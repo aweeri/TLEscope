@@ -10,8 +10,6 @@ add_subdirectory(external/sgp4)
 # Add your source files
 add_executable(TLEScope
     src/main.cpp
-    src/camera_controller.cpp
-    src/rendering.cpp
 )
 
 # Link raylib to your executable
