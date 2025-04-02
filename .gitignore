@@ -1,0 +1,46 @@
+# Build directories
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile
+/*.sln
+/*.vcxproj*
+/compile_commands.json
+
+# Compiled object files and executables
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.a
+*.pdb
+
+# Visual Studio files
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# MacOS files (if used cross-platform)
+.DS_Store
+
+# VSCode settings
+.vscode/
+
+# Raylib build artifacts (if building from source)
+external/raylib/build/
+external/raylib/CMakeFiles/
+external/raylib/CMakeCache.txt
+external/raylib/Makefile
+external/raylib/*.sln
+external/raylib/*.vcxproj*
+
+# Optional: logs or debug files
+*.log
+*.tmp
+
+# Optional: ignore binaries or test output
+/bin/
+/output/
+/dist/
