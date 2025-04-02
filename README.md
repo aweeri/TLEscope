@@ -10,4 +10,6 @@ A work in progress project to visualize satellite data using Two-Line Element (T
 - **Interactive Preview:** Rotate, zoom, and pan through the 3D space to inspect satellite trajectories.
 - **Customizable Options:** Tweak visualization settings for different display modes and data overlays.
 
+### Availability
 
+For now no builds are provided, once the basic functionality is implemented they will be posted. 
