@@ -1,6 +1,6 @@
 ### TLE Satellite Data Visualiser
 
-A work in progress project to visualize satellite data using Two-Line Element (TLE) sets. This tool allows for previewing TLE data in a visually appealing 3D space, allowing you to preview satellite orbits, line-of-sight areas, range, and more.
+A work in progress project to visualize satellite data using Two-Line Element (TLE) sets. This tool allows for parsing satellite TLE data using the simplified perturbations models and displaying their positions in real time or around set times in a visually appealing 3D space, allowing you to see their line-of-sight coverage areas, orbital characteristics, and more.
 
 ### Upcoming Features
 
