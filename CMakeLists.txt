@@ -7,9 +7,12 @@ set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(external/raylib)
 add_subdirectory(external/sgp4)
 
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
 # Add your source files
 add_executable(TLEScope
     src/main.cpp
+    src/camera.cpp
 )
 
 # Link raylib to your executable
