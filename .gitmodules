@@ -1,0 +1,6 @@
+[submodule "raylib"]
+	path = external/raylib
+	url = https://github.com/raysan5/raylib
+[submodule "sgp4"]
+	path = external/sgp4
+	url = https://github.com/dnwrnr/sgp4
