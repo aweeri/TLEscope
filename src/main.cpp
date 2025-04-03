@@ -1,14 +1,23 @@
 #include "raylib.h"
 #include <math.h>
+#include <raymath.h>
+
+// A simple linear interpolation for floats
+static float LerpFloat(float start, float end, float t) {
+    return start + t * (end - start);
+}
 
 // ===================================================================================
 // Camera Controller
 // ===================================================================================
 
-/// Updates the camera position based on mouse movement and zoom.
+/// Updates the camera position based on mouse movement, zoom, and panning.
 void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, float* distance) {
     const float sensitivity = 0.01f;
+    // Using a static variable to hold our desired distance for smooth zooming.
+    static float targetDistance = 10.0f;
 
+    // Rotate with right mouse button
     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         Vector2 mouseDelta = GetMouseDelta();
         *angleX -= mouseDelta.x * sensitivity;
@@ -17,39 +26,53 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
         // Clamp vertical rotation to prevent flipping
         if (*angleY > 1.5f)  *angleY = 1.5f;
         if (*angleY < -1.5f) *angleY = -1.5f;
-
-        // Update camera position using spherical coordinates
-        camera->position.x = camera->target.x + *distance * cosf(*angleY) * sinf(*angleX);
-        camera->position.y = camera->target.y + *distance * sinf(*angleY);
-        camera->position.z = camera->target.z + *distance * cosf(*angleY) * cosf(*angleX);
     }
 
-    // Zoom in/out using mouse wheel
+    // Zoom in/out using mouse wheel (works without holding any mouse button)
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
-        *distance -= wheel;
-        if (*distance < 2.0f)   *distance = 2.0f;
-        if (*distance > 100.0f) *distance = 100.0f;
+        targetDistance -= wheel * 0.5f;  // adjust zoom speed for smoother feel
+        if (targetDistance < 1.2f)   targetDistance = 1.2f;
+        if (targetDistance > 100.0f) targetDistance = 100.0f;
     }
+    // Smoothly interpolate the current distance toward the target distance
+    *distance += (targetDistance - *distance) * 0.1f;
+
+    // Pan (move the origin/target) with middle mouse button
+    if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
+        Vector2 mouseDelta = GetMouseDelta();
+        // Compute the forward vector from the camera's position to its target
+        Vector3 forward = Vector3Normalize(Vector3Subtract(camera->target, camera->position));
+        // Compute the right vector as perpendicular to forward and the global up
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera->up));
+        // Compute a true up vector for the camera view
+        Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
+        // Pan speed factor can depend on the current distance to keep movement consistent
+        float panSpeed = 0.005f * (*distance);
+        // Update the camera target based on mouse movement
+        camera->target = Vector3Add(camera->target, Vector3Scale(right, -mouseDelta.x * panSpeed));
+        camera->target = Vector3Add(camera->target, Vector3Scale(up, mouseDelta.y * panSpeed));
+    }
+
+    // Always update camera position using spherical coordinates relative to the target.
+    camera->position.x = camera->target.x + *distance * cosf(*angleY) * sinf(*angleX);
+    camera->position.y = camera->target.y + *distance * sinf(*angleY);
+    camera->position.z = camera->target.z + *distance * cosf(*angleY) * cosf(*angleX);
 }
 
-// ===================================================================================
-// Scene Rendering
-// ===================================================================================
+// Converts latitude and longitude (in degrees) to a 3D position on a sphere.
+Vector3 LatLonToXYZ(float latitude, float longitude, float radius) {
+    // Convert degrees to radians using Raylib's DEG2RAD constant
+    float latRad = latitude * DEG2RAD;
+    float lonRad = longitude * DEG2RAD;
 
-/// Draws the 3D scene including the model and grid.
-void DrawScene(Model model, Camera3D camera) {
-    BeginDrawing();
-        ClearBackground(BLACK);
-
-        BeginMode3D(camera);
-            Vector3 modelPosition = { 0.0f, 0.0f, 0.0f };
-            DrawModelEx(model, modelPosition, Vector3{ 1.0f, 0.0f, 0.0f }, 0.0f, Vector3{ 1.0f, 1.0f, 1.0f }, WHITE);
-            DrawGrid(10, 1.0f);
-        EndMode3D();
-
-    EndDrawing();
+    Vector3 pos;
+    pos.x = radius * cosf(latRad) * cosf(lonRad);
+    pos.y = radius * sinf(latRad);
+    pos.z = radius * cosf(latRad) * sinf(lonRad);
+    return pos;
 }
+
 
 // ===================================================================================
 // Main Entry Point
@@ -66,9 +89,9 @@ int main() {
 
     // Camera Setup
     Camera3D camera = { 0 };
-    camera.position   = Vector3{ 10.0f, 10.0f, 10.0f };
-    camera.target     = Vector3{ 0.0f, 0.0f, 0.0f };
-    camera.up         = Vector3{ 0.0f, 1.0f, 0.0f };
+    camera.position   = (Vector3){ 10.0f, 10.0f, 10.0f };
+    camera.target     = (Vector3){ 0.0f, 0.0f, 0.0f };
+    camera.up         = (Vector3){ 0.0f, 1.0f, 0.0f };
     camera.fovy       = 45.0f;
     camera.projection = CAMERA_PERSPECTIVE;
 
@@ -77,20 +100,35 @@ int main() {
     float angleY   = 0.0f;
 
     // Load Sphere Model and Texture
-    Mesh sphereMesh     = GenMeshSphere(1.0f, 32, 32);
-    Model sphereModel   = LoadModelFromMesh(sphereMesh);
-    Texture2D texture   = LoadTexture("resources/8k_earth_daymap.jpg");  // Ensure the file exists
-    sphereModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+    Model earthModel   = LoadModel("resources/sphere.obj");  // Ensure the file exists
+    Texture2D earthTexture   = LoadTexture("resources/daymap8k.png");  // Ensure the file exists
+    earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
+
+    // Load another Sphere Model with Transparent Texture
+    Model cloudsModel = LoadModel("resources/sphere.obj");  // Ensure the file exists
+    Texture2D cloudsTexture = LoadTexture("resources/cloudcover8k.png");  // Ensure the file exists
+    cloudsModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudsTexture;
 
     // Main Application Loop
     while (!WindowShouldClose()) {
         UpdateCameraController(&camera, &angleX, &angleY, &distance);
-        DrawScene(sphereModel, camera);
+        
+        BeginDrawing();
+            ClearBackground(BLACK);
+
+            BeginMode3D(camera);
+                DrawModelEx(earthModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 1.0f, 0.0f, 0.0f }, 0.0f, (Vector3){ 1.0f, 1.0f, 1.0f }, WHITE);
+                DrawModelEx(cloudsModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 1.0f, 0.0f, 0.0f }, 0.0f, (Vector3){ 1.001f, 1.001f, 1.001f }, WHITE);
+                //DrawGrid(10, 1.0f);
+            EndMode3D();
+        EndDrawing();
     }
 
     // Cleanup
-    UnloadTexture(texture);
-    UnloadModel(sphereModel);
+    UnloadTexture(earthTexture);
+    UnloadTexture(cloudsTexture);
+    UnloadModel(earthModel);
+    UnloadModel(cloudsModel);
     CloseWindow();
 
     return 0;
