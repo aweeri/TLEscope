@@ -4,6 +4,7 @@
 #include <point.h>
 #include <camera.h>
 #include <conversions.h>
+#include <stdio.h>
 
 int main() {
     // Window Initialization
@@ -12,9 +13,10 @@ int main() {
 
     InitWindow(screenWidth, screenHeight, "TLEscope");
     Image icon = LoadImage("resources/icon/tlescopeico_512.png");
+    Font font = LoadFontEx("resources/RobotoFont.ttf", 16, 0, 0);
     SetWindowIcon(icon);    
     SetWindowState(FLAG_WINDOW_RESIZABLE);
-    SetTargetFPS(144);
+    SetTargetFPS(60);
 
     // Camera Setup
     Camera3D camera = { 0 };
@@ -49,7 +51,9 @@ int main() {
         
         BeginDrawing();
             ClearBackground(BLACK);
-
+            char fpsText[20];
+            sprintf(fpsText, "FPS: %i", GetFPS());
+            DrawTextEx(font, fpsText, (Vector2){ 10, 10 }, font.baseSize, 2, WHITE);
             BeginMode3D(camera);
                 DrawCube(QNH, 0.01f, 0.01f, 0.01f, BLUE);
                 DrawModelEx(earthModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 0.0f, 1.0f, 0.0f }, 0.0f, (Vector3){ 1.0f, 1.0f, 1.0f }, WHITE);
