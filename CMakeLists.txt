@@ -8,10 +8,16 @@ add_subdirectory(external/sgp4)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+if(WIN32)
+    list(APPEND SOURCES resources/resources.rc)
+endif()
+
 add_executable(TLEScope
+    ${SOURCES}
     src/main.cpp
     src/camera.cpp
     src/point.cpp
+    src/conversions.cpp
 )
 
 # lib

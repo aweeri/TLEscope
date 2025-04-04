@@ -3,24 +3,7 @@
 #include <raymath.h>
 #include <point.h>
 #include <camera.h>
-
-// A simple linear interpolation for floats
-static float LerpFloat(float start, float end, float t) {
-    return start + t * (end - start);
-}
-
-// Converts latitude and longitude (in degrees) to a 3D position on a sphere.
-Vector3 LatLonToXYZ(float latitude, float longitude, float radius) {
-    // Convert degrees to radians using Raylib's DEG2RAD constant
-    float latRad = latitude * DEG2RAD;
-    float lonRad = longitude * DEG2RAD;
-
-    Vector3 pos;
-    pos.x = radius * cosf(latRad) * cosf(lonRad);
-    pos.y = radius * sinf(latRad);
-    pos.z = radius * cosf(latRad) * sinf(lonRad);
-    return pos;
-}
+#include <conversions.h>
 
 int main() {
     // Window Initialization
@@ -28,6 +11,8 @@ int main() {
     const int screenHeight = 720;
 
     InitWindow(screenWidth, screenHeight, "TLEscope");
+    Image icon = LoadImage("resources/icon/tlescopeico_512.png");
+    SetWindowIcon(icon);    
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     SetTargetFPS(144);
 
@@ -53,6 +38,11 @@ int main() {
     Texture2D cloudsTexture = LoadTexture("resources/cloudcover8k.png");  // Ensure the file exists
     cloudsModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudsTexture;
     static float cloudSphereAngle = 0.0f;
+
+    //Vector3 QNH = LatLonToXYZ(52.22f, 21.01f, 1.0f); //Poland
+    Vector3 QNH = LatLonToXYZ(33.89f, 134.185f, 1.0f);
+    //Vector3 QNH = LatLonToXYZ(-41.2865f, 174.7762f, 1.0f); //NZ
+
     // Main Application Loop
     while (!WindowShouldClose()) {
         UpdateCameraController(&camera, &angleX, &angleY, &distance);
@@ -61,7 +51,8 @@ int main() {
             ClearBackground(BLACK);
 
             BeginMode3D(camera);
-                DrawModelEx(earthModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 1.0f, 0.0f, 0.0f }, 0.0f, (Vector3){ 1.0f, 1.0f, 1.0f }, WHITE);
+                DrawCube(QNH, 0.01f, 0.01f, 0.01f, BLUE);
+                DrawModelEx(earthModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 0.0f, 1.0f, 0.0f }, 0.0f, (Vector3){ 1.0f, 1.0f, 1.0f }, WHITE);
                 cloudSphereAngle += 0.002f; // Adjust rotation speed as needed
                 DrawModelEx(cloudsModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 0.0f, 1.0f, 0.0f }, cloudSphereAngle, (Vector3){ 1.001f, 1.001f, 1.001f }, WHITE);
                 //DrawGrid(10, 1.0f);

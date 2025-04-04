@@ -1,0 +1,2 @@
+// resources.rc
+IDI_ICON1 ICON "./icon/tlescope_light.ico"
