@@ -6,11 +6,15 @@ A work in progress project to visualize satellite data using Two-Line Element (T
 
 ### Upcoming Features
 
-- **TLE Data Import:** Load and parse TLE data for multiple satellites.
-- **3D Visualization:** Render satellite orbits in an interactive 3D space.
-- **LOS and Range Analysis:** Display line-of-sight coverage areas and display orbital characteristics.
-- ~~**Interactive Preview:** Rotate, zoom, and pan through the 3D space to inspect satellite trajectories.~~
-- **Customizable Options:** Tweak visualization settings for different display modes and data overlays.
+- [ ] **TLE Data Import:** Load and parse TLE data for multiple satellites.
+
+- [ ] **3D Visualization:** Render satellite orbits in an interactive 3D space.
+
+- [ ] **LOS and Range Analysis:** Display line-of-sight coverage areas and display orbital characteristics.
+
+- [x] ~~**Interactive Preview:** Rotate, zoom, and pan through the 3D space to inspect satellite trajectories.~~  
+
+- [ ] **Customizable Options:** Tweak visualization settings for different display modes and data overlays.
 
 ### Availability
 
