@@ -23,4 +23,5 @@ For now no builds are provided, once the basic functionality is implemented they
 ### Downloading and building from source
 
 Simply run `git clone --recurse-submodules https://github.com/aweeri/TLEscope` in your directory of choice.
-originally built using GCC 14.2.0 i686-w64-mingw32
+
+Originally built using GCC 14.2.0 i686-w64-mingw32
