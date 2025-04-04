@@ -52,7 +52,7 @@ int main() {
     Model cloudsModel = LoadModel("resources/sphere.obj");  // Ensure the file exists
     Texture2D cloudsTexture = LoadTexture("resources/cloudcover8k.png");  // Ensure the file exists
     cloudsModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudsTexture;
-
+    static float cloudSphereAngle = 0.0f;
     // Main Application Loop
     while (!WindowShouldClose()) {
         UpdateCameraController(&camera, &angleX, &angleY, &distance);
@@ -62,7 +62,8 @@ int main() {
 
             BeginMode3D(camera);
                 DrawModelEx(earthModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 1.0f, 0.0f, 0.0f }, 0.0f, (Vector3){ 1.0f, 1.0f, 1.0f }, WHITE);
-                DrawModelEx(cloudsModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 1.0f, 0.0f, 0.0f }, 0.0f, (Vector3){ 1.001f, 1.001f, 1.001f }, WHITE);
+                cloudSphereAngle += 0.002f; // Adjust rotation speed as needed
+                DrawModelEx(cloudsModel, (Vector3){ 0.0f, 0.0f, 0.0f }, (Vector3){ 0.0f, 1.0f, 0.0f }, cloudSphereAngle, (Vector3){ 1.001f, 1.001f, 1.001f }, WHITE);
                 //DrawGrid(10, 1.0f);
             EndMode3D();
         EndDrawing();

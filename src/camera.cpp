@@ -23,7 +23,7 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
         targetDistance -= wheel * 0.5f;  // adjust zoom speed for smoother feel
-        if (targetDistance < 1.2f)   targetDistance = 1.2f;
+        if (targetDistance < 0.01f)   targetDistance = 0.01f;
         if (targetDistance > 100.0f) targetDistance = 100.0f;
     }
     // Smoothly interpolate the current distance toward the target distance
@@ -39,7 +39,7 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
         // Compute a true up vector for the camera view
         Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
         // Pan speed factor can depend on the current distance to keep movement consistent
-        float panSpeed = 0.005f * (*distance);
+        float panSpeed = 0.001f * (*distance);
         // Update the camera target based on mouse movement
         camera->target = Vector3Add(camera->target, Vector3Scale(right, -mouseDelta.x * panSpeed));
         camera->target = Vector3Add(camera->target, Vector3Scale(up, mouseDelta.y * panSpeed));
