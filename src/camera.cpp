@@ -5,7 +5,6 @@
 
 void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, float* distance) {
     const float sensitivity = 0.01f;
-    // Using a static variable to hold our desired distance for smooth zooming.
     static float targetDistance = 10.0f;
 
     // Rotate with right mouse button
@@ -19,7 +18,7 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
         if (*angleY < -1.5f) *angleY = -1.5f;
     }
 
-    // Zoom in/out using mouse wheel (works without holding any mouse button)
+    // Zoom in/out
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
         targetDistance -= wheel * 0.5f;  // adjust zoom speed for smoother feel
@@ -29,18 +28,17 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
     // Smoothly interpolate the current distance toward the target distance
     *distance += (targetDistance - *distance) * 0.1f;
 
-    // Pan (move the origin/target) with middle mouse button
+    // Pan with middle mouse button
     if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
         Vector2 mouseDelta = GetMouseDelta();
-        // Compute the forward vector from the camera's position to its target
+        // Compute the forward vector
         Vector3 forward = Vector3Normalize(Vector3Subtract(camera->target, camera->position));
-        // Compute the right vector as perpendicular to forward and the global up
         Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera->up));
-        // Compute a true up vector for the camera view
+        // Compute a true up vector
         Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
-        // Pan speed factor can depend on the current distance to keep movement consistent
+        // Pan speed factor
         float panSpeed = 0.001f * (*distance);
-        // Update the camera target based on mouse movement
+        // Update the camera target
         camera->target = Vector3Add(camera->target, Vector3Scale(right, -mouseDelta.x * panSpeed));
         camera->target = Vector3Add(camera->target, Vector3Scale(up, mouseDelta.y * panSpeed));
     }
