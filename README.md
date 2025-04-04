@@ -20,6 +20,7 @@ A work in progress project to visualize satellite data using Two-Line Element (T
 
 For now no builds are provided, once the basic functionality is implemented they will be posted. 
 
-### Downloading Source
+### Downloading and building from source
 
 Simply run `git clone --recurse-submodules https://github.com/aweeri/TLEscope` in your directory of choice.
+originally built using GCC 14.2.0 i686-w64-mingw32
