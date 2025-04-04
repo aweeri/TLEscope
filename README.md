@@ -13,3 +13,7 @@ A work in progress project to visualize satellite data using Two-Line Element (T
 ### Availability
 
 For now no builds are provided, once the basic functionality is implemented they will be posted. 
+
+### Downloading Source
+
+Simply run `git clone --recurse-submodules https://github.com/aweeri/TLEscope` in your directory of choice.
