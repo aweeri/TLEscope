@@ -4,19 +4,26 @@
 #include "camera.h"
 
 void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, float* distance, float* maxZoom) {
-    const float sensitivity = 0.01f;
+    const float sensitivity = 0.005f;
+    const float smoothFactor = 0.1f;
+    static float targetAngleX = 0.0f;
+    static float targetAngleY = 0.0f;
     static float targetDistance = 10.0f;
 
     // Rotate with right mouse button
     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         Vector2 mouseDelta = GetMouseDelta();
-        *angleX -= mouseDelta.x * sensitivity;
-        *angleY += mouseDelta.y * sensitivity;
+        targetAngleX -= mouseDelta.x * sensitivity;
+        targetAngleY += mouseDelta.y * sensitivity;
 
         // Clamp vertical rotation to prevent flipping
-        if (*angleY > 1.5f)  *angleY = 1.5f;
-        if (*angleY < -1.5f) *angleY = -1.5f;
+        if (targetAngleY > 1.5f)  targetAngleY = 1.5f;
+        if (targetAngleY < -1.5f) targetAngleY = -1.5f;
     }
+
+    // interpolate angles
+    *angleX += (targetAngleX - *angleX) * smoothFactor;
+    *angleY += (targetAngleY - *angleY) * smoothFactor;
 
     // Zoom in/out
     float wheel = GetMouseWheelMove();
