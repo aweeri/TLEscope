@@ -1,10 +1,15 @@
 #include "raylib.h"
+#include <stdio.h>
 #include <math.h>
 #include <raymath.h>
+
+// Custom includes
 #include <point.h>
 #include <camera.h>
 #include <conversions.h>
-#include <stdio.h>
+#include <TLEParser.h>
+#include <iostream>
+
 
 #if defined(PLATFORM_DESKTOP)
 #define GLSL_VERSION            330
@@ -67,6 +72,23 @@ int main() {
     BoundingBox bbEarth = GetModelBoundingBox(earthModel);
     float maxZoom = bbEarth.max.x + 0.05f;
 
+    
+    // Read TLE data from file
+    const std::string tleFile = "data/satellites.txt"; // path to TLE series
+    std::vector<TLEEntry> tleEntries = parseTLEFile(tleFile);
+
+    if (tleEntries.empty()) {
+        printf("No TLE entries found in the file %s, no TLEs have been loaded.\n", tleFile.c_str());
+    }
+    else {
+        for (const auto& entry : tleEntries) {
+            std::cout << "Satellite: " << entry.name << "\n";
+            std::cout << "Line 1: " << entry.line1 << "\n";
+            std::cout << "Line 2: " << entry.line2 << "\n\n";
+        }
+    }
+    
+
     // Main Application Loop
     while (!WindowShouldClose()) {
         UpdateCameraController(&camera, &angleX, &angleY, &distance, &maxZoom);
@@ -94,7 +116,7 @@ int main() {
                 float earthCamDistance = Vector3Distance(camera.position, earthCenter);
                 float fadeStart = maxZoom + 1.8f;  // Fully opaque above this distance
                 float fadeEnd   = maxZoom + 0.8f;         // Fully transparent below this distance
-                
+
                 float alpha;
                 if (earthCamDistance >= fadeStart) {
                     alpha = 1.0f;   // Fully opaque
