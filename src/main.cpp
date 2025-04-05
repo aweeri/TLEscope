@@ -1,4 +1,4 @@
-#include "raylib.h"
+#include <raylib.h>
 #include <stdio.h>
 #include <math.h>
 #include <raymath.h>
@@ -70,9 +70,9 @@ int main() {
 
     // Set max zoom level based on Earth's size.
     BoundingBox bbEarth = GetModelBoundingBox(earthModel);
-    float maxZoom = bbEarth.max.x + 0.05f;
+    float maxZoom = 0.05f;
 
-    
+
     // Read TLE data from file
     const std::string tleFile = "data/satellites.txt"; // path to TLE series
     std::vector<TLEEntry> tleEntries = parseTLEFile(tleFile);
@@ -115,7 +115,7 @@ int main() {
                 Vector3 earthCenter = { 0.0f, 0.0f, 0.0f };  // Assuming the Earth model is centered at the origin
                 float earthCamDistance = Vector3Distance(camera.position, earthCenter);
                 float fadeStart = maxZoom + 1.8f;  // Fully opaque above this distance
-                float fadeEnd   = maxZoom + 0.8f;         // Fully transparent below this distance
+                float fadeEnd   = maxZoom + 1.0f;         // Fully transparent below this distance
 
                 float alpha;
                 if (earthCamDistance >= fadeStart) {

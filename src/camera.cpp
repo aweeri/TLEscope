@@ -21,7 +21,8 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
     // Zoom in/out
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
-        targetDistance -= wheel * 0.5f;  // adjust zoom speed for smoother feel
+        float zoomSpeed = fminf(1.5f, 0.15f * (*distance));  // cap zoom speed at 0.8
+        targetDistance -= wheel * zoomSpeed;
         if (targetDistance < *maxZoom)   targetDistance = *maxZoom;
         if (targetDistance > 100.0f) targetDistance = 100.0f;
     }
