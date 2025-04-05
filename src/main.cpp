@@ -59,13 +59,13 @@ int main() {
     Shader shader = LoadShader(TextFormat("resources/shaders/glsl%i/base.vs", GLSL_VERSION), TextFormat("resources/shaders/glsl%i/base.fs", GLSL_VERSION));
     RenderTexture2D renderTarget = LoadRenderTexture(screenWidth, screenHeight);
 
-    //Vector3 QNH = LatLonToXYZ(52.22f, 21.01f, 1.0f); //Poland
-    Vector3 QNH = LatLonToXYZ(33.89f, 134.185f, 1.0f);
+    Vector3 QNH = LatLonToXYZ(52.22f, 21.01f, 1.0f); //Poland
+    //Vector3 QNH = LatLonToXYZ(33.89f, 134.185f, 1.0f);
     //Vector3 QNH = LatLonToXYZ(-41.2865f, 174.7762f, 1.0f); //NZ
 
     // Set max zoom level based on Earth's size.
     BoundingBox bbEarth = GetModelBoundingBox(earthModel);
-    float maxZoom = bbEarth.max.x + 0.1f;
+    float maxZoom = bbEarth.max.x + 0.05f;
 
     // Main Application Loop
     while (!WindowShouldClose()) {
@@ -75,18 +75,43 @@ int main() {
             ClearBackground(BLACK);
 
             BeginMode3D(camera);
+                
+                //DrawCube(QNH, 0.05f, 0.05f, 0.05f, BLUE); // Uncomment to visualize QNH point
+
                 // Use fmodf to avoid accumulating a huge value and make the rotation frame rate independent
                 cloudSphereAngle = fmodf(cloudSphereAngle + cloudRotationMul * GetFrameTime(), 2 * PI);
                 // Cloud layer rotation matrix (cloudSphereAngle represents the rotation in radians)
                 Matrix cloudRotation = MatrixRotate({ 0, 1, 0 }, cloudSphereAngle);
 
                 // Draw Earth and cloud meshes. For some bizzare reason, Raylib appears to be splitting each mesh into two.
+                
                 // Earth
                 DrawMesh(earthModel.meshes[0], earthModel.materials[1], MatrixIdentity());
                 DrawMesh(earthModel.meshes[1], earthModel.materials[1], MatrixIdentity());
+                
                 // Clouds
+                Vector3 earthCenter = { 0.0f, 0.0f, 0.0f };  // Assuming the Earth model is centered at the origin
+                float earthCamDistance = Vector3Distance(camera.position, earthCenter);
+                float fadeStart = maxZoom + 1.8f;  // Fully opaque above this distance
+                float fadeEnd   = maxZoom + 0.8f;         // Fully transparent below this distance
+                
+                float alpha;
+                if (earthCamDistance >= fadeStart) {
+                    alpha = 1.0f;   // Fully opaque
+                } else if (earthCamDistance <= fadeEnd) {
+                    alpha = 0.0f;   // Fully transparent
+                } else {
+                    // Linearly interpolate alpha between fadeEnd and fadeStart
+                    alpha = (earthCamDistance - fadeEnd) / (fadeStart - fadeEnd);
+                }
+
+                // Update the cloud material's color alpha channel
+                Color cloudColor = { 255, 255, 255, (unsigned char)(alpha * 255) };
+                earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = cloudColor;
+
                 DrawMesh(earthModel.meshes[2], earthModel.materials[0], MatrixMultiply(MatrixIdentity(), cloudRotation));
                 DrawMesh(earthModel.meshes[3], earthModel.materials[0], MatrixMultiply(MatrixIdentity(), cloudRotation));
+
             EndMode3D();
 
         EndTextureMode();
