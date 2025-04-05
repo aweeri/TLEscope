@@ -1,0 +1,7 @@
+newmtl Clouds
+Kd 1.000 1.000 1.000
+illum 0
+
+newmtl Earth
+Kd 1.000 1.000 1.000
+illum 0

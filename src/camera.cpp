@@ -3,7 +3,7 @@
 #include <point.h>
 #include "camera.h"
 
-void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, float* distance) {
+void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, float* distance, float* maxZoom) {
     const float sensitivity = 0.01f;
     static float targetDistance = 10.0f;
 
@@ -22,7 +22,7 @@ void UpdateCameraController(Camera3D* camera, float* angleX, float* angleY, floa
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
         targetDistance -= wheel * 0.5f;  // adjust zoom speed for smoother feel
-        if (targetDistance < 0.01f)   targetDistance = 0.01f;
+        if (targetDistance < *maxZoom)   targetDistance = *maxZoom;
         if (targetDistance > 100.0f) targetDistance = 100.0f;
     }
     // Smoothly interpolate the current distance toward the target distance
