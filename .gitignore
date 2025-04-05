@@ -1,4 +1,5 @@
 # Build directories
+/out/
 /build/
 /CMakeFiles/
 /CMakeCache.txt
@@ -15,11 +16,17 @@
 *.a
 *.pdb
 
+# Visual Studio directories
+/.vs/
+
 # Visual Studio files
 *.user
 *.suo
 *.VC.db
 *.VC.opendb
+
+#CMake files
+CMakeSettings.json
 
 # MacOS files (if used cross-platform)
 .DS_Store
