@@ -18,7 +18,7 @@ cCamera::cCamera()
     targetDistance = 16.0f;
     targetAngleX = 0.0f;
     targetAngleY = 0.0f;
-    maxZoom = 5.5f;
+    maxZoom = 0.5f;
 }
 
 cCamera::~cCamera()

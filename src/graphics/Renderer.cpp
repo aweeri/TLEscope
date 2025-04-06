@@ -58,21 +58,20 @@ void cRenderer::Render()
             cloudModel.transform = MatrixMultiply(MatrixRotate({ 0, 0, 1 }, cloudSphereAngle), baseCloudTransform);
 
             float earthCamDistance = Vector3Distance(pCam->GetCamera3D().position, earthCenter);
-            float maxZoom = pCam->GetMaxZoom();
-            float fadeStart = maxZoom + 1.8f;  // Fully opaque above this distance
-            float fadeEnd = maxZoom + 1.0f;    // Fully transparent below this distance
-
+            // Define constants for the fade range near Earth
+            const float fadeStart = 7.5f; // Start fading when closer than 1.5 units from Earth's center
+            const float fadeEnd   = 6.5f; // Fully transparent when closer than 1.0 unit
+            
             float alpha;
             if (earthCamDistance >= fadeStart) {
-                alpha = 1.0f;   // Fully opaque
-            }
-            else if (earthCamDistance <= fadeEnd) {
-                alpha = 0.0f;   // Fully transparent
-            }
-            else {
-                // Linearly interpolate alpha between fadeEnd and fadeStart
+                alpha = 1.0f;   // Fully opaque if farther than fadeStart
+            } else if (earthCamDistance <= fadeEnd) {
+                alpha = 0.0f;   // Fully transparent if closer than fadeEnd
+            } else {
+                // Linearly interpolate alpha between fadeEnd and fadeStart distances
                 alpha = (earthCamDistance - fadeEnd) / (fadeStart - fadeEnd);
             }
+            
 
             unsigned char preMultiplied = (unsigned char)(255 * alpha);
             Color cloudColor = { preMultiplied, preMultiplied, preMultiplied, (unsigned char)(255 * alpha) };

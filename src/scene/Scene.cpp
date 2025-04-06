@@ -62,10 +62,13 @@ void cScene::GenEarth()
     cloudModel.transform = MatrixMultiply(MatrixIdentity(), MatrixRotate({ 1, 0, 0 }, -90.0f * (PI / 180.0f)));
 
     // Load textures, generate mipmaps, set trilinear filtering, and assign materials to the appropriate models.
-    earthTexture = LoadTexture("resources/daymap8k.png");
+    Image earthImage = LoadImage("resources/daymap8k.png");
+    ImageFlipHorizontal(&earthImage);
+    earthTexture = LoadTextureFromImage(earthImage);
+    UnloadImage(earthImage);
     GenTextureMipmaps(&earthTexture);
     SetTextureFilter(earthTexture, TEXTURE_FILTER_TRILINEAR);
-    cloudTexture = LoadTexture("resources/cloudcover8k.png");
+    cloudTexture = LoadTexture("resources/cloudlayer.png");
     GenTextureMipmaps(&cloudTexture);
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_TRILINEAR);
 
