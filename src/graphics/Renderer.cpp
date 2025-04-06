@@ -39,7 +39,9 @@ void cRenderer::SetSceneSpecific()
     Texture2D locationTexture = LoadTextureFromImage(locationImage);
     UnloadImage(locationImage);
     GenTextureMipmaps(&locationTexture);
-    gpBase->GetBillboardHelper()->CreateBillboard(std::string("MyLocation"), locationTexture, { 0.0f, 6.0f, 0.0f }, 1.0f, WHITE);
+
+    Rectangle source = { 0.0f, 0.0f, (float)locationTexture.width, (float)locationTexture.height };
+    gpBase->GetBillboardHelper()->CreateBillboardPro(std::string("MyLocation"), locationTexture, source, { 0, 6, 0 }, { 0, 1, 0 }, { 1, 1 }, { 0.5, 0.5 }, 0, WHITE);
 }
 
 void cRenderer::Render()
@@ -87,8 +89,17 @@ void cRenderer::Render()
             BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
                 DrawModel(cloudModel, { 0, 0, 0 }, 1.01f, WHITE);
             EndBlendMode();
+            
+            Billboard* pBillboard = gpBase->GetScene()->GetBillboardByName("MyLocation");
+            Vector3 direction = Vector3Subtract(pCam->GetCamera3D().position, pBillboard->GetPosition());
+            direction = Vector3Normalize(direction);
+            Vector3 right = Vector3CrossProduct(pCam->GetCamera3D().up, direction);
+            right = Vector3Normalize(right);
+            Vector3 dynamicUp = Vector3CrossProduct(direction, right);
+            pBillboard->SetUp(dynamicUp);
+            DrawBillboard(pBillboard);
 
-            DrawBillboard(gpBase->GetScene()->GetBillboardByName(std::string("MyLocation")));
+
         EndMode3D();
 
     EndTextureMode();
