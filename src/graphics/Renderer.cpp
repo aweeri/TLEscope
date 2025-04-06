@@ -9,10 +9,10 @@
 #define GLSL_VERSION            100
 #endif
 
-cRenderer::cRenderer(int alScreenWidth, int alScreenHeight)
+cRenderer::cRenderer(int screenWidth, int screenHeight)
 {
     shader = LoadShader(TextFormat("resources/shaders/glsl%i/base.vs", GLSL_VERSION), TextFormat("resources/shaders/glsl%i/base.fs", GLSL_VERSION));
-    renderTarget = LoadRenderTexture(alScreenWidth, alScreenHeight);
+    renderTarget = LoadRenderTexture(screenWidth, screenHeight);
     fontRoboto = LoadFontEx("resources/fonts/RobotoFont.ttf", 16, 0, 0);
 
     earthCenter = { 0.0f, 0.0f, 0.0f };
@@ -74,9 +74,12 @@ void cRenderer::Render()
                 alpha = (earthCamDistance - fadeEnd) / (fadeStart - fadeEnd);
             }
 
-            Color cloudColor = { 255, 255, 255, (unsigned char)(alpha * 255) };
+            unsigned char preMultiplied = (unsigned char)(255 * alpha);
+            Color cloudColor = { preMultiplied, preMultiplied, preMultiplied, (unsigned char)(255 * alpha) };
             cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = cloudColor;
-            DrawModel(cloudModel, { 0, 0, 0 }, 1.01f, WHITE);
+            BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
+                DrawModel(cloudModel, { 0, 0, 0 }, 1.01f, WHITE);
+            EndBlendMode();
         EndMode3D();
 
     EndTextureMode();
