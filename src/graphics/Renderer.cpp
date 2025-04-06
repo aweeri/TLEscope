@@ -1,7 +1,7 @@
 #include "graphics/Renderer.h"
 #include "TLEscope.h"
-#include "raylib.h"
-#include "raymath.h"
+#include <raylib.h>
+#include <raymath.h>
 
 #if defined(PLATFORM_DESKTOP)
 #define GLSL_VERSION            330
@@ -14,7 +14,6 @@ cRenderer::cRenderer(int alScreenWidth, int alScreenHeight)
     shader = LoadShader(TextFormat("resources/shaders/glsl%i/base.vs", GLSL_VERSION), TextFormat("resources/shaders/glsl%i/base.fs", GLSL_VERSION));
     renderTarget = LoadRenderTexture(alScreenWidth, alScreenHeight);
     fontRoboto = LoadFontEx("resources/fonts/RobotoFont.ttf", 16, 0, 0);
-    //fontConsola = LoadFontEx("resources/fonts/consola.ttf", 16, 0, 0);
 
     earthCenter = { 0.0f, 0.0f, 0.0f };
     cloudSphereAngle = 0.0f;
@@ -27,7 +26,6 @@ cRenderer::~cRenderer()
     UnloadShader(shader);
     UnloadRenderTexture(renderTarget);
     UnloadFont(fontRoboto);
-    //UnloadFont(fontConsola);
 }
 
 void cRenderer::SetSceneSpecific()

@@ -1,7 +1,7 @@
 #ifndef TLE_SCOPE_SCENE_H
 #define TLE_SCOPE_SCENE_H
 
-#include "raylib.h"
+#include <raylib.h>
 #include <string>
 #include <map>
 
@@ -16,7 +16,7 @@ public:
 
 	void GenEarth();
 
-	Model& GetModelByName(const std::string& asName);
+	Model& GetModelByName(const std::string& name);
 
 private:
 	Texture2D earthTexture;

@@ -1,7 +1,6 @@
-#include "raylib.h"
-#include <raymath.h>
-#include <graphics/Point.h>
 #include "scene/Camera.h"
+#include <raylib.h>
+#include <raymath.h>
 
 cCamera::cCamera()
 {

@@ -1,13 +1,12 @@
 #ifndef TLE_SCOPE_RENDERER_H
 #define TLE_SCOPE_RENDERER_H
 
-#include "raylib.h"
-#include <map>
+#include <raylib.h>
 
 class cRenderer
 {
 public:
-	cRenderer(int alScreenWidth, int alScreenHeight);
+	cRenderer(int screenWidth, int screenHeight);
 	~cRenderer();
 
 	void SetSceneSpecific();
@@ -17,7 +16,6 @@ private:
 	Shader shader;
 	RenderTexture2D renderTarget;
 	Font fontRoboto;
-	//Font fontConsola;
 	Vector3 earthCenter;
 	float cloudSphereAngle;
 	float cloudRotationMul;

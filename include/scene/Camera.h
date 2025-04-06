@@ -1,4 +1,4 @@
-#include "raylib.h"
+#include <raylib.h>
 
 #ifndef TLE_SCOPE_CAMERA_H
 #define TLE_SCOPE_CAMERA_H

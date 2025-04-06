@@ -1,5 +1,5 @@
 #include "graphics/Point.h"
-#include "raylib.h"
+#include <raylib.h>
 
 Point CreatePoint(const char *imagePath, Vector3 position, float scale) {
     Point point = { 0 };

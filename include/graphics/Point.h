@@ -1,7 +1,7 @@
 #ifndef TLE_SCOPE_POINT_H
 #define TLE_SCOPE_POINT_H
 
-#include "raylib.h"
+#include <raylib.h>
 
 typedef struct Point {
     Texture2D texture;

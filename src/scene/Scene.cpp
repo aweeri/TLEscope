@@ -1,7 +1,4 @@
 #include "scene/Scene.h"
-
-#include "TLEscope.h"
-#include "graphics/Renderer.h"
 #include <raylib.h>
 #include <raymath.h>
 
@@ -57,7 +54,7 @@ void cScene::GenEarth()
 
     // Update mesh buffer
     UpdateMeshBuffer(earthMesh, 1, earthMesh.texcoords, earthMesh.vertexCount * 2 * sizeof(float), 0);
-    UpdateMeshBuffer(cloudMesh, 1, earthMesh.texcoords, earthMesh.vertexCount * 2 * sizeof(float), 0);
+    UpdateMeshBuffer(cloudMesh, 1, cloudMesh.texcoords, cloudMesh.vertexCount * 2 * sizeof(float), 0);
 
     Model earthModel = LoadModelFromMesh(earthMesh);
     earthModel.transform = MatrixMultiply(MatrixIdentity(), MatrixRotate({ 1, 0, 0 }, -90.0f * (PI / 180.0f)));
