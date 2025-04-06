@@ -14,11 +14,13 @@ endif()
 
 add_executable(TLEScope
     ${SOURCES}
-    src/main.cpp
-    src/camera.cpp
-    src/point.cpp
-    src/conversions.cpp
-    src/tleparser.cpp
+    "src/Main.cpp"
+	"src/TLEscope.cpp"
+	"src/graphics/Point.cpp"
+	"src/graphics/Renderer.cpp"
+	"src/math/Conversions.cpp"
+    "src/scene/Camera.cpp"
+	"src/scene/Scene.cpp"
 )
 
 # lib
@@ -34,8 +36,3 @@ add_custom_command(TARGET TLEScope POST_BUILD
         ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:TLEScope>/resources
 )
 
-# Post build copy data/
-add_custom_command(TARGET TLEScope POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/data $<TARGET_FILE_DIR:TLEScope>/data
-)
