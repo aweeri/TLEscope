@@ -10,12 +10,21 @@ cScene::cScene()
 
 cScene::~cScene()
 {
-    tModelNameMapIt it;
-    for (it = modelsbyName.begin(); it != modelsbyName.end(); it++)
+    // Models
+    tModelNameMapIt modelIt;
+    for (modelIt = modelsbyName.begin(); modelIt != modelsbyName.end(); modelIt++)
     {
-        UnloadModel(it->second);
+        UnloadModel(modelIt->second);
     }
     modelsbyName.clear();
+
+    // Billboards
+    tBillboardNameMapIt billboardIt;
+    for (billboardIt = billboardsbyName.begin(); billboardIt != billboardsbyName.end(); billboardIt++)
+    {
+        delete billboardIt->second;
+    }
+    billboardsbyName.clear();
 
     if (earthTexture.id > 0)
         UnloadTexture(earthTexture);
@@ -79,12 +88,25 @@ void cScene::GenEarth()
     modelsbyName.insert(tModelNameMap::value_type(std::string("cloud"), cloudModel));
 }
 
-Model& cScene::GetModelByName(const std::string& asName)
+Model& cScene::GetModelByName(const std::string& argName)
 {
-    tModelNameMapIt it = modelsbyName.find(asName);
-    if (it == modelsbyName.end()) {
+    tModelNameMapIt modelIt = modelsbyName.find(argName);
+    if (modelIt == modelsbyName.end()) {
         static Model defaultModel = { 0 };
         return defaultModel;
     }
-    return it->second;
+    return modelIt->second;
+}
+
+Billboard* cScene::GetBillboardByName(const std::string& argName)
+{
+    tBillboardNameMapIt billboardIt = billboardsbyName.find(argName);
+    if (billboardIt == billboardsbyName.end()) return NULL;
+
+    return billboardIt->second;
+}
+
+void cScene::AddBillboard(std::string argName, Billboard* argBillboard)
+{
+    billboardsbyName.insert(tBillboardNameMap::value_type(std::string(argName), argBillboard));
 }

@@ -1,7 +1,9 @@
 #include "graphics/Renderer.h"
+#include "scene/BillboardHelper.h"
 #include "TLEscope.h"
 #include <raylib.h>
 #include <raymath.h>
+#include <string>
 
 #if defined(PLATFORM_DESKTOP)
 #define GLSL_VERSION            330
@@ -9,10 +11,10 @@
 #define GLSL_VERSION            100
 #endif
 
-cRenderer::cRenderer(int screenWidth, int screenHeight)
+cRenderer::cRenderer(int argScreenWidth, int argScreenHeight)
 {
     shader = LoadShader(TextFormat("resources/shaders/glsl%i/base.vs", GLSL_VERSION), TextFormat("resources/shaders/glsl%i/base.fs", GLSL_VERSION));
-    renderTarget = LoadRenderTexture(screenWidth, screenHeight);
+    renderTarget = LoadRenderTexture(argScreenWidth, argScreenHeight);
     fontRoboto = LoadFontEx("resources/fonts/RobotoFont.ttf", 16, 0, 0);
 
     earthCenter = { 0.0f, 0.0f, 0.0f };
@@ -32,6 +34,12 @@ void cRenderer::SetSceneSpecific()
 {
     cScene* pScene = gpBase->GetScene();
     baseCloudTransform = pScene->GetModelByName("cloud").transform;
+
+    Image locationImage = LoadImage("resources/mylocation.png");
+    Texture2D locationTexture = LoadTextureFromImage(locationImage);
+    UnloadImage(locationImage);
+    GenTextureMipmaps(&locationTexture);
+    gpBase->GetBillboardHelper()->CreateBillboard(std::string("MyLocation"), locationTexture, { 0.0f, 6.0f, 0.0f }, 1.0f, WHITE);
 }
 
 void cRenderer::Render()
@@ -79,6 +87,8 @@ void cRenderer::Render()
             BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
                 DrawModel(cloudModel, { 0, 0, 0 }, 1.01f, WHITE);
             EndBlendMode();
+
+            DrawBillboard(gpBase->GetScene()->GetBillboardByName(std::string("MyLocation")));
         EndMode3D();
 
     EndTextureMode();
@@ -96,4 +106,36 @@ void cRenderer::Render()
         sprintf(fpsText, "FPS: %i", GetFPS());
         DrawTextEx(fontRoboto, fpsText, { 10, 10 }, (float)fontRoboto.baseSize, 2, WHITE);
     EndDrawing();
+}
+
+
+void cRenderer::DrawBillboard(Billboard* argBillboard)
+{
+    cCamera* pCam = gpBase->GetCamera();
+
+    int Type = argBillboard->GetType();
+
+    if (Type == BILLBOARD)
+        ::DrawBillboard(pCam->GetCamera3D(),
+            argBillboard->GetTexture(),
+            argBillboard->GetPosition(),
+            argBillboard->GetScale(),
+            argBillboard->GetTint());
+    else if (Type == BILLBOARD_REC)
+        ::DrawBillboardRec(pCam->GetCamera3D(),
+            argBillboard->GetTexture(),
+            argBillboard->GetSource(),
+            argBillboard->GetPosition(),
+            argBillboard->GetSize(),
+            argBillboard->GetTint());
+    else if (Type == BILLBOARD_PRO)
+        ::DrawBillboardPro(pCam->GetCamera3D(),
+            argBillboard->GetTexture(),
+            argBillboard->GetSource(),
+            argBillboard->GetPosition(),
+            argBillboard->GetUp(),
+            argBillboard->GetSize(),
+            argBillboard->GetOrigin(),
+            argBillboard->GetRotation(),
+            argBillboard->GetTint());
 }

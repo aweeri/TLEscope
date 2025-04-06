@@ -21,7 +21,7 @@ add_executable(TLEScope
 	"src/math/Conversions.cpp"
     "src/scene/Camera.cpp"
 	"src/scene/Scene.cpp"
-)
+	"src/scene/BillboardHelper.cpp")
 
 # lib
 target_link_libraries(TLEScope raylib)

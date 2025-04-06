@@ -11,6 +11,7 @@ cTLEscope::cTLEscope()
 	pScene = NULL;
 	pCamera = NULL;
 	pRenderer = NULL;
+	pBillboardHelper = NULL;
 }
 
 cTLEscope::~cTLEscope()
@@ -18,6 +19,7 @@ cTLEscope::~cTLEscope()
 	delete pScene;
 	delete pCamera;
 	delete pRenderer;
+	delete pBillboardHelper;
 }
 
 bool cTLEscope::Init()
@@ -32,8 +34,9 @@ bool cTLEscope::Init()
 	pScene = new cScene;
 	pCamera = new cCamera;
 	pRenderer = new cRenderer(screenWidth, screenHeight);
+	pBillboardHelper = new cBillboardHelper;
 
-	if (!pScene || !pRenderer || !pCamera)
+	if (!pScene || !pRenderer || !pCamera || !pBillboardHelper)
 		return false;
 
 	//The init is over
