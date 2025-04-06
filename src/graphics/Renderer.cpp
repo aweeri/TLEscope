@@ -35,13 +35,13 @@ void cRenderer::SetSceneSpecific()
     cScene* pScene = gpBase->GetScene();
     baseCloudTransform = pScene->GetModelByName("cloud").transform;
 
-    Image locationImage = LoadImage("resources/mylocation.png");
+    Image locationImage = LoadImage("resources/fonts/satellite_alt_40dp_FFFFFF_FILL0_wght300_GRAD0_opsz40.png");
     Texture2D locationTexture = LoadTextureFromImage(locationImage);
     UnloadImage(locationImage);
     GenTextureMipmaps(&locationTexture);
 
     Rectangle source = { 0.0f, 0.0f, (float)locationTexture.width, (float)locationTexture.height };
-    gpBase->GetBillboardHelper()->CreateBillboardPro(std::string("MyLocation"), locationTexture, source, { 0, 6, 0 }, { 0, 1, 0 }, { 1, 1 }, { 0.5, 0.5 }, 0, WHITE);
+    gpBase->GetBillboardHelper()->CreateBillboardPro(std::string("MyLocation"), locationTexture, source, { 0, 6, 0 }, { 0, 1, 0 }, { 0.2, 0.2 }, { 0.5, 0.5 }, 0, WHITE);
 }
 
 void cRenderer::Render()
