@@ -14,10 +14,13 @@ endif()
 
 add_executable(TLEScope
     ${SOURCES}
-    src/main.cpp
-    src/camera.cpp
-    src/point.cpp
-    src/conversions.cpp
+    "src/Main.cpp"
+	"src/TLEscope.cpp"
+	"src/graphics/Point.cpp"
+	"src/graphics/Renderer.cpp"
+	"src/math/Conversions.cpp"
+    "src/scene/Camera.cpp"
+	"src/scene/Scene.cpp"
 )
 
 # lib
