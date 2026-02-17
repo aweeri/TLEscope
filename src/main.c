@@ -18,8 +18,8 @@ static AppConfig cfg = {
 };
 
 static Font customFont;
-static Texture2D satIcon, markerIcon, earthTexture;
-static Model earthModel;
+static Texture2D satIcon, markerIcon, earthTexture, moonTexture;
+static Model earthModel, moonModel;
 
 // safely modifies the alpha channel without relying on raylib's Fade()
 static Color ApplyAlpha(Color c, float alpha) {
@@ -166,6 +166,12 @@ int main(void) {
     earthTexture = LoadTexture("resources/earth.png");
     earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
 
+    float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
+    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
+    moonModel = LoadModelFromMesh(moonMesh);
+    moonTexture = LoadTexture("resources/moon.jpg");
+    moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
+
     float map_w = 2048.0f, map_h = 1024.0f;
     float camDistance = 35.0f, camAngleX = 0.785f, camAngleY = 0.5f;
 
@@ -216,6 +222,15 @@ int main(void) {
         char datetime_str[64];
         epoch_to_datetime_str(current_epoch, datetime_str);
         double gmst_deg = epoch_to_gmst(current_epoch);
+
+        Vector3 moon_pos_km = calculate_moon_position(current_epoch);
+        Vector3 draw_moon_pos = Vector3Scale(moon_pos_km, 1.0f / DRAW_SCALE);
+
+        // Apply tidal lock mapping for the moon texture pointing to origin 0,0,0
+        Vector3 dirToEarth = Vector3Normalize(Vector3Negate(draw_moon_pos));
+        float moon_yaw = atan2f(-dirToEarth.z, dirToEarth.x);
+        float moon_pitch = asinf(dirToEarth.y);
+        moonModel.transform = MatrixMultiply(MatrixRotateZ(moon_pitch), MatrixRotateY(moon_yaw));
 
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
@@ -461,6 +476,16 @@ int main(void) {
                             DrawUIText(markers[m].name, mx+x_off+(m_size_2d/2.f)+4.f, my-(m_size_2d/2.f), m_text_2d, WHITE);
                         }
                     }
+
+                    // Render sub-lunar point ground track
+                    float moon_mx, moon_my;
+                    get_map_coordinates(moon_pos_km, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &moon_mx, &moon_my);
+                    for (int offset_i = -1; offset_i <= 1; offset_i++) {
+                        float x_off = offset_i * map_w;
+                        DrawCircleV((Vector2){moon_mx + x_off, moon_my}, 6.0f * cfg.ui_scale / camera2d.zoom, LIGHTGRAY);
+                        DrawUIText("MOON", moon_mx + x_off + 10.f, moon_my - 8.f, 16.0f * cfg.ui_scale / camera2d.zoom, LIGHTGRAY);
+                    }
+
                     EndScissorMode();
                 }
             EndMode2D();
@@ -469,6 +494,9 @@ int main(void) {
             BeginMode3D(camera3d);
                 earthModel.transform = MatrixRotateY((gmst_deg + cfg.earth_rotation_offset) * DEG2RAD);
                 DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
+
+                // Render Moon Model
+                DrawModel(moonModel, draw_moon_pos, 1.0f, WHITE);
 
                 if (active_sat && has_footprint) {
                     for (int i = 0; i < FP_RINGS; i++) {
@@ -645,6 +673,8 @@ int main(void) {
     UnloadTexture(markerIcon);
     UnloadTexture(earthTexture);
     UnloadModel(earthModel);
+    UnloadTexture(moonTexture);
+    UnloadModel(moonModel);
     UnloadFont(customFont);
     CloseWindow();
     return 0;

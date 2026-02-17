@@ -191,3 +191,33 @@ void get_apsis_2d(Satellite* sat, double current_time, bool is_apoapsis, double 
     
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
 }
+
+// simplified Meeus implementation for Moon tracking
+Vector3 calculate_moon_position(double current_time_days) {
+    double jd = epoch_to_jd(current_time_days);
+    double D = jd - 2451545.0; 
+
+    double L = fmod(218.316 + 13.176396 * D, 360.0) * DEG2RAD;
+    double M = fmod(134.963 + 13.064993 * D, 360.0) * DEG2RAD;
+    double F = fmod(93.272 + 13.229350 * D, 360.0) * DEG2RAD;
+
+    double lambda = L + (6.289 * DEG2RAD) * sin(M); 
+    double beta = (5.128 * DEG2RAD) * sin(F);       
+    double dist_km = 385000.0 - 20905.0 * cos(M);   
+
+    double x_ecl = dist_km * cos(beta) * cos(lambda);
+    double y_ecl = dist_km * cos(beta) * sin(lambda);
+    double z_ecl = dist_km * sin(beta);
+
+    double eps = 23.439 * DEG2RAD;
+    double x_eci = x_ecl;
+    double y_eci = y_ecl * cos(eps) - z_ecl * sin(eps);
+    double z_eci = y_ecl * sin(eps) + z_ecl * cos(eps);
+
+    Vector3 pos;
+    pos.x = x_eci;
+    pos.y = z_eci;
+    pos.z = -y_eci;
+
+    return pos;
+}
