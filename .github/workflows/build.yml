@@ -19,6 +19,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc make libcurl4-openssl-dev libraylib-dev libx11-dev libgl1-mesa-dev
 
+      - name: Build and Install Raylib from Source
+        run: |
+          git clone --depth 1 https://github.com/raysan5/raylib.git
+          cd raylib/src
+          make PLATFORM=PLATFORM_DESKTOP
+          sudo make install
+
       - name: Install MinGW (Windows Cross-Compiler)
         run: sudo apt-get install -y mingw-w64
 
