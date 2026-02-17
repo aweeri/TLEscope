@@ -398,12 +398,31 @@ int main(void) {
                         sCol = ApplyAlpha(sCol, sat_alpha);
 
                         if (is_hl) {
-                            double T_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
-                            int segments = fmin(999, fmax(50, (int)(100 * cfg.orbits_to_draw))); 
-                            
-                            Vector2 track_pts[1000];
+                            int segments = fmin(4000, fmax(50, (int)(400 * cfg.orbits_to_draw))); 
+                            Vector2 track_pts[4001]; // must be segments + 1
+
+                            // grab the current mean and eccentric anomaly to start the track from the exact current position
+                            double delta_time_s_curr = (current_epoch - satellites[i].epoch_days) * 86400.0;
+                            double M_curr = fmod(satellites[i].mean_anomaly + satellites[i].mean_motion * delta_time_s_curr, 2.0 * PI);
+                            if (M_curr < 0) M_curr += 2.0 * PI;
+
+                            double E_curr = M_curr;
+                            for (int k = 0; k < 10; k++) {
+                                double delta = (E_curr - satellites[i].eccentricity * sin(E_curr) - M_curr) / (1.0 - satellites[i].eccentricity * cos(E_curr));
+                                E_curr -= delta;
+                                if (fabs(delta) < 1e-6) break;
+                            }
+
+                            // step through eccentric anomaly instead of time for smoother curves at periapsis
                             for (int j = 0; j <= segments; j++) {
-                                double t = current_epoch + (T_days * cfg.orbits_to_draw * j / segments);
+                                double progress = (double)j / segments;
+                                double E_target = E_curr + (progress * 2.0 * PI * cfg.orbits_to_draw);
+                                
+                                // work backward to mean anomaly and then to time
+                                double M_target = E_target - satellites[i].eccentricity * sin(E_target);
+                                double delta_M = M_target - M_curr;
+                                double t = current_epoch + (delta_M / satellites[i].mean_motion) / 86400.0;
+                                
                                 get_map_coordinates(calculate_position(&satellites[i], t), epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
                             }
 
