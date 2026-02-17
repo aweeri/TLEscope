@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "rlgl.h"
+// #include "rlgl.h"
 
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
@@ -154,7 +154,7 @@ int main(void) {
 
     load_tle_data("resources/data.tle");
 
-    rlSetClipPlanes(0.1, 50000.0); // magic fix to get rid of far plane clipping
+    // rlSetClipPlanes(0.1, 50000.0); // magic fix to get rid of far plane clipping
 
     // set up the cameras for both views
     Camera camera3d = { 0 };

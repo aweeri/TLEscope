@@ -9,7 +9,7 @@
 #define EARTH_RADIUS_KM 6371.0f 
 #define MOON_RADIUS_KM 1737.4f 
 #define MU 398600.4418f  
-#define DRAW_SCALE 1000.0f 
+#define DRAW_SCALE 3000.0f 
 
 // keeps track of satellite data
 typedef struct {
