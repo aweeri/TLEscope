@@ -7,17 +7,18 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build:
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Linux Dependencies
+      - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc make libcurl4-openssl-dev libraylib-dev libx11-dev libgl1-mesa-dev
+          sudo apt-get install -y gcc make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
 
       - name: Build and Install Raylib from Source
         run: |
@@ -26,18 +27,35 @@ jobs:
           make PLATFORM=PLATFORM_DESKTOP
           sudo make install
 
-      - name: Install MinGW (Windows Cross-Compiler)
-        run: sudo apt-get install -y mingw-w64
-
       - name: Compile Linux Binaries
         run: make linux
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLEScope-Linux
+          path: bin/
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW (Windows Cross-Compiler)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
 
       - name: Compile Windows Binaries
         run: make windows
 
-      - name: Upload Build Artifacts
+      - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: TLEScope-Binaries
+          name: TLEScope-Windows
           path: bin/
           retention-days: 14
