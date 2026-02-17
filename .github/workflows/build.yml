@@ -1,0 +1,36 @@
+name: Build TLEScope
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make libcurl4-openssl-dev libraylib-dev libx11-dev libgl1-mesa-dev
+
+      - name: Install MinGW (Windows Cross-Compiler)
+        run: sudo apt-get install -y mingw-w64
+
+      - name: Compile Linux Binaries
+        run: make linux
+
+      - name: Compile Windows Binaries
+        run: make windows
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLEScope-Binaries
+          path: bin/
+          retention-days: 14
