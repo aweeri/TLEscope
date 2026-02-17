@@ -1,44 +1,48 @@
 CC_LINUX = gcc
-CC_WIN = x86_64-w64-mingw32-gcc
+CC_WIN   = x86_64-w64-mingw32-gcc
+CFLAGS   = -Wall -Wextra -std=c99 -O2 -Isrc
 
-CFLAGS = -Wall -Wextra -std=c99 -O2
-SRC = src/main.c src/astro.c src/config.c
+# Files
+SRC       = src/main.c src/astro.c src/config.c
 FETCH_SRC = src/fetch_tle.c
+OBJ       = $(SRC:src/%.c=build/%.o)
+FETCH_OBJ = build/fetch_tle.o
 
-# Linux configuration
-LDFLAGS_LINUX = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-CURL_LINUX = -lcurl
-TARGET_LINUX = TLEScope
-FETCH_LINUX = fetch_tle
-
-# Windows configuration
-# Ensure curl is in your mingw lib path
+# Library Flags
+LDFLAGS_LIN = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+CURL_LIN    = -lcurl
 LDFLAGS_WIN = -lraylib -lopengl32 -lgdi32 -lwinmm -mwindows
-CURL_WIN = -lcurl -lws2_32 -lcrypt32
-INC_WIN = -Iraylib_win/include -I/usr/x86_64-w64-mingw32/include
-LIB_WIN = -Lraylib_win/lib -L/usr/x86_64-w64-mingw32/lib
-TARGET_WIN = TLEScope.exe
-FETCH_WIN = fetch_tle.exe
+CURL_WIN    = -lcurl -lws2_32 -lcrypt32
+WIN_PATHS   = -Iraylib_win/include -Lraylib_win/lib -I/usr/x86_64-w64-mingw32/include -L/usr/x86_64-w64-mingw32/lib
 
-all: $(TARGET_LINUX) $(FETCH_LINUX)
+all: linux
 
-# Linux Build
-$(TARGET_LINUX): $(SRC)
-	$(CC_LINUX) $(CFLAGS) -o $(TARGET_LINUX) $(SRC) $(LDFLAGS_LINUX)
+linux: bin/TLEscope bin/fetch_tle
 
-$(FETCH_LINUX): $(FETCH_SRC)
-	$(CC_LINUX) $(CFLAGS) -o $(FETCH_LINUX) $(FETCH_SRC) $(CURL_LINUX)
+windows: bin/TLEscope.exe bin/fetch_tle.exe
 
-# Windows Build
-windows: $(TARGET_WIN) $(FETCH_WIN)
+# Linking
+bin/TLEscope: $(OBJ) | bin
+	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(LDFLAGS_LIN)
 
-$(TARGET_WIN): $(SRC)
-	$(CC_WIN) $(CFLAGS) $(INC_WIN) -o $(TARGET_WIN) $(SRC) $(LIB_WIN) $(LDFLAGS_WIN)
+bin/fetch_tle: $(FETCH_OBJ) | bin
+	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(CURL_LIN)
 
-$(FETCH_WIN): $(FETCH_SRC)
-	$(CC_WIN) $(CFLAGS) $(INC_WIN) -o $(FETCH_WIN) $(FETCH_SRC) $(LIB_WIN) $(CURL_WIN)
+bin/TLEscope.exe: $(SRC) | bin
+	$(CC_WIN) $(CFLAGS) $(WIN_PATHS) -o $@ $^ $(LDFLAGS_WIN)
+
+bin/fetch_tle.exe: $(FETCH_SRC) | bin
+	$(CC_WIN) $(CFLAGS) $(WIN_PATHS) -o $@ $^ $(CURL_WIN)
+
+# Compiling (Linux only for object reuse)
+build/%.o: src/%.c | build
+	$(CC_LINUX) $(CFLAGS) -c $< -o $@
+
+# Directory management
+bin build:
+	@mkdir -p $@
 
 clean:
-	rm -f $(TARGET_LINUX) $(TARGET_WIN) $(FETCH_LINUX) $(FETCH_WIN)
+	rm -rf bin build
 
-.PHONY: all windows clean
+.PHONY: all linux windows clean
