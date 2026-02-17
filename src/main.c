@@ -129,6 +129,8 @@ static void DrawUIText(const char* text, float x, float y, float size, Color col
     DrawTextEx(customFont, text, (Vector2){x, y}, size, 1.0f, color);
 }
 
+typedef enum { LOCK_NONE, LOCK_EARTH, LOCK_MOON } TargetLock;
+
 int main(void) {
     LoadAppConfig("settings.json", &cfg);
 
@@ -185,6 +187,8 @@ int main(void) {
 
     Satellite* hovered_sat = NULL;
     Satellite* selected_sat = NULL;
+    TargetLock active_lock = LOCK_EARTH;
+    double last_left_click_time = 0.0;
 
     SetTargetFPS(cfg.target_fps);
 
@@ -225,6 +229,8 @@ int main(void) {
 
         Vector3 moon_pos_km = calculate_moon_position(current_epoch);
         Vector3 draw_moon_pos = Vector3Scale(moon_pos_km, 1.0f / DRAW_SCALE);
+        float moon_mx, moon_my;
+        get_map_coordinates(moon_pos_km, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &moon_mx, &moon_my);
 
         // Apply tidal lock mapping for the moon texture pointing to origin 0,0,0
         Vector3 dirToEarth = Vector3Normalize(Vector3Negate(draw_moon_pos));
@@ -240,6 +246,7 @@ int main(void) {
         if (is_2d_view) {
             if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT))) {
                 camera2d.target = Vector2Add(camera2d.target, Vector2Scale(mouseDelta, -1.0f / camera2d.zoom));
+                active_lock = LOCK_NONE;
             }
             float wheel = GetMouseWheelMove();
             if (wheel != 0) {
@@ -248,6 +255,7 @@ int main(void) {
                 camera2d.target = mouseWorldPos;
                 camera2d.zoom += wheel * 0.1f * camera2d.zoom;
                 if (camera2d.zoom < 0.1f) camera2d.zoom = 0.1f;
+                active_lock = LOCK_NONE;
             }
 
             Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), camera2d);
@@ -272,6 +280,7 @@ int main(void) {
                     float panSpeed = camDistance * 0.001f; 
                     camera3d.target = Vector3Add(camera3d.target, Vector3Scale(right, -mouseDelta.x * panSpeed));
                     camera3d.target = Vector3Add(camera3d.target, Vector3Scale(upVector, mouseDelta.y * panSpeed));
+                    active_lock = LOCK_NONE;
                 } else {
                     camAngleX -= mouseDelta.x * 0.005f;
                     camAngleY += mouseDelta.y * 0.005f;
@@ -281,10 +290,6 @@ int main(void) {
             }
             camDistance -= GetMouseWheelMove() * (camDistance * 0.1f);
             if (camDistance < draw_earth_radius + 1.0f) camDistance = draw_earth_radius + 1.0f;
-
-            camera3d.position.x = camera3d.target.x + camDistance * cosf(camAngleY) * sinf(camAngleX);
-            camera3d.position.y = camera3d.target.y + camDistance * sinf(camAngleY);
-            camera3d.position.z = camera3d.target.z + camDistance * cosf(camAngleY) * cosf(camAngleX);
 
             Ray mouseRay = GetMouseRay(GetMousePosition(), camera3d);
             float closest_dist = 9999.0f;
@@ -307,7 +312,48 @@ int main(void) {
             // only update selection if the mouse is not clicking on the UI Checkbox
             if (!CheckCollisionPointRec(GetMousePosition(), cbHitbox)) {
                 selected_sat = hovered_sat; 
+
+                double current_time = GetTime();
+                if (current_time - last_left_click_time < 0.3) {
+                    if (is_2d_view) {
+                        Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), camera2d);
+                        bool hit_moon = false;
+                        for (int offset_i = -1; offset_i <= 1; offset_i++) {
+                            float x_off = offset_i * map_w;
+                            if (Vector2Distance(mouseWorld, (Vector2){moon_mx + x_off, moon_my}) < (15.0f * cfg.ui_scale / camera2d.zoom)) {
+                                hit_moon = true;
+                                break;
+                            }
+                        }
+                        active_lock = hit_moon ? LOCK_MOON : LOCK_EARTH;
+                    } else {
+                        Ray mouseRay = GetMouseRay(GetMousePosition(), camera3d);
+                        RayCollision earthCol = GetRayCollisionSphere(mouseRay, Vector3Zero(), draw_earth_radius);
+                        RayCollision moonCol = GetRayCollisionSphere(mouseRay, draw_moon_pos, draw_moon_radius);
+
+                        if (moonCol.hit && (!earthCol.hit || moonCol.distance < earthCol.distance)) {
+                            active_lock = LOCK_MOON;
+                        } else if (earthCol.hit) {
+                            active_lock = LOCK_EARTH;
+                        }
+                    }
+                }
+                last_left_click_time = current_time;
             }
+        }
+
+        if (active_lock == LOCK_EARTH) {
+            if (is_2d_view) camera2d.target = Vector2Zero();
+            else camera3d.target = Vector3Zero();
+        } else if (active_lock == LOCK_MOON) {
+            if (is_2d_view) camera2d.target = (Vector2){moon_mx, moon_my};
+            else camera3d.target = draw_moon_pos;
+        }
+
+        if (!is_2d_view) {
+            camera3d.position.x = camera3d.target.x + camDistance * cosf(camAngleY) * sinf(camAngleX);
+            camera3d.position.y = camera3d.target.y + camDistance * sinf(camAngleY);
+            camera3d.position.z = camera3d.target.z + camDistance * cosf(camAngleY) * cosf(camAngleX);
         }
 
         Satellite* active_sat = hovered_sat ? hovered_sat : selected_sat;
@@ -478,8 +524,6 @@ int main(void) {
                     }
 
                     // Render sub-lunar point ground track
-                    float moon_mx, moon_my;
-                    get_map_coordinates(moon_pos_km, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &moon_mx, &moon_my);
                     for (int offset_i = -1; offset_i <= 1; offset_i++) {
                         float x_off = offset_i * map_w;
                         DrawCircleV((Vector2){moon_mx + x_off, moon_my}, 6.0f * cfg.ui_scale / camera2d.zoom, LIGHTGRAY);
