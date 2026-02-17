@@ -56,7 +56,20 @@ jobs:
       - name: Install MinGW (Windows Cross-Compiler)
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64
+          sudo apt-get install -y mingw-w64 unzip
+
+      - name: Install Windows libcurl
+        run: |
+          wget -qO curl.zip "https://curl.se/windows/latest.cgi?p=win64-mingw.zip"
+          unzip -q curl.zip
+          
+          # Move headers and libs into the cross-compiler's default search paths
+          sudo cp -r curl-*-win64-mingw/include/curl /usr/x86_64-w64-mingw32/include/
+          sudo cp -r curl-*-win64-mingw/lib/* /usr/x86_64-w64-mingw32/lib/
+          
+          # Stage the required DLL so it gets bundled with the release
+          mkdir -p bin
+          cp curl-*-win64-mingw/bin/*.dll bin/
 
       - name: Compile Windows Binaries
         run: make windows
@@ -66,6 +79,7 @@ jobs:
           mkdir -p TLEscope-Windows
           cp bin/TLEscope.exe TLEscope-Windows/
           cp bin/fetch_tle.exe TLEscope-Windows/
+          cp bin/*.dll TLEscope-Windows/
           cp -r resources/ TLEscope-Windows/
           cp settings.json TLEscope-Windows/
 
