@@ -1,6 +1,6 @@
 {
-    "window_width": 1280,
-    "window_height": 720,
+    "window_width": 1920,
+    "window_height": 1080,
     "target_fps": 120,
     "ui_scale": 1.0,
     "earth_rotation_offset": 0.0,
