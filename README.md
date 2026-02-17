@@ -1,19 +1,22 @@
-### TLEscope
+### **TLEscope**
+​TLEscope is a satellite visualization tool designed to transform Two-Line Element (TLE) sets into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
 
-TLEscope helps you visualize satellite data using Two-Line Element (TLE) sets. It allows for previewing current, and future positions of orbital bodies in a visually appealing 3D/2D space, allowing you to see their line-of-sight coverage areas, orbital characteristics, and more.
+### ​**Features**
+- **​Dual-View Visualization**: Seamlessly toggle between an interactive 3D orbital space and a 2D projection featuring accurate satellite ground tracks.
 
-### OS Support
-Currently Linux and Windows are natively supported.
+- **​Coverage Analysis**: Real-time rendering of Line-of-Sight (LOS) coverage areas and comprehensive orbital characteristics.
 
-### Motivation
+- **​TLE Data Integration**: Efficiently load and parse TLE data for individual satellites or entire constellations.
 
-Existing sofware is kinda clunky and not very pretty, and so TLEscope came to life. Contributions and Issues are very much welcome.
-This project is heavily motivated by elements of the Kerbal Space Program map view and Blender camera controls. 
+- **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences.
 
-### Features
+- **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
-- **TLE Data Import:** Load and parse TLE data for multiple satellites. This is currently separate, but in the future will be fully integrated.
-- **3D Visualization:** Render satellite orbits in an interactive 3D space.
-- **2D Visualization:** An interactive 2D projection with satellite ground tracks.
-- **LOS and Range Analysis:** Display line-of-sight coverage areas and display orbital characteristics.
-- **Deeply configurable** Simple theming options for people who care.
+- **​Native OS Support**: Built for Linux and Windows.
+
+### ​**Design Philosophy**
+​Most existing orbital tracking software suffers from dated, unintuitive interfaces. TLEscope bridges this gap by prioritizing both visual clarity and ease of use.
+​The project is heavily influenced by the Kerbal Space Program map view and Blender-style camera navigation, offering a familiar and fluid control scheme for researchers and enthusiasts alike.
+
+### **​Development & Contributions**
+​TLEscope is an evolving project with a rich roadmap. While TLE data importing is currently a very manual process, full integration is planned for future releases. We welcome bug reports, feature requests, and code contributions via the project's issue tracker.
