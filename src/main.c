@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
+
 #include "types.h"
 #include "config.h"
 #include "astro.h"
@@ -17,6 +20,14 @@ static AppConfig cfg = {
 static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture;
 static Model earthModel;
+
+// safely modifies the alpha channel without relying on raylib's Fade()
+static Color ApplyAlpha(Color c, float alpha) {
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    c.a = (unsigned char)(c.a * alpha);
+    return c;
+}
 
 // check if the earth is blocking the view
 static bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius) {
@@ -85,10 +96,11 @@ static Mesh GenEarthMesh(float radius, int slices, int rings) {
 }
 
 // draw the orbit path ring
-static void draw_orbit_3d(Satellite* sat, bool is_highlighted) {
+static void draw_orbit_3d(Satellite* sat, bool is_highlighted, float alpha) {
     Vector3 prev_pos = {0};
     int segments = 100;
     Color orbitColor = is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal;
+    orbitColor = ApplyAlpha(orbitColor, alpha);
 
     for (int i = 0; i <= segments; i++) {
         double E = (2.0 * PI * i) / segments;
@@ -127,6 +139,7 @@ int main(void) {
     customFont = LoadFontEx("resources/font.ttf", 64, 0, 0); 
     GenTextureMipmaps(&customFont.texture); 
     SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
+    GuiSetFont(customFont); // Ensure raygui uses the custom font
 
     satIcon = LoadTexture("resources/sat_icon.png");
     markerIcon = LoadTexture("resources/marker_icon.png");
@@ -159,6 +172,10 @@ int main(void) {
     double current_epoch = get_current_real_time_epoch();
     double time_multiplier = 1.0; 
     bool paused = false, is_2d_view = false;
+    
+    // checkbox and fading state
+    bool hide_unselected = false;
+    float unselected_fade = 1.0f;
 
     Satellite* hovered_sat = NULL;
     Satellite* selected_sat = NULL;
@@ -184,6 +201,16 @@ int main(void) {
 
         if (!paused) {
             current_epoch += (GetFrameTime() * time_multiplier) / 86400.0; 
+        }
+
+        // fading math
+        bool should_hide = (hide_unselected && selected_sat != NULL);
+        if (should_hide) {
+            unselected_fade -= 3.0f * GetFrameTime();
+            if (unselected_fade < 0.0f) unselected_fade = 0.0f;
+        } else {
+            unselected_fade += 3.0f * GetFrameTime();
+            if (unselected_fade > 1.0f) unselected_fade = 1.0f;
         }
 
         char datetime_str[64];
@@ -213,6 +240,9 @@ int main(void) {
 
             for (int i = 0; i < sat_count; i++) {
                 satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
+                // prevent raycasting on hidden satellites satellites
+                if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
+                
                 float mx, my;
                 get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &mx, &my);
                 float dist = Vector2Distance(mouseWorld, (Vector2){mx, my});
@@ -246,13 +276,24 @@ int main(void) {
 
             for (int i = 0; i < sat_count; i++) {
                 satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
+                // Prevent raycasting on fading/hidden satellites
+                if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
+
                 Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                 RayCollision col = GetRayCollisionSphere(mouseRay, draw_pos, hit_radius); 
                 if (col.hit && col.distance < closest_dist) { closest_dist = col.distance; hovered_sat = &satellites[i]; }
             }
         }
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) selected_sat = hovered_sat; 
+        // defining a hitbox area to cover the UI checkbox + its text
+        Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 24 * cfg.ui_scale };
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            // only update selection if the mouse is not clicking on the UI Checkbox
+            if (!CheckCollisionPointRec(GetMousePosition(), cbHitbox)) {
+                selected_sat = hovered_sat; 
+            }
+        }
 
         Satellite* active_sat = hovered_sat ? hovered_sat : selected_sat;
 
@@ -348,8 +389,13 @@ int main(void) {
                     }
 
                     for (int i = 0; i < sat_count; i++) {
+                        bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
+                        float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                        if (sat_alpha <= 0.0f) continue;
+
                         bool is_hl = (active_sat == &satellites[i]);
                         Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
+                        sCol = ApplyAlpha(sCol, sat_alpha);
 
                         if (is_hl) {
                             double T_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
@@ -365,15 +411,15 @@ int main(void) {
                                 float x_off = offset_i * map_w;
                                 for (int j = 1; j <= segments; j++) {
                                     if (fabs(track_pts[j].x - track_pts[j-1].x) < map_w * 0.6f) {
-                                        DrawLineEx((Vector2){track_pts[j-1].x+x_off, track_pts[j-1].y}, (Vector2){track_pts[j].x+x_off, track_pts[j].y}, 2.0f/camera2d.zoom, cfg.orbit_highlighted);
+                                        DrawLineEx((Vector2){track_pts[j-1].x+x_off, track_pts[j-1].y}, (Vector2){track_pts[j].x+x_off, track_pts[j].y}, 2.0f/camera2d.zoom, ApplyAlpha(cfg.orbit_highlighted, sat_alpha));
                                     }
                                 }
 
                                 Vector2 peri2d, apo2d;
                                 get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
                                 get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
-                                DrawCircleV((Vector2){peri2d.x + x_off, peri2d.y}, marker_radius_2d, cfg.periapsis);
-                                DrawCircleV((Vector2){apo2d.x + x_off, apo2d.y}, marker_radius_2d, cfg.apoapsis);
+                                DrawCircleV((Vector2){peri2d.x + x_off, peri2d.y}, marker_radius_2d, ApplyAlpha(cfg.periapsis, sat_alpha));
+                                DrawCircleV((Vector2){apo2d.x + x_off, apo2d.y}, marker_radius_2d, ApplyAlpha(cfg.apoapsis, sat_alpha));
                             }
                         }
 
@@ -422,12 +468,16 @@ int main(void) {
                 }
 
                 for (int i = 0; i < sat_count; i++) {
+                    bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
+                    float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                    if (sat_alpha <= 0.0f) continue;
+
                     bool is_hl = (active_sat == &satellites[i]);
-                    draw_orbit_3d(&satellites[i], is_hl);
+                    draw_orbit_3d(&satellites[i], is_hl, sat_alpha);
 
                     if (is_hl) {
                         Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                        DrawLine3D(Vector3Zero(), draw_pos, cfg.orbit_highlighted);
+                        DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(cfg.orbit_highlighted, sat_alpha));
 
                         double rp = satellites[i].semi_major_axis * (1.0 - satellites[i].eccentricity);
                         double ra = satellites[i].semi_major_axis * (1.0 + satellites[i].eccentricity);
@@ -438,8 +488,8 @@ int main(void) {
                         Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
                         Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
 
-                        DrawSphere(Vector3Scale(periVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, cfg.periapsis); 
-                        DrawSphere(Vector3Scale(apoVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, cfg.apoapsis); 
+                        DrawSphere(Vector3Scale(periVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, ApplyAlpha(cfg.periapsis, sat_alpha)); 
+                        DrawSphere(Vector3Scale(apoVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, ApplyAlpha(cfg.apoapsis, sat_alpha)); 
                     }
                 }
             EndMode3D();
@@ -448,12 +498,17 @@ int main(void) {
             float m_text_3d = 16.0f * cfg.ui_scale;
 
             for (int i = 0; i < sat_count; i++) {
+                bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
+                float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                if (sat_alpha <= 0.0f) continue;
+
                 Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                 Vector3 toTarget = Vector3Subtract(draw_pos, camera3d.position);
                 Vector3 camForward = Vector3Normalize(Vector3Subtract(camera3d.target, camera3d.position));
 
                 if (Vector3DotProduct(toTarget, camForward) > 0.0f && !IsOccludedByEarth(camera3d.position, draw_pos, draw_earth_radius)) {
                     Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
+                    sCol = ApplyAlpha(sCol, sat_alpha);
                     Vector2 sp = GetWorldToScreen(draw_pos, camera3d);
                     DrawTexturePro(satIcon, (Rectangle){0,0,satIcon.width,satIcon.height}, 
                         (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d/2.f, m_size_3d/2.f}, 0.0f, sCol);
@@ -482,6 +537,15 @@ int main(void) {
         DrawUIText("Time: '.' (Faster 2x), ',' (Slower 0.5x), '/' (1x Speed), 'Shift+/' (Reset)", 10*cfg.ui_scale, (10+24)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
         DrawUIText(TextFormat("UI Scale: '-' / '+' (%.1fx) | Offset Load: %.1f deg", cfg.ui_scale, cfg.earth_rotation_offset), 10*cfg.ui_scale, (10+48)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
         DrawUIText(TextFormat("%s | Speed: %.1fx %s", datetime_str, time_multiplier, paused ? "[PAUSED]" : ""), 10*cfg.ui_scale, (10+76)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_main);
+
+        // raygui configuration and rendering
+        GuiSetStyle(DEFAULT, TEXT_SIZE, 16 * cfg.ui_scale);
+        GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(cfg.text_main));
+        GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED, ColorToInt(cfg.text_main));
+        GuiSetStyle(DEFAULT, TEXT_COLOR_PRESSED, ColorToInt(cfg.text_main));
+        
+        Rectangle cbRec = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 20 * cfg.ui_scale, 20 * cfg.ui_scale };
+        GuiCheckBox(cbRec, "Hide Unselected", &hide_unselected);
 
         if (active_sat) {
             Vector2 screenPos;
