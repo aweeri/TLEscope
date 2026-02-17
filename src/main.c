@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "rlgl.h"
+
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
@@ -16,6 +18,8 @@ static AppConfig cfg = {
     .window_width = 1280, .window_height = 720, .target_fps = 120, .ui_scale = 1.0f,
     .bg_color = {0, 0, 0, 255}, .text_main = {255, 255, 255, 255}
 };
+
+
 
 static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture, moonTexture;
@@ -135,7 +139,7 @@ int main(void) {
     LoadAppConfig("settings.json", &cfg);
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.0.1");
+    InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.1");
 
     // load our font and icons
     customFont = LoadFontEx("resources/font.ttf", 64, 0, 0); 
@@ -149,6 +153,8 @@ int main(void) {
     SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
 
     load_tle_data("resources/data.tle");
+
+    rlSetClipPlanes(0.1, 50000.0); // magic fix to get rid of far plane clipping
 
     // set up the cameras for both views
     Camera camera3d = { 0 };
@@ -539,7 +545,7 @@ int main(void) {
                 earthModel.transform = MatrixRotateY((gmst_deg + cfg.earth_rotation_offset) * DEG2RAD);
                 DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
 
-                // Render Moon Model
+                // render Moon (not sure what for tbh but I'm sure someone will appreciate it :3)
                 DrawModel(moonModel, draw_moon_pos, 1.0f, WHITE);
 
                 if (active_sat && has_footprint) {
@@ -626,7 +632,7 @@ int main(void) {
         // text overlays for the ui
         DrawUIText(is_2d_view ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D. Space: Pause." : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D. Space: Pause.", 10*cfg.ui_scale, 10*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
         DrawUIText("Time: '.' (Faster 2x), ',' (Slower 0.5x), '/' (1x Speed), 'Shift+/' (Reset)", 10*cfg.ui_scale, (10+24)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
-        DrawUIText(TextFormat("UI Scale: '-' / '+' (%.1fx) | Offset Load: %.1f deg", cfg.ui_scale, cfg.earth_rotation_offset), 10*cfg.ui_scale, (10+48)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
+        DrawUIText(TextFormat("UI Scale: '-' / '+' (%.1fx)", cfg.ui_scale), 10*cfg.ui_scale, (10+48)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
         DrawUIText(TextFormat("%s | Speed: %.1fx %s", datetime_str, time_multiplier, paused ? "[PAUSED]" : ""), 10*cfg.ui_scale, (10+76)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_main);
 
         // raygui configuration and rendering

@@ -6,7 +6,7 @@
     "earth_rotation_offset": 0.0,
     "orbits_to_draw": 3.0,
     
-    "bg_color": "#000000FF",
+    "bg_color": "#101010FF",
     "orbit_normal": "#D3D3D326",
     "orbit_highlighted": "#FFFFFFFF",
     "sat_normal": "#FFFFFFFF",
