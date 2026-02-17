@@ -78,7 +78,7 @@ jobs:
         run: |
           mkdir -p TLEscope-Windows
           cp bin/TLEscope.exe TLEscope-Windows/
-          cp bin/fetch_tle.exe TLEscope-Windows/
+          # cp bin/fetch_tle.exe TLEscope-Windows/
           cp bin/*.dll TLEscope-Windows/
           cp -r resources/ TLEscope-Windows/
           cp settings.json TLEscope-Windows/
