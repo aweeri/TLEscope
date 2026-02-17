@@ -168,6 +168,10 @@ int main(void) {
     camera2d.offset = (Vector2){ cfg.window_width / 2.0f, cfg.window_height / 2.0f };
     camera2d.target = (Vector2){ 0.0f, 0.0f };
 
+    // smooth camera targets for 2d
+    float target_camera2d_zoom = camera2d.zoom;
+    Vector2 target_camera2d_target = camera2d.target;
+
     float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
     Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 64, 64);
     earthModel = LoadModelFromMesh(sphereMesh);
@@ -182,6 +186,12 @@ int main(void) {
 
     float map_w = 2048.0f, map_h = 1024.0f;
     float camDistance = 35.0f, camAngleX = 0.785f, camAngleY = 0.5f;
+
+    // smooth camera targets for 3d
+    float target_camDistance = camDistance;
+    float target_camAngleX = camAngleX;
+    float target_camAngleY = camAngleY;
+    Vector3 target_camera3d_target = camera3d.target;
 
     double current_epoch = get_current_real_time_epoch();
     double time_multiplier = 1.0; 
@@ -248,10 +258,10 @@ int main(void) {
         hovered_sat = NULL;
         float hit_radius = 0.4f * cfg.ui_scale;
 
-        // moving the camera around
+        // moving the camera around smoothly via targets
         if (is_2d_view) {
             if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT))) {
-                camera2d.target = Vector2Add(camera2d.target, Vector2Scale(mouseDelta, -1.0f / camera2d.zoom));
+                target_camera2d_target = Vector2Add(target_camera2d_target, Vector2Scale(mouseDelta, -1.0f / target_camera2d_zoom));
                 active_lock = LOCK_NONE;
             }
             float wheel = GetMouseWheelMove();
@@ -259,8 +269,9 @@ int main(void) {
                 Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera2d);
                 camera2d.offset = GetMousePosition();
                 camera2d.target = mouseWorldPos;
-                camera2d.zoom += wheel * 0.1f * camera2d.zoom;
-                if (camera2d.zoom < 0.1f) camera2d.zoom = 0.1f;
+                target_camera2d_target = mouseWorldPos; // align target
+                target_camera2d_zoom += wheel * 0.1f * target_camera2d_zoom;
+                if (target_camera2d_zoom < 0.1f) target_camera2d_zoom = 0.1f;
                 active_lock = LOCK_NONE;
             }
 
@@ -283,19 +294,19 @@ int main(void) {
                     Vector3 forward = Vector3Normalize(Vector3Subtract(camera3d.target, camera3d.position));
                     Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera3d.up));
                     Vector3 upVector = Vector3Normalize(Vector3CrossProduct(right, forward));
-                    float panSpeed = camDistance * 0.001f; 
-                    camera3d.target = Vector3Add(camera3d.target, Vector3Scale(right, -mouseDelta.x * panSpeed));
-                    camera3d.target = Vector3Add(camera3d.target, Vector3Scale(upVector, mouseDelta.y * panSpeed));
+                    float panSpeed = target_camDistance * 0.001f; 
+                    target_camera3d_target = Vector3Add(target_camera3d_target, Vector3Scale(right, -mouseDelta.x * panSpeed));
+                    target_camera3d_target = Vector3Add(target_camera3d_target, Vector3Scale(upVector, mouseDelta.y * panSpeed));
                     active_lock = LOCK_NONE;
                 } else {
-                    camAngleX -= mouseDelta.x * 0.005f;
-                    camAngleY += mouseDelta.y * 0.005f;
-                    if (camAngleY > 1.5f) camAngleY = 1.5f;
-                    if (camAngleY < -1.5f) camAngleY = -1.5f;
+                    target_camAngleX -= mouseDelta.x * 0.005f;
+                    target_camAngleY += mouseDelta.y * 0.005f;
+                    if (target_camAngleY > 1.5f) target_camAngleY = 1.5f;
+                    if (target_camAngleY < -1.5f) target_camAngleY = -1.5f;
                 }
             }
-            camDistance -= GetMouseWheelMove() * (camDistance * 0.1f);
-            if (camDistance < draw_earth_radius + 1.0f) camDistance = draw_earth_radius + 1.0f;
+            target_camDistance -= GetMouseWheelMove() * (target_camDistance * 0.1f);
+            if (target_camDistance < draw_earth_radius + 1.0f) target_camDistance = draw_earth_radius + 1.0f;
 
             Ray mouseRay = GetMouseRay(GetMousePosition(), camera3d);
             float closest_dist = 9999.0f;
@@ -349,12 +360,23 @@ int main(void) {
         }
 
         if (active_lock == LOCK_EARTH) {
-            if (is_2d_view) camera2d.target = Vector2Zero();
-            else camera3d.target = Vector3Zero();
+            if (is_2d_view) target_camera2d_target = Vector2Zero();
+            else target_camera3d_target = Vector3Zero();
         } else if (active_lock == LOCK_MOON) {
-            if (is_2d_view) camera2d.target = (Vector2){moon_mx, moon_my};
-            else camera3d.target = draw_moon_pos;
+            if (is_2d_view) target_camera2d_target = (Vector2){moon_mx, moon_my};
+            else target_camera3d_target = draw_moon_pos;
         }
+
+        // apply the smooth lerping
+        float smooth_speed = 10.0f * GetFrameTime();
+        
+        camera2d.zoom = Lerp(camera2d.zoom, target_camera2d_zoom, smooth_speed);
+        camera2d.target = Vector2Lerp(camera2d.target, target_camera2d_target, smooth_speed);
+        
+        camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
+        camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
+        camDistance = Lerp(camDistance, target_camDistance, smooth_speed);
+        camera3d.target = Vector3Lerp(camera3d.target, target_camera3d_target, smooth_speed);
 
         if (!is_2d_view) {
             camera3d.position.x = camera3d.target.x + camDistance * cosf(camAngleY) * sinf(camAngleX);
@@ -525,15 +547,12 @@ int main(void) {
                             float x_off = offset_i * map_w;
                             DrawTexturePro(markerIcon, (Rectangle){0,0,markerIcon.width,markerIcon.height}, 
                                 (Rectangle){mx+x_off, my, m_size_2d, m_size_2d}, (Vector2){m_size_2d/2.f, m_size_2d/2.f}, 0.0f, WHITE);
-                            DrawUIText(markers[m].name, mx+x_off+(m_size_2d/2.f)+4.f, my-(m_size_2d/2.f), m_text_2d, WHITE);
+                            
+                            // only draw text if zoomed in enough
+                            if (camera2d.zoom > 0.1f) {
+                                DrawUIText(markers[m].name, mx+x_off+(m_size_2d/2.f)+4.f, my-(m_size_2d/2.f), m_text_2d, WHITE);
+                            }
                         }
-                    }
-
-                    // Render sub-lunar point ground track
-                    for (int offset_i = -1; offset_i <= 1; offset_i++) {
-                        float x_off = offset_i * map_w;
-                        DrawCircleV((Vector2){moon_mx + x_off, moon_my}, 6.0f * cfg.ui_scale / camera2d.zoom, LIGHTGRAY);
-                        DrawUIText("MOON", moon_mx + x_off + 10.f, moon_my - 8.f, 16.0f * cfg.ui_scale / camera2d.zoom, LIGHTGRAY);
                     }
 
                     EndScissorMode();
@@ -624,7 +643,11 @@ int main(void) {
                     Vector2 sp = GetWorldToScreen(m_pos, camera3d);
                     DrawTexturePro(markerIcon, (Rectangle){0,0,markerIcon.width,markerIcon.height}, 
                         (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d/2.f, m_size_3d/2.f}, 0.0f, WHITE);
-                    DrawUIText(markers[m].name, sp.x+(m_size_3d/2.f)+4.f, sp.y-(m_size_3d/2.f), m_text_3d, WHITE);
+                    
+                    // only draw text if zoomed in enough
+                    if (camDistance < 50.0f) {
+                        DrawUIText(markers[m].name, sp.x+(m_size_3d/2.f)+4.f, sp.y-(m_size_3d/2.f), m_text_3d, WHITE);
+                    }
                 }
             }
         }

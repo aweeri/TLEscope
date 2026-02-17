@@ -9,7 +9,7 @@
     "bg_color": "#101010FF",
     "orbit_normal": "#D3D3D326",
     "orbit_highlighted": "#FFFFFFFF",
-    "sat_normal": "#FFFFFFFF",
+    "sat_normal": "#EEEEEE66",
     "sat_highlighted": "#FFFF00FF",
     "sat_selected": "#00FF00FF",
     "text_main": "#FFFFFFFF",
