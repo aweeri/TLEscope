@@ -1,6 +1,10 @@
 ### **TLEscope**
 ​TLEscope is a satellite visualization tool designed to transform Two-Line Element (TLE) sets into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
 
+<img width="430" alt="image" src="https://github.com/user-attachments/assets/d7800027-8f43-4eb7-a0f3-7fbd63ec4976" />
+<img width="430" alt="image" src="https://github.com/user-attachments/assets/6109b657-8748-4d10-9fff-8002754a3ba6" />
+
+
 ### ​**Features**
 - **​Dual-View Visualization**: Seamlessly toggle between an interactive 3D orbital space and a 2D projection featuring accurate satellite ground tracks.
 
@@ -20,3 +24,9 @@
 
 ### **​Development & Contributions**
 ​TLEscope is an evolving project with a rich roadmap. While TLE data importing is currently a very manual process, full integration is planned for future releases. We welcome bug reports, feature requests, and code contributions via the project's issue tracker.
+
+### **Download**
+To download TLEscope, grab a portable zip from the [Relases tab](https://github.com/aweeri/TLEscope/releases), then extract it's contents into a directory of choice.
+You can choose between nightly and complete relases:
+- **Stable** relases are properly versioned notable milestone builds. They may not have the latest features, but they are a stable and safe choice. 
+- **Nightly** relases are always up to date with the latest commits, as long as they [compile correctly](https://github.com/aweeri/TLEscope/actions). Do not complain too much if things don't work as expected.
