@@ -1,8 +1,10 @@
-name: Build TLEscope
+name: Build and Release TLEscope
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags:
+      - 'v*' # Triggers stable release on version tags
   pull_request:
     branches: [ "main", "master" ]
 
@@ -89,3 +91,46 @@ jobs:
           name: TLEscope-Windows
           path: TLEscope-Windows/
           retention-days: 14
+
+  release:
+    name: Publish Release
+    needs: [build-linux, build-windows]
+    # Only run on pushes to main/master or tag pushes (ignore pull requests)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip Artifacts for Release
+        run: |
+          cd artifacts
+          zip -r ../TLEscope-Linux.zip TLEscope-Linux/
+          zip -r ../TLEscope-Windows.zip TLEscope-Windows/
+          cd ..
+
+      - name: Update Nightly Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly Build"
+          body: "Automated nightly build reflecting the latest commit."
+          prerelease: true
+          files: |
+            TLEscope-Linux.zip
+            TLEscope-Windows.zip
+
+      - name: Publish Stable Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            TLEscope-Linux.zip
+            TLEscope-Windows.zip
