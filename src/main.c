@@ -177,7 +177,7 @@ int main(void) {
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
     moonModel = LoadModelFromMesh(moonMesh);
-    moonTexture = LoadTexture("resources/moon.jpg");
+    moonTexture = LoadTexture("resources/moon.png");
     moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
 
     float map_w = 2048.0f, map_h = 1024.0f;
