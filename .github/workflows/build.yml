@@ -27,7 +27,6 @@ jobs:
           make PLATFORM=PLATFORM_DESKTOP
           sudo make install
 
-      # Keep this step if you did not commit raygui.h to your src/ directory
       - name: Install Raygui Header
         run: |
           sudo wget https://raw.githubusercontent.com/raysan5/raygui/master/src/raygui.h -O /usr/local/include/raygui.h
@@ -42,15 +41,13 @@ jobs:
           cp bin/fetch_tle TLEscope-Linux/
           cp -r resources/ TLEscope-Linux/
           cp settings.json TLEscope-Linux/
-          tar -czvf TLEscope-Linux.tar.gz TLEscope-Linux/
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TLEscope-Linux-Archive
-          path: TLEscope-Linux.tar.gz
+          name: TLEscope-Linux
+          path: TLEscope-Linux/
           retention-days: 14
-
   build-windows:
     name: Build Windows
     runs-on: ubuntu-latest
