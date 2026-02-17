@@ -48,7 +48,8 @@ jobs:
           name: TLEscope-Linux
           path: TLEscope-Linux/
           retention-days: 14
-  build-windows:
+
+build-windows:
     name: Build Windows
     runs-on: ubuntu-latest
 
@@ -64,9 +65,17 @@ jobs:
       - name: Compile Windows Binaries
         run: make windows
 
-      - name: Upload Windows Artifacts
+      - name: Bundle Windows Release
+        run: |
+          mkdir -p TLEscope-Windows
+          cp bin/TLEscope.exe TLEscope-Windows/
+          cp bin/fetch_tle.exe TLEscope-Windows/
+          cp -r resources/ TLEscope-Windows/
+          cp settings.json TLEscope-Windows/
+
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TLEscope-Windows
-          path: bin/
+          path: TLEscope-Windows/
           retention-days: 14
