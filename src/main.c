@@ -256,7 +256,6 @@ int main(void) {
 
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
-        float hit_radius = 0.4f * cfg.ui_scale;
 
         // moving the camera around smoothly via targets
         if (is_2d_view) {
@@ -275,8 +274,9 @@ int main(void) {
                 active_lock = LOCK_NONE;
             }
 
-            Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), camera2d);
-            float closest_dist = 9999.0f, hit_radius_2d = 10.0f * cfg.ui_scale / camera2d.zoom; 
+            Vector2 mousePos = GetMousePosition();
+            float closest_dist = 9999.0f;
+            float hit_radius_pixels = 12.0f * cfg.ui_scale; // hitbox size in screen pixels
 
             for (int i = 0; i < sat_count; i++) {
                 satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
@@ -285,8 +285,11 @@ int main(void) {
                 
                 float mx, my;
                 get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &mx, &my);
-                float dist = Vector2Distance(mouseWorld, (Vector2){mx, my});
-                if (dist < hit_radius_2d && dist < closest_dist) { closest_dist = dist; hovered_sat = &satellites[i]; }
+                
+                Vector2 screenPos = GetWorldToScreen2D((Vector2){mx, my}, camera2d);
+                float dist = Vector2Distance(mousePos, screenPos);
+                
+                if (dist < hit_radius_pixels && dist < closest_dist) { closest_dist = dist; hovered_sat = &satellites[i]; }
             }
         } else {
             if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
@@ -317,7 +320,12 @@ int main(void) {
                 if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
 
                 Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                RayCollision col = GetRayCollisionSphere(mouseRay, draw_pos, hit_radius); 
+                
+                // adjust sphere radius based on distance to maintain consistent screen-size hitbox
+                float distToCam = Vector3Distance(camera3d.position, draw_pos);
+                float hit_radius_3d = 0.015f * distToCam * cfg.ui_scale;
+
+                RayCollision col = GetRayCollisionSphere(mouseRay, draw_pos, hit_radius_3d); 
                 if (col.hit && col.distance < closest_dist) { closest_dist = col.distance; hovered_sat = &satellites[i]; }
             }
         }
