@@ -27,10 +27,6 @@ jobs:
           make PLATFORM=PLATFORM_DESKTOP
           sudo make install
 
-      - name: Install Raygui Header
-        run: |
-          sudo wget https://raw.githubusercontent.com/raysan5/raygui/master/src/raygui.h -O /usr/local/include/raygui.h
-
       - name: Compile Linux Binaries
         run: make linux
 
@@ -49,7 +45,7 @@ jobs:
           path: TLEscope-Linux/
           retention-days: 14
 
-build-windows:
+  build-windows:
     name: Build Windows
     runs-on: ubuntu-latest
 
