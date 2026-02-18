@@ -745,7 +745,10 @@ int main(void) {
             DrawUIText(TextFormat("Apo: %.0f km", ra-EARTH_RADIUS_KM), apoScreen.x, apoScreen.y-(15*cfg.ui_scale), 16*cfg.ui_scale, cfg.apoapsis);
         }
 
+        // performance stats :3
         DrawUIText(TextFormat("%3i FPS", GetFPS()), GetScreenWidth() - (90*cfg.ui_scale), 10*cfg.ui_scale, 20*cfg.ui_scale, cfg.sat_selected);
+        DrawUIText(TextFormat("%i Sats", sat_count), GetScreenWidth() - (90*cfg.ui_scale), 34*cfg.ui_scale, 16*cfg.ui_scale, cfg.text_secondary);
+        
         EndDrawing();
     }
 
