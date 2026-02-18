@@ -110,6 +110,11 @@ jobs:
       - name: Zip Artifacts for Release
         run: |
           cd artifacts
+          
+          # make executable
+          chmod +x TLEscope-Linux/TLEscope
+          chmod +x TLEscope-Linux/fetch_tle
+          
           zip -r ../TLEscope-Linux.zip TLEscope-Linux/
           zip -r ../TLEscope-Windows.zip TLEscope-Windows/
           cd ..
