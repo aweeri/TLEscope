@@ -123,48 +123,29 @@ void load_tle_data(const char* filename) {
     fclose(file);
 }
 
-// figure out where the satellite is right now (with j2 spheroid perturbations)
+// figure out where the satellite is right now
 Vector3 calculate_position(Satellite* sat, double current_time_days) {
     double delta_time_s = (current_time_days - sat->epoch_days) * 86400.0;
-    
-    // earth oblateness (j2) effects
-    double e2 = sat->eccentricity * sat->eccentricity;
-    double p = sat->semi_major_axis * (1.0 - e2);
-    
-    // j2 math constants
-    const double J2 = 0.00108262668;
-    const double RE = EARTH_RADIUS_KM; // earth radius in km
-    
-    double n_J2_Re2_p2 = sat->mean_motion * J2 * (RE * RE) / (p * p);
-    double raan_dot = -1.5 * n_J2_Re2_p2 * cos(sat->inclination);
-    double arg_perigee_dot = 0.75 * n_J2_Re2_p2 * (4.0 - 5.0 * pow(sin(sat->inclination), 2));
-
-    double current_raan = sat->raan + raan_dot * delta_time_s;
-    double current_arg_perigee = sat->arg_perigee + arg_perigee_dot * delta_time_s;
-
     double M = sat->mean_anomaly + sat->mean_motion * delta_time_s;
     M = fmod(M, 2.0 * PI);
-    if (M < 0.0) M += 2.0 * PI;
+    if (M < 0) M += 2.0 * PI;
 
-    // improved guess for kepler's equation
-    double E = M + sat->eccentricity * sin(M);
-    double sinE, cosE;
+    double E = M;
     for (int i = 0; i < 10; i++) {
-        sinE = sin(E);
-        cosE = cos(E);
-        double delta = (E - sat->eccentricity * sinE - M) / (1.0 - sat->eccentricity * cosE);
+        double delta = (E - sat->eccentricity * sin(E) - M) / (1.0 - sat->eccentricity * cos(E));
         E -= delta;
         if (fabs(delta) < 1e-6) break;
     }
 
-    // bypass true anomaly calculation
-    double sqrt_1_minus_e2 = sqrt(1.0 - e2);
-    double x_orb = sat->semi_major_axis * (cosE - sat->eccentricity);
-    double y_orb = sat->semi_major_axis * sqrt_1_minus_e2 * sinE;
+    double nu = 2.0 * atan2(sqrt(1.0 + sat->eccentricity) * sin(E / 2.0), 
+                            sqrt(1.0 - sat->eccentricity) * cos(E / 2.0));
 
-    // use perturbed angles for orientation
-    double cw = cos(current_arg_perigee), sw = sin(current_arg_perigee);
-    double cO = cos(current_raan), sO = sin(current_raan);
+    double r = sat->semi_major_axis * (1.0 - sat->eccentricity * cos(E));
+    double x_orb = r * cos(nu);
+    double y_orb = r * sin(nu);
+
+    double cw = cos(sat->arg_perigee), sw = sin(sat->arg_perigee);
+    double cO = cos(sat->raan), sO = sin(sat->raan);
     double ci = cos(sat->inclination), si = sin(sat->inclination);
 
     Vector3 pos;

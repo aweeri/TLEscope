@@ -19,10 +19,9 @@ static AppConfig cfg = {
     .bg_color = {0, 0, 0, 255}, .text_main = {255, 255, 255, 255}
 };
 
-
-
 static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture, moonTexture;
+static Texture2D periMark, apoMark; // New textures
 static Model earthModel, moonModel;
 
 // safely modifies the alpha channel without relying on raylib's Fade()
@@ -149,8 +148,13 @@ int main(void) {
 
     satIcon = LoadTexture("resources/sat_icon.png");
     markerIcon = LoadTexture("resources/marker_icon.png");
+    periMark = LoadTexture("resources/smallmark.png");
+    apoMark = LoadTexture("resources/smallmark.png");
+    
     SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(periMark, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
 
     load_tle_data("resources/data.tle");
 
@@ -428,7 +432,7 @@ int main(void) {
 
         float m_size_2d = 24.0f * cfg.ui_scale / camera2d.zoom;
         float m_text_2d = 16.0f * cfg.ui_scale / camera2d.zoom;
-        float marker_radius_2d = fmaxf(1.0f, 4.0f * cfg.ui_scale / camera2d.zoom);
+        float mark_size_2d = 32.0f * cfg.ui_scale / camera2d.zoom;
 
         if (is_2d_view) {
             // drawing the flat map
@@ -534,8 +538,11 @@ int main(void) {
                                 Vector2 peri2d, apo2d;
                                 get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
                                 get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
-                                DrawCircleV((Vector2){peri2d.x + x_off, peri2d.y}, marker_radius_2d, ApplyAlpha(cfg.periapsis, sat_alpha));
-                                DrawCircleV((Vector2){apo2d.x + x_off, apo2d.y}, marker_radius_2d, ApplyAlpha(cfg.apoapsis, sat_alpha));
+                                
+                                DrawTexturePro(periMark, (Rectangle){0,0,periMark.width,periMark.height}, 
+                                    (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d}, (Vector2){mark_size_2d/2.f, mark_size_2d/2.f}, 0.0f, ApplyAlpha(cfg.periapsis, sat_alpha));
+                                DrawTexturePro(apoMark, (Rectangle){0,0,apoMark.width,apoMark.height}, 
+                                    (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d}, (Vector2){mark_size_2d/2.f, mark_size_2d/2.f}, 0.0f, ApplyAlpha(cfg.apoapsis, sat_alpha));
                             }
                         }
 
@@ -602,24 +609,42 @@ int main(void) {
                     if (is_hl) {
                         Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                         DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(cfg.orbit_highlighted, sat_alpha));
-
-                        double rp = satellites[i].semi_major_axis * (1.0 - satellites[i].eccentricity);
-                        double ra = satellites[i].semi_major_axis * (1.0 + satellites[i].eccentricity);
-                        double cw = cos(satellites[i].arg_perigee), sw = sin(satellites[i].arg_perigee);
-                        double cO = cos(satellites[i].raan), sO = sin(satellites[i].raan);
-                        double ci = cos(satellites[i].inclination), si = sin(satellites[i].inclination);
-
-                        Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
-                        Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
-
-                        DrawSphere(Vector3Scale(periVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, ApplyAlpha(cfg.periapsis, sat_alpha)); 
-                        DrawSphere(Vector3Scale(apoVec, 1.0f/DRAW_SCALE), 0.08f*cfg.ui_scale, ApplyAlpha(cfg.apoapsis, sat_alpha)); 
                     }
                 }
             EndMode3D();
+            
+            // marker scale and occlusion
 
             float m_size_3d = 24.0f * cfg.ui_scale;
             float m_text_3d = 16.0f * cfg.ui_scale;
+            float mark_size_3d = 32.0f * cfg.ui_scale;
+
+            if (active_sat) {
+                bool is_unselected = (selected_sat != NULL && active_sat != selected_sat);
+                float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                
+                double rp = active_sat->semi_major_axis * (1.0 - active_sat->eccentricity);
+                double ra = active_sat->semi_major_axis * (1.0 + active_sat->eccentricity);
+                double cw = cos(active_sat->arg_perigee), sw = sin(active_sat->arg_perigee);
+                double cO = cos(active_sat->raan), sO = sin(active_sat->raan);
+                double ci = cos(active_sat->inclination), si = sin(active_sat->inclination);
+                
+                Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
+                Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
+                Vector3 draw_p = Vector3Scale(periVec, 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(apoVec, 1.0f/DRAW_SCALE);
+
+                if (!IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) {
+                    Vector2 sp = GetWorldToScreen(draw_p, camera3d);
+                    DrawTexturePro(periMark, (Rectangle){0,0,periMark.width,periMark.height}, 
+                        (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d/2.f, mark_size_3d/2.f}, 0.0f, ApplyAlpha(cfg.periapsis, sat_alpha));
+                }
+                if (!IsOccludedByEarth(camera3d.position, draw_a, draw_earth_radius)) {
+                    Vector2 sp = GetWorldToScreen(draw_a, camera3d);
+                    DrawTexturePro(apoMark, (Rectangle){0,0,apoMark.width,apoMark.height}, 
+                        (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d/2.f, mark_size_3d/2.f}, 0.0f, ApplyAlpha(cfg.apoapsis, sat_alpha));
+                }
+            }
 
             for (int i = 0; i < sat_count; i++) {
                 bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
@@ -719,6 +744,10 @@ int main(void) {
             double rp = active_sat->semi_major_axis * (1.0 - active_sat->eccentricity);
             double ra = active_sat->semi_major_axis * (1.0 + active_sat->eccentricity);
             Vector2 periScreen, apoScreen;
+            
+            bool show_peri = true;
+            bool show_apo = true;
+            
             if (is_2d_view) {
                 Vector2 p2, a2;
                 get_apsis_2d(active_sat, current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &p2);
@@ -738,11 +767,22 @@ int main(void) {
                 double ci = cos(active_sat->inclination), si = sin(active_sat->inclination);
                 Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
                 Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
-                periScreen = GetWorldToScreen(Vector3Scale(periVec, 1.0f/DRAW_SCALE), camera3d);
-                apoScreen = GetWorldToScreen(Vector3Scale(apoVec, 1.0f/DRAW_SCALE), camera3d);
+                Vector3 draw_p = Vector3Scale(periVec, 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(apoVec, 1.0f/DRAW_SCALE);
+                
+                if (IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) show_peri = false;
+                if (IsOccludedByEarth(camera3d.position, draw_a, draw_earth_radius)) show_apo = false;
+                
+                periScreen = GetWorldToScreen(draw_p, camera3d);
+                apoScreen = GetWorldToScreen(draw_a, camera3d);
             }
-            DrawUIText(TextFormat("Peri: %.0f km", rp-EARTH_RADIUS_KM), periScreen.x, periScreen.y-(15*cfg.ui_scale), 16*cfg.ui_scale, cfg.periapsis);
-            DrawUIText(TextFormat("Apo: %.0f km", ra-EARTH_RADIUS_KM), apoScreen.x, apoScreen.y-(15*cfg.ui_scale), 16*cfg.ui_scale, cfg.apoapsis);
+            
+            float text_size = 16.0f * cfg.ui_scale;
+            float x_offset = 20.0f * cfg.ui_scale;
+            float y_offset = text_size / 2.2f;
+
+            if (show_peri) DrawUIText(TextFormat("Peri: %.0f km", rp-EARTH_RADIUS_KM), periScreen.x + x_offset, periScreen.y - y_offset, text_size, cfg.periapsis);
+            if (show_apo) DrawUIText(TextFormat("Apo: %.0f km", ra-EARTH_RADIUS_KM), apoScreen.x + x_offset, apoScreen.y - y_offset, text_size, cfg.apoapsis);
         }
 
         // performance stats :3
@@ -755,6 +795,8 @@ int main(void) {
     // cleanup time before closing
     UnloadTexture(satIcon);
     UnloadTexture(markerIcon);
+    UnloadTexture(periMark);
+    UnloadTexture(apoMark);
     UnloadTexture(earthTexture);
     UnloadModel(earthModel);
     UnloadTexture(moonTexture);
