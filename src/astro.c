@@ -133,7 +133,7 @@ Vector3 calculate_position(Satellite* sat, double current_time_days) {
     
     // j2 math constants
     const double J2 = 0.00108262668;
-    const double RE = 6378.137; // earth radius in km
+    const double RE = EARTH_RADIUS_KM; // earth radius in km
     
     double n_J2_Re2_p2 = sat->mean_motion * J2 * (RE * RE) / (p * p);
     double raan_dot = -1.5 * n_J2_Re2_p2 * cos(sat->inclination);
