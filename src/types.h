@@ -4,7 +4,7 @@
 #include <raylib.h>
 
 // basic limits and math constants
-#define MAX_SATELLITES 2000
+#define MAX_SATELLITES 15000
 #define MAX_MARKERS 100
 #define EARTH_RADIUS_KM 6371.0f 
 #define MOON_RADIUS_KM 1737.4f 
