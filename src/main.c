@@ -98,30 +98,35 @@ static Mesh GenEarthMesh(float radius, int slices, int rings) {
     return mesh;
 }
 
-// draw the orbit path ring
-static void draw_orbit_3d(Satellite* sat, bool is_highlighted, float alpha) {
+// draw the orbit path ring using precise SGP4 positioning
+static void draw_orbit_3d(Satellite* sat, double current_epoch, bool is_highlighted, float alpha) {
     Vector3 prev_pos = {0};
-    int segments = 100;
+    int segments = is_highlighted ? fmin(4000, fmax(90, (int)(400 * cfg.orbits_to_draw))) : 90;
     Color orbitColor = is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal;
     orbitColor = ApplyAlpha(orbitColor, alpha);
 
-    for (int i = 0; i <= segments; i++) {
-        double E = (2.0 * PI * i) / segments;
-        double nu = 2.0 * atan2(sqrt(1.0 + sat->eccentricity) * sin(E / 2.0), 
-                                sqrt(1.0 - sat->eccentricity) * cos(E / 2.0));
-        double r = sat->semi_major_axis * (1.0 - sat->eccentricity * cos(E));
-        
-        double x_orb = r * cos(nu);
-        double y_orb = r * sin(nu);
-        double cw = cos(sat->arg_perigee), sw = sin(sat->arg_perigee);
-        double cO = cos(sat->raan), sO = sin(sat->raan);
-        double ci = cos(sat->inclination), si = sin(sat->inclination);
+    double delta_time_s_curr = (current_epoch - sat->epoch_days) * 86400.0;
+    double M_curr = fmod(sat->mean_anomaly + sat->mean_motion * delta_time_s_curr, 2.0 * PI);
+    if (M_curr < 0) M_curr += 2.0 * PI;
 
-        Vector3 pos;
-        pos.x = (cO * cw - sO * sw * ci) * x_orb + (-cO * sw - sO * cw * ci) * y_orb;
-        pos.y = (sw * si) * x_orb + (cw * si) * y_orb;
-        pos.z = -((sO * cw + cO * sw * ci) * x_orb + (-sO * sw + cO * cw * ci) * y_orb);
-        pos = Vector3Scale(pos, 1.0f / DRAW_SCALE);
+    double E_curr = M_curr;
+    for (int k = 0; k < 10; k++) {
+        double delta = (E_curr - sat->eccentricity * sin(E_curr) - M_curr) / (1.0 - sat->eccentricity * cos(E_curr));
+        E_curr -= delta;
+        if (fabs(delta) < 1e-6) break;
+    }
+
+    double orbits_count = is_highlighted ? (double)cfg.orbits_to_draw : 1.0;
+
+    for (int i = 0; i <= segments; i++) {
+        double progress = (double)i / segments;
+        double E_target = E_curr + (progress * 2.0 * PI * orbits_count);
+        
+        double M_target = E_target - sat->eccentricity * sin(E_target);
+        double delta_M = M_target - M_curr;
+        double t = current_epoch + (delta_M / sat->mean_motion) / 86400.0;
+        
+        Vector3 pos = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
 
         if (i > 0) DrawLine3D(prev_pos, pos, orbitColor);
         prev_pos = pos;
@@ -231,6 +236,7 @@ int main(void) {
 
         if (!paused) {
             current_epoch += (GetFrameTime() * time_multiplier) / 86400.0; 
+            current_epoch = normalize_epoch(current_epoch);
         }
 
         // fading math
@@ -604,7 +610,7 @@ int main(void) {
                     if (sat_alpha <= 0.0f) continue;
 
                     bool is_hl = (active_sat == &satellites[i]);
-                    draw_orbit_3d(&satellites[i], is_hl, sat_alpha);
+                    draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha);
 
                     if (is_hl) {
                         Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
@@ -623,16 +629,18 @@ int main(void) {
                 bool is_unselected = (selected_sat != NULL && active_sat != selected_sat);
                 float sat_alpha = is_unselected ? unselected_fade : 1.0f;
                 
-                double rp = active_sat->semi_major_axis * (1.0 - active_sat->eccentricity);
-                double ra = active_sat->semi_major_axis * (1.0 + active_sat->eccentricity);
-                double cw = cos(active_sat->arg_perigee), sw = sin(active_sat->arg_perigee);
-                double cO = cos(active_sat->raan), sO = sin(active_sat->raan);
-                double ci = cos(active_sat->inclination), si = sin(active_sat->inclination);
+                double delta_time_s_curr = (current_epoch - active_sat->epoch_days) * 86400.0;
+                double M_curr = fmod(active_sat->mean_anomaly + active_sat->mean_motion * delta_time_s_curr, 2.0 * PI);
+                if (M_curr < 0) M_curr += 2.0 * PI;
                 
-                Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
-                Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
-                Vector3 draw_p = Vector3Scale(periVec, 1.0f/DRAW_SCALE);
-                Vector3 draw_a = Vector3Scale(apoVec, 1.0f/DRAW_SCALE);
+                double diff_peri = 0.0 - M_curr; if (diff_peri < 0) diff_peri += 2.0 * PI;
+                double diff_apo = PI - M_curr; if (diff_apo < 0) diff_apo += 2.0 * PI;
+                
+                double t_peri = current_epoch + (diff_peri / active_sat->mean_motion) / 86400.0;
+                double t_apo = current_epoch + (diff_apo / active_sat->mean_motion) / 86400.0;
+
+                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri), 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo), 1.0f/DRAW_SCALE);
 
                 if (!IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) {
                     Vector2 sp = GetWorldToScreen(draw_p, camera3d);
@@ -741,12 +749,22 @@ int main(void) {
                     active_sat->inclination*RAD2DEG, active_sat->raan*RAD2DEG, active_sat->eccentricity, r_km-EARTH_RADIUS_KM, v_kms, lat_deg, lon_deg);
             DrawUIText(info, boxX, boxY + (28*cfg.ui_scale), 18*cfg.ui_scale, cfg.text_main);
 
-            double rp = active_sat->semi_major_axis * (1.0 - active_sat->eccentricity);
-            double ra = active_sat->semi_major_axis * (1.0 + active_sat->eccentricity);
             Vector2 periScreen, apoScreen;
-            
             bool show_peri = true;
             bool show_apo = true;
+
+            double delta_time_s_curr = (current_epoch - active_sat->epoch_days) * 86400.0;
+            double M_curr = fmod(active_sat->mean_anomaly + active_sat->mean_motion * delta_time_s_curr, 2.0 * PI);
+            if (M_curr < 0) M_curr += 2.0 * PI;
+            
+            double diff_peri = 0.0 - M_curr; if (diff_peri < 0) diff_peri += 2.0 * PI;
+            double diff_apo = PI - M_curr; if (diff_apo < 0) diff_apo += 2.0 * PI;
+            
+            double t_peri = current_epoch + (diff_peri / active_sat->mean_motion) / 86400.0;
+            double t_apo = current_epoch + (diff_apo / active_sat->mean_motion) / 86400.0;
+
+            double real_rp = Vector3Length(calculate_position(active_sat, t_peri));
+            double real_ra = Vector3Length(calculate_position(active_sat, t_apo));
             
             if (is_2d_view) {
                 Vector2 p2, a2;
@@ -762,13 +780,8 @@ int main(void) {
                 periScreen = GetWorldToScreen2D(p2, camera2d);
                 apoScreen = GetWorldToScreen2D(a2, camera2d);
             } else {
-                double cw = cos(active_sat->arg_perigee), sw = sin(active_sat->arg_perigee);
-                double cO = cos(active_sat->raan), sO = sin(active_sat->raan);
-                double ci = cos(active_sat->inclination), si = sin(active_sat->inclination);
-                Vector3 periVec = { (cO*cw - sO*sw*ci)*rp, (sw*si)*rp, -((sO*cw + cO*sw*ci)*rp) };
-                Vector3 apoVec = { (cO*cw - sO*sw*ci)*(-ra), (sw*si)*(-ra), -((sO*cw + cO*sw*ci)*(-ra)) };
-                Vector3 draw_p = Vector3Scale(periVec, 1.0f/DRAW_SCALE);
-                Vector3 draw_a = Vector3Scale(apoVec, 1.0f/DRAW_SCALE);
+                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri), 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo), 1.0f/DRAW_SCALE);
                 
                 if (IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) show_peri = false;
                 if (IsOccludedByEarth(camera3d.position, draw_a, draw_earth_radius)) show_apo = false;
@@ -781,8 +794,8 @@ int main(void) {
             float x_offset = 20.0f * cfg.ui_scale;
             float y_offset = text_size / 2.2f;
 
-            if (show_peri) DrawUIText(TextFormat("Peri: %.0f km", rp-EARTH_RADIUS_KM), periScreen.x + x_offset, periScreen.y - y_offset, text_size, cfg.periapsis);
-            if (show_apo) DrawUIText(TextFormat("Apo: %.0f km", ra-EARTH_RADIUS_KM), apoScreen.x + x_offset, apoScreen.y - y_offset, text_size, cfg.apoapsis);
+            if (show_peri) DrawUIText(TextFormat("Peri: %.0f km", real_rp-EARTH_RADIUS_KM), periScreen.x + x_offset, periScreen.y - y_offset, text_size, cfg.periapsis);
+            if (show_apo) DrawUIText(TextFormat("Apo: %.0f km", real_ra-EARTH_RADIUS_KM), apoScreen.x + x_offset, apoScreen.y - y_offset, text_size, cfg.apoapsis);
         }
 
         // performance stats :3

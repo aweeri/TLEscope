@@ -1,6 +1,6 @@
 CC_LINUX = gcc
 CC_WIN   = x86_64-w64-mingw32-gcc
-CFLAGS   = -Wall -Wextra -std=c99 -O2 -Isrc
+CFLAGS   = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib
 
 # Files
 SRC       = src/main.c src/astro.c src/config.c
@@ -34,15 +34,15 @@ bin/TLEscope.exe: $(SRC) | bin
 bin/fetch_tle.exe: $(FETCH_SRC) | bin
 	$(CC_WIN) $(CFLAGS) $(WIN_PATHS) -o $@ $^ $(CURL_WIN)
 
-# Compiling (Linux only for object reuse)
+# Compilation
 build/%.o: src/%.c | build
 	$(CC_LINUX) $(CFLAGS) -c $< -o $@
 
-# Directory management
-bin build:
-	@mkdir -p $@
+build:
+	mkdir -p build
+
+bin:
+	mkdir -p bin
 
 clean:
-	rm -rf bin build
-
-.PHONY: all linux windows clean
+	rm -rf build bin

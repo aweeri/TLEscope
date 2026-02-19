@@ -1,10 +1,14 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
 #include <raylib.h>
+#include "csgp4.h"
 
 // basic limits and math constants
-#define MAX_SATELLITES 15000
+#define MAX_SATELLITES 2000
 #define MAX_MARKERS 100
 #define EARTH_RADIUS_KM 6371.0f 
 #define MOON_RADIUS_KM 1737.4f 
@@ -23,6 +27,8 @@ typedef struct {
     double mean_motion; 
     double semi_major_axis; 
     Vector3 current_pos; 
+
+    struct elsetrec satrec; 
 } Satellite;
 
 typedef struct {
@@ -30,6 +36,12 @@ typedef struct {
     float lat;
     float lon;
 } Marker;
+
+extern Satellite satellites[MAX_SATELLITES];
+extern int sat_count;
+
+extern Marker markers[MAX_MARKERS];
+extern int marker_count;
 
 // visual settings and colors
 typedef struct {
@@ -54,11 +66,5 @@ typedef struct {
     Color footprint_bg;
     Color footprint_border;
 } AppConfig;
-
-extern Satellite satellites[MAX_SATELLITES];
-extern int sat_count;
-
-extern Marker markers[MAX_MARKERS];
-extern int marker_count;
 
 #endif // TYPES_H

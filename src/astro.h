@@ -7,6 +7,7 @@ double get_current_real_time_epoch(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char* buffer);
 void load_tle_data(const char* filename);
+double normalize_epoch(double epoch);
 
 // orbit math stuff
 Vector3 calculate_position(Satellite* sat, double current_time_days);
