@@ -81,6 +81,8 @@ static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, e
 static Texture2D periMark, apoMark;
 static Model earthModel, moonModel, cloudModel;
 
+
+
 // safely modifies the alpha channel without relying on raylib's Fade()
 static Color ApplyAlpha(Color c, float alpha) {
     if (alpha < 0.0f) alpha = 0.0f;
@@ -183,18 +185,88 @@ static void DrawUIText(const char* text, float x, float y, float size, Color col
 
 typedef enum { LOCK_NONE, LOCK_EARTH, LOCK_MOON } TargetLock;
 
+
+static void DrawLoadingScreen(float progress, const char* message) {
+    BeginDrawing();
+    ClearBackground(cfg.bg_color);
+    
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+    float barW = 400 * cfg.ui_scale;
+    float barH = 30 * cfg.ui_scale;
+    
+    Rectangle barOutline = { (screenW - barW)/2, (screenH - barH)/2, barW, barH };
+    Rectangle barProgress = { barOutline.x + 5, barOutline.y + 5, (barW - 10) * progress, barH - 10 };
+    
+    DrawRectangleLinesEx(barOutline, 2, cfg.text_main);
+    DrawRectangleRec(barProgress, cfg.text_secondary);
+    
+    Vector2 msgSize = MeasureTextEx(customFont, message, 20 * cfg.ui_scale, 1.0f);
+    DrawUIText(message, (screenW - msgSize.x)/2, barOutline.y - 40 * cfg.ui_scale, 20 * cfg.ui_scale, cfg.text_main);
+    
+    EndDrawing();
+}
+
 int main(void) {
+    /*
+    -----------------------------------------------------------------------------
+    INITIALIZATION AND LOADING SEQUENCE HERE
+    loading crap into VRAM is slow so here we show a lil loading screen~
+    -----------------------------------------------------------------------------
+    */
     LoadAppConfig("settings.json", &cfg);
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.1");
-
-    // load our font and icons
-    customFont = LoadFontEx("resources/font.ttf", 64, 0, 0); 
-    GenTextureMipmaps(&customFont.texture); 
+    InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.3");
+    
+    // Load font first so we can use it for the loading text
+    customFont = LoadFontEx("resources/font.ttf", 64, 0, 0);
+    GenTextureMipmaps(&customFont.texture);
     SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
-    GuiSetFont(customFont); // Ensure raygui uses the custom font
+    GuiSetFont(customFont);
 
+    DrawLoadingScreen(0.1f, "Fetching TLE Data...");
+    load_tle_data("resources/data.tle");
+
+    DrawLoadingScreen(0.25f, "Initializing Textures...");
+    earthTexture = LoadTexture("resources/earth.png");
+    earthNightTexture = LoadTexture("resources/earth_night.png");
+    
+    DrawLoadingScreen(0.4f, "Compiling Shaders...");
+    Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
+    int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
+    shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
+
+    Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
+    int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
+    int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
+
+    Shader shaderCloud = LoadShaderFromMemory(NULL, fsCloud3D);
+    int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
+    
+    DrawLoadingScreen(0.6f, "Generating Meshes...");
+    float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
+    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 64, 64);
+    earthModel = LoadModelFromMesh(sphereMesh);
+    earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
+    earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
+    Shader defaultEarthShader = earthModel.materials[0].shader;
+    
+    DrawLoadingScreen(0.8f, "Loading Celestial Bodies...");
+    float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
+    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
+    cloudModel = LoadModelFromMesh(cloudMesh);
+    cloudTexture = LoadTexture("resources/clouds.png");
+    cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+    Shader defaultCloudShader = cloudModel.materials[0].shader;
+    
+    float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
+    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
+    moonModel = LoadModelFromMesh(moonMesh);
+    moonTexture = LoadTexture("resources/moon.png");
+    moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
+
+    DrawLoadingScreen(0.95f, "Finalizing UI...");
     satIcon = LoadTexture("resources/sat_icon.png");
     markerIcon = LoadTexture("resources/marker_icon.png");
     periMark = LoadTexture("resources/smallmark.png");
@@ -205,7 +277,12 @@ int main(void) {
     SetTextureFilter(periMark, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
 
-    load_tle_data("resources/data.tle");
+    DrawLoadingScreen(1.0f, "Ready!");
+    /*
+    -----------------------------------------------------------------------------
+    stuff after loading and initialization, like setting up the cameras and main loop variables
+    -----------------------------------------------------------------------------
+    */
 
     // set up the cameras for both views
     Camera camera3d = { 0 };
@@ -222,42 +299,6 @@ int main(void) {
     // smooth camera targets for 2d
     float target_camera2d_zoom = camera2d.zoom;
     Vector2 target_camera2d_target = camera2d.target;
-
-    float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
-    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 64, 64);
-    earthModel = LoadModelFromMesh(sphereMesh);
-    earthTexture = LoadTexture("resources/earth.png");
-    earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
-    earthNightTexture = LoadTexture("resources/earth_night.png");
-
-    Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
-    int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
-    
-    // link texture1 to raylib's EMISSION material map
-    shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
-    earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
-    
-    Shader defaultEarthShader = earthModel.materials[0].shader; // cache the default shader
-
-    Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
-    int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
-    int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
-
-    float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
-    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
-    cloudModel = LoadModelFromMesh(cloudMesh);
-    cloudTexture = LoadTexture("resources/clouds.png");
-    cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
-
-    Shader shaderCloud = LoadShaderFromMemory(NULL, fsCloud3D);
-    int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
-    Shader defaultCloudShader = cloudModel.materials[0].shader;
-
-    float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
-    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
-    moonModel = LoadModelFromMesh(moonMesh);
-    moonTexture = LoadTexture("resources/moon.png");
-    moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
 
     float map_w = 2048.0f, map_h = 1024.0f;
     float camDistance = 35.0f, camAngleX = 0.785f, camAngleY = 0.5f;
@@ -284,6 +325,13 @@ int main(void) {
     SetTargetFPS(cfg.target_fps);
 
     while (!WindowShouldClose()) {
+        /*
+        -----------------------------------------------------------------------------
+        main simulation loop starts here. 
+        all the input handling, updating, and drawing happens in this loop, on each frame drawn
+        -----------------------------------------------------------------------------
+        */
+
         // keyboard stuff
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
         if (IsKeyPressed(KEY_PERIOD)) time_multiplier *= 2.0;
@@ -333,7 +381,7 @@ int main(void) {
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
 
-        // moving the camera around smoothly via targets
+        // moving the camera around smoothly via targets, split between 2d and 3d controls
         if (is_2d_view) {
             if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT))) {
                 target_camera2d_target = Vector2Add(target_camera2d_target, Vector2Scale(mouseDelta, -1.0f / target_camera2d_zoom));
@@ -408,9 +456,12 @@ int main(void) {
 
         // defining a hitbox area to cover the UI checkboxes + texts
         Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 74 * cfg.ui_scale };
+        
 
+        // shooting left and right like its an american high school prom night
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            // only update selection if the mouse is not clicking on the UI Checkboxes
+            /* only update selection if the mouse is not clicking on the UI Checkboxes (wouldn't want to hurt them, 
+            they're just trying to do their job) */
             if (!CheckCollisionPointRec(GetMousePosition(), cbHitbox)) {
                 selected_sat = hovered_sat; 
 
@@ -451,7 +502,7 @@ int main(void) {
             else target_camera3d_target = draw_moon_pos;
         }
 
-        // apply the smooth lerping
+        // apply the smooth lerping (is just linear interpolation for smoofness :D)
         float smooth_speed = 10.0f * GetFrameTime();
         
         camera2d.zoom = Lerp(camera2d.zoom, target_camera2d_zoom, smooth_speed);
@@ -506,6 +557,12 @@ int main(void) {
         float m_text_2d = 16.0f * cfg.ui_scale / camera2d.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / camera2d.zoom;
 
+        /*
+        -----------------------------------------------------------------------------
+        drawing the 2d and 3d views depending on what's currently active;
+        they share some of the same logic but are separate in how they render things
+        -----------------------------------------------------------------------------
+        */
         if (is_2d_view) {
             // drawing the flat map
             BeginMode2D(camera2d);
@@ -785,6 +842,15 @@ int main(void) {
             }
         }
 
+
+        /*
+        -----------------------------------------------------------------------------
+        aaaand finally the UI layer!!!! this is easy, just some text and checkboxes, no big deal~
+        also includes the logic for the "hide unselected" feature which fades out non-selected satellites when enabled,
+        gonna move that out eventually TODO
+        -----------------------------------------------------------------------------
+        */
+
         // text overlays for the ui
         DrawUIText(is_2d_view ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D. Space: Pause." : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D. Space: Pause.", 10*cfg.ui_scale, 10*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
         DrawUIText("Time: '.' (Faster 2x), ',' (Slower 0.5x), '/' (1x Speed), 'Shift+/' (Reset)", 10*cfg.ui_scale, (10+24)*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_secondary);
@@ -851,6 +917,7 @@ int main(void) {
             bool show_peri = true;
             bool show_apo = true;
 
+            // calculate the time of periapsis and apoapsis passages and their current positions for display in the UI
             double delta_time_s_curr = (current_epoch - active_sat->epoch_days) * 86400.0;
             double M_curr = fmod(active_sat->mean_anomaly + active_sat->mean_motion * delta_time_s_curr, 2.0 * PI);
             if (M_curr < 0) M_curr += 2.0 * PI;
@@ -863,7 +930,7 @@ int main(void) {
 
             double real_rp = Vector3Length(calculate_position(active_sat, t_peri));
             double real_ra = Vector3Length(calculate_position(active_sat, t_apo));
-            
+            // hide the periapsis/apoapsis markers if they're currently behind the Earth in the 3D view, or just off the edge of the map in 2D
             if (is_2d_view) {
                 Vector2 p2, a2;
                 get_apsis_2d(active_sat, current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &p2);
@@ -899,7 +966,7 @@ int main(void) {
         // performance stats :3
         DrawUIText(TextFormat("%3i FPS", GetFPS()), GetScreenWidth() - (90*cfg.ui_scale), 10*cfg.ui_scale, 20*cfg.ui_scale, cfg.sat_selected);
         DrawUIText(TextFormat("%i Sats", sat_count), GetScreenWidth() - (90*cfg.ui_scale), 34*cfg.ui_scale, 16*cfg.ui_scale, cfg.text_secondary);
-        
+
         EndDrawing();
     }
 
