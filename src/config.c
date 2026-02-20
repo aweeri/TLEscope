@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+bool show_clouds = false; // Global state
+
 // turn hex strings into real colors
 Color ParseHexColor(const char* hexStr, Color fallback) {
     if (!hexStr || hexStr[0] != '#') return fallback;
@@ -46,6 +48,16 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
     PARSE_FLOAT("ui_scale", ui_scale);
     PARSE_FLOAT("earth_rotation_offset", earth_rotation_offset);
     PARSE_FLOAT("orbits_to_draw", orbits_to_draw);
+
+    // parse the global cloud toggle 
+    char* sc_ptr = strstr(text, "\"show_clouds\"");
+    if (sc_ptr) {
+        char* comma = strchr(sc_ptr, ',');
+        char* false_ptr = strstr(sc_ptr, "false");
+        if (false_ptr && (!comma || false_ptr < comma)) {
+            show_clouds = false;
+        }
+    }
 
     // grabbing all the colors 
     PARSE_COLOR("bg_color", bg_color);

@@ -20,9 +20,9 @@ static AppConfig cfg = {
 };
 
 static Font customFont;
-static Texture2D satIcon, markerIcon, earthTexture, moonTexture;
-static Texture2D periMark, apoMark; // New textures
-static Model earthModel, moonModel;
+static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture;
+static Texture2D periMark, apoMark;
+static Model earthModel, moonModel, cloudModel;
 
 // safely modifies the alpha channel without relying on raylib's Fade()
 static Color ApplyAlpha(Color c, float alpha) {
@@ -187,6 +187,12 @@ int main(void) {
     earthTexture = LoadTexture("resources/earth.png");
     earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
 
+    float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
+    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
+    cloudModel = LoadModelFromMesh(cloudMesh);
+    cloudTexture = LoadTexture("resources/clouds.png");
+    cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
     moonModel = LoadModelFromMesh(moonMesh);
@@ -340,11 +346,11 @@ int main(void) {
             }
         }
 
-        // defining a hitbox area to cover the UI checkbox + its text
-        Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 24 * cfg.ui_scale };
+        // defining a hitbox area to cover the UI checkboxes + texts
+        Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 50 * cfg.ui_scale };
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            // only update selection if the mouse is not clicking on the UI Checkbox
+            // only update selection if the mouse is not clicking on the UI Checkboxes
             if (!CheckCollisionPointRec(GetMousePosition(), cbHitbox)) {
                 selected_sat = hovered_sat; 
 
@@ -585,6 +591,14 @@ int main(void) {
                 earthModel.transform = MatrixRotateY((gmst_deg + cfg.earth_rotation_offset) * DEG2RAD);
                 DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
 
+                if (show_clouds) {
+                    double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
+                    cloudModel.transform = MatrixRotateY((float)(continuous_cloud_angle * DEG2RAD));
+                    // BeginBlendMode(BLEND_ADDITIVE); // garbage tint, dont use it
+                    DrawModel(cloudModel, Vector3Zero(), 1.0f, WHITE);
+                    EndBlendMode();
+                }
+
                 // render Moon (not sure what for tbh but I'm sure someone will appreciate it :3)
                 DrawModel(moonModel, draw_moon_pos, 1.0f, WHITE);
 
@@ -708,6 +722,9 @@ int main(void) {
         Rectangle cbRec = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 20 * cfg.ui_scale, 20 * cfg.ui_scale };
         GuiCheckBox(cbRec, "Hide Unselected", &hide_unselected);
 
+        Rectangle cbRec2 = { 10 * cfg.ui_scale, (10 + 128) * cfg.ui_scale, 20 * cfg.ui_scale, 20 * cfg.ui_scale };
+        GuiCheckBox(cbRec2, "Show Clouds", &show_clouds);
+
         if (active_sat) {
             Vector2 screenPos;
             if (is_2d_view) {
@@ -812,6 +829,8 @@ int main(void) {
     UnloadTexture(apoMark);
     UnloadTexture(earthTexture);
     UnloadModel(earthModel);
+    UnloadTexture(cloudTexture);
+    UnloadModel(cloudModel);
     UnloadTexture(moonTexture);
     UnloadModel(moonModel);
     UnloadFont(customFont);

@@ -5,6 +5,7 @@
     "ui_scale": 1.0,
     "earth_rotation_offset": 0.0,
     "orbits_to_draw": 3.0,
+    "show_clouds": false,
     
     "bg_color": "#101010FF",
     "orbit_normal": "#D3D3D326",
