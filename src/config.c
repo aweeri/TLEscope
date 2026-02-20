@@ -3,8 +3,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-bool show_clouds = false; // Global state
-
 // turn hex strings into real colors
 Color ParseHexColor(const char* hexStr, Color fallback) {
     if (!hexStr || hexStr[0] != '#') return fallback;
@@ -55,8 +53,24 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
         char* comma = strchr(sc_ptr, ',');
         char* false_ptr = strstr(sc_ptr, "false");
         if (false_ptr && (!comma || false_ptr < comma)) {
-            show_clouds = false;
+            config->show_clouds = false;
+        } else {
+            config->show_clouds = true;
         }
+    }
+
+    // parse the global night lights toggle (opt-out)
+    char* snl_ptr = strstr(text, "\"show_night_lights\"");
+    if (snl_ptr) {
+        char* comma = strchr(snl_ptr, ',');
+        char* false_ptr = strstr(snl_ptr, "false");
+        if (false_ptr && (!comma || false_ptr < comma)) {
+            config->show_night_lights = false;
+        } else {
+            config->show_night_lights = true;
+        }
+    } else {
+        config->show_night_lights = true;
     }
 
     // grabbing all the colors 

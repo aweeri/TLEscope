@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-// #include "rlgl.h"
-
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
@@ -13,14 +11,73 @@
 #include "config.h"
 #include "astro.h"
 
+// GLSL 330 fragment shader magic to blend day and night textures based on the sun's position relative
+const char* fs3D = 
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec4 fragColor;\n"
+    "out vec4 finalColor;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform sampler2D texture1;\n"
+    "uniform vec3 sunDir;\n"
+    "void main() {\n"
+    "    vec4 day = texture(texture0, fragTexCoord);\n"
+    "    vec4 night = texture(texture1, fragTexCoord);\n"
+    "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
+    "    float phi = fragTexCoord.y * 3.14159265359;\n"
+    "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
+    "    float intensity = dot(normal, sunDir);\n"
+    "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
+    "    finalColor = mix(night, day, blend) * fragColor;\n"
+    "}\n";
+
+const char* fs2D = 
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec4 fragColor;\n"
+    "out vec4 finalColor;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform sampler2D texture1;\n"
+    "uniform vec3 sunDir;\n"
+    "void main() {\n"
+    "    vec4 day = texture(texture0, fragTexCoord);\n"
+    "    vec4 night = texture(texture1, fragTexCoord);\n"
+    "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
+    "    float phi = fragTexCoord.y * 3.14159265359;\n"
+    "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
+    "    float intensity = dot(normal, sunDir);\n"
+    "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
+    "    finalColor = mix(night, day, blend) * fragColor;\n"
+    "}\n";
+
+const char* fsCloud3D = 
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec4 fragColor;\n"
+    "out vec4 finalColor;\n"
+    "uniform sampler2D texture0;\n" // cloud map
+    "uniform vec3 sunDir;\n"
+    "void main() {\n"
+    "    vec4 texel = texture(texture0, fragTexCoord);\n"
+    "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
+    "    float phi = fragTexCoord.y * 3.14159265359;\n"
+    "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
+    "    float intensity = dot(normal, sunDir);\n"
+    "    \n"
+    "    // Fade clouds to transparent on the night side \n"
+    "    float alpha = smoothstep(-0.15, 0.05, intensity);\n"
+    "    finalColor = vec4(texel.rgb, texel.a * alpha) * fragColor;\n"
+    "}\n";
+
 // defaults
 static AppConfig cfg = {
     .window_width = 1280, .window_height = 720, .target_fps = 120, .ui_scale = 1.0f,
+    .show_clouds = false, .show_night_lights = true,
     .bg_color = {0, 0, 0, 255}, .text_main = {255, 255, 255, 255}
 };
 
 static Font customFont;
-static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture;
+static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture;
 static Texture2D periMark, apoMark;
 static Model earthModel, moonModel, cloudModel;
 
@@ -105,27 +162,14 @@ static void draw_orbit_3d(Satellite* sat, double current_epoch, bool is_highligh
     Color orbitColor = is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal;
     orbitColor = ApplyAlpha(orbitColor, alpha);
 
-    double delta_time_s_curr = (current_epoch - sat->epoch_days) * 86400.0;
-    double M_curr = fmod(sat->mean_anomaly + sat->mean_motion * delta_time_s_curr, 2.0 * PI);
-    if (M_curr < 0) M_curr += 2.0 * PI;
-
-    double E_curr = M_curr;
-    for (int k = 0; k < 10; k++) {
-        double delta = (E_curr - sat->eccentricity * sin(E_curr) - M_curr) / (1.0 - sat->eccentricity * cos(E_curr));
-        E_curr -= delta;
-        if (fabs(delta) < 1e-6) break;
-    }
-
     double orbits_count = is_highlighted ? (double)cfg.orbits_to_draw : 1.0;
+    
+    // period calculation 
+    double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
+    double time_step = (period_days * orbits_count) / segments;
 
     for (int i = 0; i <= segments; i++) {
-        double progress = (double)i / segments;
-        double E_target = E_curr + (progress * 2.0 * PI * orbits_count);
-        
-        double M_target = E_target - sat->eccentricity * sin(E_target);
-        double delta_M = M_target - M_curr;
-        double t = current_epoch + (delta_M / sat->mean_motion) / 86400.0;
-        
+        double t = current_epoch + (i * time_step);
         Vector3 pos = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
 
         if (i > 0) DrawLine3D(prev_pos, pos, orbitColor);
@@ -163,8 +207,6 @@ int main(void) {
 
     load_tle_data("resources/data.tle");
 
-    // rlSetClipPlanes(0.1, 50000.0); // magic fix to get rid of far plane clipping
-
     // set up the cameras for both views
     Camera camera3d = { 0 };
     camera3d.target = (Vector3){ 0.0f, 0.0f, 0.0f };
@@ -186,12 +228,30 @@ int main(void) {
     earthModel = LoadModelFromMesh(sphereMesh);
     earthTexture = LoadTexture("resources/earth.png");
     earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
+    earthNightTexture = LoadTexture("resources/earth_night.png");
+
+    Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
+    int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
+    
+    // link texture1 to raylib's EMISSION material map
+    shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
+    earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
+    
+    Shader defaultEarthShader = earthModel.materials[0].shader; // cache the default shader
+
+    Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
+    int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
+    int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
 
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
     cloudModel = LoadModelFromMesh(cloudMesh);
     cloudTexture = LoadTexture("resources/clouds.png");
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+
+    Shader shaderCloud = LoadShaderFromMemory(NULL, fsCloud3D);
+    int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
+    Shader defaultCloudShader = cloudModel.materials[0].shader;
 
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
@@ -296,7 +356,7 @@ int main(void) {
 
             for (int i = 0; i < sat_count; i++) {
                 satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
-                // prevent raycasting on hidden satellites satellites
+                // prevent raycasting on hidden satellites
                 if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
                 
                 float mx, my;
@@ -347,7 +407,7 @@ int main(void) {
         }
 
         // defining a hitbox area to cover the UI checkboxes + texts
-        Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 50 * cfg.ui_scale };
+        Rectangle cbHitbox = { 10 * cfg.ui_scale, (10 + 104) * cfg.ui_scale, 200 * cfg.ui_scale, 74 * cfg.ui_scale };
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             // only update selection if the mouse is not clicking on the UI Checkboxes
@@ -449,8 +509,23 @@ int main(void) {
         if (is_2d_view) {
             // drawing the flat map
             BeginMode2D(camera2d);
+                if (cfg.show_night_lights) {
+                    BeginShaderMode(shader2D);
+                    SetShaderValueTexture(shader2D, nightTexLoc2D, earthNightTexture);
+                    
+                    Vector3 sunEci = calculate_sun_position(current_epoch);
+                    float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                    // rotate Sun vector by -GMST to get ECEF mapping for 2d 
+                    Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
+                    SetShaderValue(shader2D, sunDirLoc2D, &sunEcef, SHADER_UNIFORM_VEC3);
+                }
+
                 DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, 
                     (Rectangle){-map_w/2, -map_h/2, map_w, map_h}, (Vector2){0,0}, 0.0f, WHITE);
+
+                if (cfg.show_night_lights) {
+                    EndShaderMode();
+                }
 
                 Vector2 mapMin = GetWorldToScreen2D((Vector2){-map_w/2.0f, -map_h/2.0f}, camera2d);
                 Vector2 mapMax = GetWorldToScreen2D((Vector2){map_w/2.0f, map_h/2.0f}, camera2d);
@@ -514,28 +589,11 @@ int main(void) {
                             int segments = fmin(4000, fmax(50, (int)(400 * cfg.orbits_to_draw))); 
                             Vector2 track_pts[4001]; // must be segments + 1
 
-                            // grab the current mean and eccentric anomaly to start the track from the exact current position
-                            double delta_time_s_curr = (current_epoch - satellites[i].epoch_days) * 86400.0;
-                            double M_curr = fmod(satellites[i].mean_anomaly + satellites[i].mean_motion * delta_time_s_curr, 2.0 * PI);
-                            if (M_curr < 0) M_curr += 2.0 * PI;
+                            double period_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
+                            double time_step = (period_days * cfg.orbits_to_draw) / segments;
 
-                            double E_curr = M_curr;
-                            for (int k = 0; k < 10; k++) {
-                                double delta = (E_curr - satellites[i].eccentricity * sin(E_curr) - M_curr) / (1.0 - satellites[i].eccentricity * cos(E_curr));
-                                E_curr -= delta;
-                                if (fabs(delta) < 1e-6) break;
-                            }
-
-                            // step through eccentric anomaly instead of time for smoother curves at periapsis
                             for (int j = 0; j <= segments; j++) {
-                                double progress = (double)j / segments;
-                                double E_target = E_curr + (progress * 2.0 * PI * cfg.orbits_to_draw);
-                                
-                                // work backward to mean anomaly and then to time
-                                double M_target = E_target - satellites[i].eccentricity * sin(E_target);
-                                double delta_M = M_target - M_curr;
-                                double t = current_epoch + (delta_M / satellites[i].mean_motion) / 86400.0;
-                                
+                                double t = current_epoch + (j * time_step);
                                 get_map_coordinates(calculate_position(&satellites[i], t), epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
                             }
 
@@ -589,14 +647,34 @@ int main(void) {
             // drawing the 3d view
             BeginMode3D(camera3d);
                 earthModel.transform = MatrixRotateY((gmst_deg + cfg.earth_rotation_offset) * DEG2RAD);
+                
+                if (cfg.show_night_lights) {
+                    earthModel.materials[0].shader = shader3D;
+                    Vector3 sunEci = calculate_sun_position(current_epoch);
+                    float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                    Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
+                    SetShaderValue(shader3D, sunDirLoc3D, &sunEcef, SHADER_UNIFORM_VEC3);
+                } else {
+                    earthModel.materials[0].shader = defaultEarthShader;
+                }
+
                 DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
 
-                if (show_clouds) {
+                if (cfg.show_clouds) {
                     double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
-                    cloudModel.transform = MatrixRotateY((float)(continuous_cloud_angle * DEG2RAD));
-                    // BeginBlendMode(BLEND_ADDITIVE); // garbage tint, dont use it
+                    float cloud_rot_rad = (float)(continuous_cloud_angle * DEG2RAD);
+                    cloudModel.transform = MatrixRotateY(cloud_rot_rad);
+                    
+                    if (cfg.show_night_lights) {
+                        cloudModel.materials[0].shader = shaderCloud;
+                        Vector3 sunEci = calculate_sun_position(current_epoch);
+                        Vector3 sunCloudSpace = Vector3Transform(sunEci, MatrixRotateY(-cloud_rot_rad));
+                        SetShaderValue(shaderCloud, sunDirLocCloud, &sunCloudSpace, SHADER_UNIFORM_VEC3);
+                    } else {
+                        cloudModel.materials[0].shader = defaultCloudShader;
+                    }
+
                     DrawModel(cloudModel, Vector3Zero(), 1.0f, WHITE);
-                    EndBlendMode();
                 }
 
                 // render Moon (not sure what for tbh but I'm sure someone will appreciate it :3)
@@ -723,7 +801,10 @@ int main(void) {
         GuiCheckBox(cbRec, "Hide Unselected", &hide_unselected);
 
         Rectangle cbRec2 = { 10 * cfg.ui_scale, (10 + 128) * cfg.ui_scale, 20 * cfg.ui_scale, 20 * cfg.ui_scale };
-        GuiCheckBox(cbRec2, "Show Clouds", &show_clouds);
+        GuiCheckBox(cbRec2, "Show Clouds", &cfg.show_clouds);
+
+        Rectangle cbRec3 = { 10 * cfg.ui_scale, (10 + 152) * cfg.ui_scale, 20 * cfg.ui_scale, 20 * cfg.ui_scale };
+        GuiCheckBox(cbRec3, "Night Lights", &cfg.show_night_lights);
 
         if (active_sat) {
             Vector2 screenPos;
@@ -828,7 +909,11 @@ int main(void) {
     UnloadTexture(periMark);
     UnloadTexture(apoMark);
     UnloadTexture(earthTexture);
+    UnloadTexture(earthNightTexture);
     UnloadModel(earthModel);
+    UnloadShader(shader3D);
+    UnloadShader(shader2D);
+    UnloadShader(shaderCloud);
     UnloadTexture(cloudTexture);
     UnloadModel(cloudModel);
     UnloadTexture(moonTexture);

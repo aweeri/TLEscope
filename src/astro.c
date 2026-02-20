@@ -223,6 +223,42 @@ void get_apsis_2d(Satellite* sat, double current_time, bool is_apoapsis, double 
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
 }
 
+// i truly do hope this doesnt drift or something its so eyeballed istg
+Vector3 calculate_sun_position(double current_time_days) {
+    current_time_days = normalize_epoch(current_time_days);
+    
+    int yy = (int)(current_time_days / 1000.0);
+    double day = fmod(current_time_days, 1000.0);
+    
+    double unix_time = ConvertEpochYearAndDayToUnix(yy, day);
+    double jd = (unix_time / 86400.0) + 2440587.5;
+    double n = jd - 2451545.0;
+
+    double L = fmod(280.460 + 0.9856474 * n, 360.0);
+    if (L < 0) L += 360.0;
+    
+    double g = fmod(357.528 + 0.9856003 * n, 360.0);
+    if (g < 0) g += 360.0;
+
+    double lambda = L + 1.915 * sin(g * DEG2RAD) + 0.020 * sin(2.0 * g * DEG2RAD);
+    double epsilon = 23.439 - 0.0000004 * n;
+
+    double x_ecl = cos(lambda * DEG2RAD);
+    double y_ecl = sin(lambda * DEG2RAD);
+    double z_ecl = 0.0;
+
+    double x_eci = x_ecl;
+    double y_eci = y_ecl * cos(epsilon * DEG2RAD) - z_ecl * sin(epsilon * DEG2RAD);
+    double z_eci = y_ecl * sin(epsilon * DEG2RAD) + z_ecl * cos(epsilon * DEG2RAD);
+
+    Vector3 pos;
+    pos.x = (float)(x_eci);
+    pos.y = (float)(z_eci);
+    pos.z = (float)(-y_eci);
+
+    return Vector3Normalize(pos);
+}
+
 Vector3 calculate_moon_position(double current_time_days) {
     current_time_days = normalize_epoch(current_time_days);
     

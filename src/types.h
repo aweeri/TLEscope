@@ -51,6 +51,8 @@ typedef struct {
     float ui_scale;
     float earth_rotation_offset;
     float orbits_to_draw;
+    bool show_clouds;
+    bool show_night_lights;
     
     Color bg_color;
     Color orbit_normal;
