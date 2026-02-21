@@ -1,4 +1,5 @@
 {
+    "theme": "default",
     "window_width": 1920,
     "window_height": 1080,
     "target_fps": 120,
@@ -7,31 +8,14 @@
     "orbits_to_draw": 3.0,
     "show_clouds": false,
     
-    "bg_color": "#101010FF",
-    "orbit_normal": "#D3D3D326",
-    "orbit_highlighted": "#FFFFFFFF",
-    "sat_normal": "#EEEEEE66",
-    "sat_highlighted": "#FFFF00FF",
-    "sat_selected": "#00FF00FF",
-    "text_main": "#FFFFFFFF",
-    "text_secondary": "#D3D3D3FF",
-    "ui_bg": "#000000CC",
-    "periapsis": "#87CEEBFF",
-    "apoapsis": "#FFA500FF",
-    "footprint_bg": "#FFFFFF22",
-    "footprint_border": "#FFFFFF88",
-
     "markers": [
     {"name": "QTH", "lat": 50.2945, "lon": 18.6714},
     {"name": "Cape Canaveral", "lat": 28.3922, "lon": -80.6077},
     {"name": "Vandenberg", "lat": 34.7420, "lon": -120.5724},
-    {"name": "Kourou (ESA)", "lat": 5.2360, "lon": -52.7750},
+    {"name": "Kourou", "lat": 5.2360, "lon": -52.7750},
     {"name": "Baikonur Cosmodrome", "lat": 45.9646, "lon": 63.3052},
-    {"name": "Mahia (Rocket Lab)", "lat": -39.2609, "lon": 177.8659},
-    {"name": "Boca Chica (Starbase)", "lat": 25.9973, "lon": -97.1573},
     {"name": "Tanegashima", "lat": 30.3909, "lon": 130.9681},
     {"name": "Jiuquan", "lat": 40.9606, "lon": 100.2983},
-    {"name": "Satish Dhawan", "lat": 13.7374, "lon": 80.2351},
-    {"name": "Wallops Island", "lat": 37.9330, "lon": -75.4790}
+    {"name": "Satish Dhawan", "lat": 13.7374, "lon": 80.2351}
     ]
 }

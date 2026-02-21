@@ -73,7 +73,7 @@ const char* fsCloud3D =
 static AppConfig cfg = {
     .window_width = 1280, .window_height = 720, .target_fps = 120, .ui_scale = 1.0f,
     .show_clouds = false, .show_night_lights = true,
-    .bg_color = {0, 0, 0, 255}, .text_main = {255, 255, 255, 255}
+    .bg_color = {0, 0, 0, 255}, .text_main = {255, 255, 255, 255}, .theme = "default"
 };
 
 static Font customFont;
@@ -239,18 +239,18 @@ int main(void) {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.3");
     
-    // Load font first so we can use it for the loading text
-    customFont = LoadFontEx("resources/font.ttf", 64, 0, 0);
+    // Load font first so we can use it for the loading text (from the active theme)
+    customFont = LoadFontEx(TextFormat("themes/%s/font.ttf", cfg.theme), 64, 0, 0);
     GenTextureMipmaps(&customFont.texture);
     SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
     GuiSetFont(customFont);
 
     DrawLoadingScreen(0.1f, "Fetching TLE Data...");
-    load_tle_data("resources/data.tle");
+    load_tle_data("data.tle");
 
     DrawLoadingScreen(0.25f, "Initializing Textures...");
-    earthTexture = LoadTexture("resources/earth.png");
-    earthNightTexture = LoadTexture("resources/earth_night.png");
+    earthTexture = LoadTexture(TextFormat("themes/%s/earth.png", cfg.theme));
+    earthNightTexture = LoadTexture(TextFormat("themes/%s/earth_night.png", cfg.theme));
     
     DrawLoadingScreen(0.4f, "Compiling Shaders...");
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
@@ -276,21 +276,21 @@ int main(void) {
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
     cloudModel = LoadModelFromMesh(cloudMesh);
-    cloudTexture = LoadTexture("resources/clouds.png");
+    cloudTexture = LoadTexture(TextFormat("themes/%s/clouds.png", cfg.theme));
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
     
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32); 
     moonModel = LoadModelFromMesh(moonMesh);
-    moonTexture = LoadTexture("resources/moon.png");
+    moonTexture = LoadTexture(TextFormat("themes/%s/moon.png", cfg.theme));
     moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
 
     DrawLoadingScreen(0.95f, "Finalizing UI...");
-    satIcon = LoadTexture("resources/sat_icon.png");
-    markerIcon = LoadTexture("resources/marker_icon.png");
-    periMark = LoadTexture("resources/smallmark.png");
-    apoMark = LoadTexture("resources/smallmark.png");
+    satIcon = LoadTexture(TextFormat("themes/%s/sat_icon.png", cfg.theme));
+    markerIcon = LoadTexture(TextFormat("themes/%s/marker_icon.png", cfg.theme));
+    periMark = LoadTexture(TextFormat("themes/%s/smallmark.png", cfg.theme));
+    apoMark = LoadTexture(TextFormat("themes/%s/smallmark.png", cfg.theme));
     
     SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);

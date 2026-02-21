@@ -51,6 +51,7 @@ extern int marker_count;
 
 // visual settings and colors
 typedef struct {
+    char theme[64];
     int window_width;
     int window_height;
     int target_fps;

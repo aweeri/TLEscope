@@ -37,8 +37,9 @@ jobs:
           mkdir -p TLEscope-Linux
           cp bin/TLEscope TLEscope-Linux/
           cp bin/fetch_tle TLEscope-Linux/
-          cp -r resources/ TLEscope-Linux/
+          cp -r themes/ TLEscope-Linux/
           cp settings.json TLEscope-Linux/
+          cp data.tle TLEscope-Linux/
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
@@ -82,8 +83,9 @@ jobs:
           cp bin/TLEscope.exe TLEscope-Windows/
           # cp bin/fetch_tle.exe TLEscope-Windows/
           cp bin/*.dll TLEscope-Windows/
-          cp -r resources/ TLEscope-Windows/
+          cp -r themes/ TLEscope-Windows/
           cp settings.json TLEscope-Windows/
+          cp data.tle TLEscope-Windows/
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
