@@ -237,8 +237,12 @@ int main(void) {
     LoadAppConfig("settings.json", &cfg);
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(cfg.window_width, cfg.window_height, "TLEScope 3.3");
-    
+    InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+    Image logo = LoadImage("logo.png");
+    if (logo.data != NULL) {
+        SetWindowIcon(logo);
+        UnloadImage(logo);
+    }
     // Load font first so we can use it for the loading text (from the active theme)
     customFont = LoadFontEx(TextFormat("themes/%s/font.ttf", cfg.theme), 64, 0, 0);
     GenTextureMipmaps(&customFont.texture);
@@ -341,6 +345,8 @@ int main(void) {
     Satellite* selected_sat = NULL;
     TargetLock active_lock = LOCK_EARTH;
     double last_left_click_time = 0.0;
+
+    
 
     SetTargetFPS(cfg.target_fps);
 

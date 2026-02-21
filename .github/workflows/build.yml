@@ -22,13 +22,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
 
-      - name: Build and Install Raylib from Source
-        run: |
-          git clone --depth 1 https://github.com/raysan5/raylib.git
-          cd raylib/src
-          make PLATFORM=PLATFORM_DESKTOP
-          sudo make install
-
       - name: Compile Linux Binaries
         run: make linux
 
@@ -97,7 +90,6 @@ jobs:
   release:
     name: Publish Release
     needs: [build-linux, build-windows]
-    # Only run on pushes to main/master or tag pushes (ignore pull requests)
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
