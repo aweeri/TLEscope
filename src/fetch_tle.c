@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <curl/curl.h>
 
 #ifdef _WIN32
@@ -11,8 +12,8 @@
     #define MKDIR(dir) mkdir(dir, 0755)
 #endif
 
-#define OUTPUT_DIR "resources"
-#define OUTPUT_FILE "resources/data.tle"
+#define OUTPUT_DIR "/"
+#define OUTPUT_FILE "data.tle"
 
 typedef struct {
     const char *id;
