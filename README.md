@@ -23,7 +23,6 @@
 
 - **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
-
 - **​Native OS Support**: Built for Linux and Windows.
 
 ### ​**Design Philosophy**
@@ -38,3 +37,31 @@ To download TLEscope, grab a portable zip from the [Relases tab](https://github.
 You can choose between nightly and complete relases:
 - **Stable** relases are properly versioned notable milestone builds. They may not have the latest features, but they are a stable and safe choice. 
 - **Nightly** relases are always up to date with the latest commits, as long as they [compile correctly](https://github.com/aweeri/TLEscope/actions). Do not complain too much if things don't work as expected.
+
+### **Building From Source**
+TLEscope uses gcc for Linux builds and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
+
+Install the required build tools and libraries, then clone the repository and execute the `make linux` command in the root directory of the project, after which run `./bin/TLEscope` (running from within `bin/` will NOT work). If you want to build a Windows executable, you will also need to install the `mingw-w64` package via your package manager of choice. Steps for typical system configurations can be found below:
+
+**Debian/Ubuntu-based systems**
+```
+sudo apt-get update
+sudo apt-get install -y gcc make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
+git clone https://github.com/aweeri/TLEscope
+cd TLEscope
+make linux      # this builds for linux, if you wish to build a windows executable, run make windows
+./bin/TLEscope
+```
+**Arch-based systems**
+```
+sudo pacman -Syu
+sudo pacman -S --needed base-devel git alsa-lib libx11 libxrandr libxi mesa libglu libxcursor libxinerama wayland libxkbcommon curl
+git clone https://github.com/aweeri/TLEscope
+cd TLEscope
+make linux      # this builds for linux, if you wish to build a windows executable, run make windows
+./bin/TLEscope
+```
+**Windows-based systems**
+
+Your best bet will be installing MSYS2, then running `pacman -S mingw-w64-x86_64-gcc make mingw-w64-x86_64-curl` within the terminal, then `make windows LIB_WIN_PATH="-Ilib/raylib_win/include -Llib/raylib_win/lib"`. if you're lucky, your executable files will end up getting built into `/bin`.
+If that doesn't work - May god help you.
