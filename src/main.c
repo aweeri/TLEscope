@@ -161,7 +161,8 @@ static void update_orbit_cache(Satellite* sat, double current_epoch) {
     double time_step = period_days / (ORBIT_CACHE_SIZE - 1);
     for (int i = 0; i < ORBIT_CACHE_SIZE; i++) {
         double t = current_epoch + (i * time_step);
-        sat->orbit_cache[i] = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
+        double t_unix = get_unix_from_epoch(t);
+        sat->orbit_cache[i] = Vector3Scale(calculate_position(sat, t_unix), 1.0f / DRAW_SCALE);
     }
     sat->orbit_cached = true;
 }
@@ -181,7 +182,8 @@ static void draw_orbit_3d(Satellite* sat, double current_epoch, bool is_highligh
 
         for (int i = 0; i <= segments; i++) {
             double t = current_epoch + (i * time_step);
-            Vector3 pos = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
+            double t_unix = get_unix_from_epoch(t);
+            Vector3 pos = Vector3Scale(calculate_position(sat, t_unix), 1.0f / DRAW_SCALE);
 
             if (i > 0) DrawLine3D(prev_pos, pos, orbitColor);
             prev_pos = pos;
@@ -382,6 +384,15 @@ int main(void) {
             }
         }
 
+        double current_unix = get_unix_from_epoch(current_epoch);
+
+        // precalculate all satellite positions for the current frame
+        for (int i = 0; i < sat_count; i++) {
+            // don't waste time calculating if it's hidden and not selected
+            if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
+            satellites[i].current_pos = calculate_position(&satellites[i], current_unix);
+        }
+
         // fading math
         bool should_hide = (hide_unselected && selected_sat != NULL);
         if (should_hide) {
@@ -432,7 +443,6 @@ int main(void) {
             float hit_radius_pixels = 12.0f * cfg.ui_scale; // hitbox size in screen pixels
 
             for (int i = 0; i < sat_count; i++) {
-                satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
                 // prevent raycasting on hidden satellites
                 if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
                 
@@ -468,11 +478,13 @@ int main(void) {
             float closest_dist = 9999.0f;
 
             for (int i = 0; i < sat_count; i++) {
-                satellites[i].current_pos = calculate_position(&satellites[i], current_epoch);
                 // Prevent raycasting on fading/hidden satellites
                 if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat) continue;
 
                 Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
+
+                // fast coarse culling via squared distance to avoid expensive sphere collision checks on distant satellites
+                if (Vector3DistanceSqr(camera3d.target, draw_pos) > (camDistance * camDistance * 16.0f)) continue; 
                 
                 // adjust sphere radius based on distance to maintain consistent screen-size hitbox
                 float distToCam = Vector3Distance(camera3d.position, draw_pos);
@@ -680,7 +692,8 @@ int main(void) {
 
                             for (int j = 0; j <= segments; j++) {
                                 double t = current_epoch + (j * time_step);
-                                get_map_coordinates(calculate_position(&satellites[i], t), epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
+                                double t_unix = get_unix_from_epoch(t);
+                                get_map_coordinates(calculate_position(&satellites[i], t_unix), epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
                             }
 
                             for (int offset_i = -1; offset_i <= 1; offset_i++) {
@@ -816,9 +829,11 @@ int main(void) {
                 
                 double t_peri = current_epoch + (diff_peri / active_sat->mean_motion) / 86400.0;
                 double t_apo = current_epoch + (diff_apo / active_sat->mean_motion) / 86400.0;
+                double t_peri_unix = get_unix_from_epoch(t_peri);
+                double t_apo_unix = get_unix_from_epoch(t_apo);
 
-                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri), 1.0f/DRAW_SCALE);
-                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo), 1.0f/DRAW_SCALE);
+                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri_unix), 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo_unix), 1.0f/DRAW_SCALE);
 
                 if (!IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) {
                     Vector2 sp = GetWorldToScreen(draw_p, camera3d);
@@ -956,9 +971,11 @@ int main(void) {
             
             double t_peri = current_epoch + (diff_peri / active_sat->mean_motion) / 86400.0;
             double t_apo = current_epoch + (diff_apo / active_sat->mean_motion) / 86400.0;
+            double t_peri_unix = get_unix_from_epoch(t_peri);
+            double t_apo_unix = get_unix_from_epoch(t_apo);
 
-            double real_rp = Vector3Length(calculate_position(active_sat, t_peri));
-            double real_ra = Vector3Length(calculate_position(active_sat, t_apo));
+            double real_rp = Vector3Length(calculate_position(active_sat, t_peri_unix));
+            double real_ra = Vector3Length(calculate_position(active_sat, t_apo_unix));
             // hide the periapsis/apoapsis markers if they're currently behind the Earth in the 3D view, or just off the edge of the map in 2D
             if (is_2d_view) {
                 Vector2 p2, a2;
@@ -974,8 +991,8 @@ int main(void) {
                 periScreen = GetWorldToScreen2D(p2, camera2d);
                 apoScreen = GetWorldToScreen2D(a2, camera2d);
             } else {
-                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri), 1.0f/DRAW_SCALE);
-                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo), 1.0f/DRAW_SCALE);
+                Vector3 draw_p = Vector3Scale(calculate_position(active_sat, t_peri_unix), 1.0f/DRAW_SCALE);
+                Vector3 draw_a = Vector3Scale(calculate_position(active_sat, t_apo_unix), 1.0f/DRAW_SCALE);
                 
                 if (IsOccludedByEarth(camera3d.position, draw_p, draw_earth_radius)) show_peri = false;
                 if (IsOccludedByEarth(camera3d.position, draw_a, draw_earth_radius)) show_apo = false;

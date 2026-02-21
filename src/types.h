@@ -21,6 +21,7 @@
 typedef struct {
     char name[32];
     double epoch_days;
+    double epoch_unix; 
     double inclination;
     double raan;
     double eccentricity;

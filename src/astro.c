@@ -60,12 +60,16 @@ double normalize_epoch(double epoch) {
     return (yy * 1000.0) + day_of_year;
 }
 
-double epoch_to_gmst(double epoch) {
+// utility to convert normalized epoch format to unix time for sgp4 math
+double get_unix_from_epoch(double epoch) {
     epoch = normalize_epoch(epoch);
     int yy = (int)(epoch / 1000.0);
     double day = fmod(epoch, 1000.0);
-    
-    double unix_time = ConvertEpochYearAndDayToUnix(yy, day);
+    return ConvertEpochYearAndDayToUnix(yy, day);
+}
+
+double epoch_to_gmst(double epoch) {
+    double unix_time = get_unix_from_epoch(epoch);
     double jd = (unix_time / 86400.0) + 2440587.5;
     
     double gmst = fmod(280.46061837 + 360.98564736629 * (jd - 2451545.0), 360.0);
@@ -134,6 +138,7 @@ void load_tle_data(const char* filename) {
         }
 
         sat->epoch_days = parse_tle_double(line1, 18, 14);
+        sat->epoch_unix = get_unix_from_epoch(sat->epoch_days); // precalculated for perf
         sat->inclination = parse_tle_double(line2, 8, 8) * DEG2RAD;
         sat->raan = parse_tle_double(line2, 17, 8) * DEG2RAD;
 
@@ -152,18 +157,9 @@ void load_tle_data(const char* filename) {
     fclose(file);
 }
 
-Vector3 calculate_position(Satellite* sat, double current_time_days) {
-    current_time_days = normalize_epoch(current_time_days);
-    
-    int cur_yy = (int)(current_time_days / 1000.0);
-    double cur_day = fmod(current_time_days, 1000.0);
-    double current_unix = ConvertEpochYearAndDayToUnix(cur_yy, cur_day);
-
-    int sat_yy = (int)(sat->epoch_days / 1000.0);
-    double sat_day = fmod(sat->epoch_days, 1000.0);
-    double sat_unix = ConvertEpochYearAndDayToUnix(sat_yy, sat_day);
-
-    double tsince = (current_unix - sat_unix) / 60.0;
+// precalculated unix time passed down to prevent excessyear/day conversions
+Vector3 calculate_position(Satellite* sat, double current_unix) {
+    double tsince = (current_unix - sat->epoch_unix) / 60.0;
 
     double ro[3] = {0};
     double vo[3] = {0};
@@ -197,17 +193,9 @@ void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float
 
 void get_apsis_2d(Satellite* sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset, float map_w, float map_h, Vector2* out) {
     (void)gmst_deg; 
-    current_time = normalize_epoch(current_time);
 
-    int cur_yy = (int)(current_time / 1000.0);
-    double cur_day = fmod(current_time, 1000.0);
-    double current_unix = ConvertEpochYearAndDayToUnix(cur_yy, cur_day);
-
-    int sat_yy = (int)(sat->epoch_days / 1000.0);
-    double sat_day = fmod(sat->epoch_days, 1000.0);
-    double sat_unix = ConvertEpochYearAndDayToUnix(sat_yy, sat_day);
-
-    double delta_time_s = current_unix - sat_unix;
+    double current_unix = get_unix_from_epoch(current_time);
+    double delta_time_s = current_unix - sat->epoch_unix;
     
     double M = fmod(sat->mean_anomaly + sat->mean_motion * delta_time_s, 2.0 * PI);
     if (M < 0) M += 2.0 * PI;
@@ -217,7 +205,8 @@ void get_apsis_2d(Satellite* sat, double current_time, bool is_apoapsis, double 
     if (diff < 0) diff += 2.0 * PI;
 
     double t_target = current_time + (diff / sat->mean_motion) / 86400.0;
-    Vector3 pos3d = calculate_position(sat, t_target);
+    double t_target_unix = get_unix_from_epoch(t_target);
+    Vector3 pos3d = calculate_position(sat, t_target_unix);
     double gmst_target = epoch_to_gmst(t_target);
     
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
@@ -225,12 +214,7 @@ void get_apsis_2d(Satellite* sat, double current_time, bool is_apoapsis, double 
 
 // i truly do hope this doesnt drift or something its so eyeballed istg
 Vector3 calculate_sun_position(double current_time_days) {
-    current_time_days = normalize_epoch(current_time_days);
-    
-    int yy = (int)(current_time_days / 1000.0);
-    double day = fmod(current_time_days, 1000.0);
-    
-    double unix_time = ConvertEpochYearAndDayToUnix(yy, day);
+    double unix_time = get_unix_from_epoch(current_time_days);
     double jd = (unix_time / 86400.0) + 2440587.5;
     double n = jd - 2451545.0;
 
@@ -260,12 +244,7 @@ Vector3 calculate_sun_position(double current_time_days) {
 }
 
 Vector3 calculate_moon_position(double current_time_days) {
-    current_time_days = normalize_epoch(current_time_days);
-    
-    int yy = (int)(current_time_days / 1000.0);
-    double day = fmod(current_time_days, 1000.0);
-    
-    double unix_time = ConvertEpochYearAndDayToUnix(yy, day);
+    double unix_time = get_unix_from_epoch(current_time_days);
     double jd = (unix_time / 86400.0) + 2440587.5;
     double D = jd - 2451545.0; 
 
