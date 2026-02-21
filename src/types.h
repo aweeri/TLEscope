@@ -15,6 +15,8 @@
 #define MU 398600.4418f  
 #define DRAW_SCALE 3000.0f 
 
+#define ORBIT_CACHE_SIZE 91
+
 // keeps track of satellite data
 typedef struct {
     char name[32];
@@ -29,6 +31,9 @@ typedef struct {
     Vector3 current_pos; 
 
     struct elsetrec satrec; 
+
+    Vector3 orbit_cache[ORBIT_CACHE_SIZE];
+    bool orbit_cached;
 } Satellite;
 
 typedef struct {

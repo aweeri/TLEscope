@@ -81,8 +81,6 @@ static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, e
 static Texture2D periMark, apoMark;
 static Model earthModel, moonModel, cloudModel;
 
-
-
 // safely modifies the alpha channel without relying on raylib's Fade()
 static Color ApplyAlpha(Color c, float alpha) {
     if (alpha < 0.0f) alpha = 0.0f;
@@ -157,25 +155,46 @@ static Mesh GenEarthMesh(float radius, int slices, int rings) {
     return mesh;
 }
 
-// draw the orbit path ring using precise SGP4 positioning
-static void draw_orbit_3d(Satellite* sat, double current_epoch, bool is_highlighted, float alpha) {
-    Vector3 prev_pos = {0};
-    int segments = is_highlighted ? fmin(4000, fmax(90, (int)(400 * cfg.orbits_to_draw))) : 90;
-    Color orbitColor = is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal;
-    orbitColor = ApplyAlpha(orbitColor, alpha);
-
-    double orbits_count = is_highlighted ? (double)cfg.orbits_to_draw : 1.0;
-    
-    // period calculation 
+// update a specific satellite's background orbit cache sequentially
+static void update_orbit_cache(Satellite* sat, double current_epoch) {
     double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
-    double time_step = (period_days * orbits_count) / segments;
-
-    for (int i = 0; i <= segments; i++) {
+    double time_step = period_days / (ORBIT_CACHE_SIZE - 1);
+    for (int i = 0; i < ORBIT_CACHE_SIZE; i++) {
         double t = current_epoch + (i * time_step);
-        Vector3 pos = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
+        sat->orbit_cache[i] = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
+    }
+    sat->orbit_cached = true;
+}
 
-        if (i > 0) DrawLine3D(prev_pos, pos, orbitColor);
-        prev_pos = pos;
+// draw the orbit path ring either live or from cache
+static void draw_orbit_3d(Satellite* sat, double current_epoch, bool is_highlighted, float alpha) {
+    Color orbitColor = ApplyAlpha(is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal, alpha);
+
+    if (is_highlighted) {
+        // High freq bypass for active/selected target
+        Vector3 prev_pos = {0};
+        int segments = fmin(4000, fmax(90, (int)(400 * cfg.orbits_to_draw)));
+        double orbits_count = (double)cfg.orbits_to_draw;
+        
+        double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
+        double time_step = (period_days * orbits_count) / segments;
+
+        for (int i = 0; i <= segments; i++) {
+            double t = current_epoch + (i * time_step);
+            Vector3 pos = Vector3Scale(calculate_position(sat, t), 1.0f / DRAW_SCALE);
+
+            if (i > 0) DrawLine3D(prev_pos, pos, orbitColor);
+            prev_pos = pos;
+        }
+    } else {
+        // Fast rendering via memory cache for idle targets
+        if (!sat->orbit_cached) return;
+        Vector3 prev_pos = sat->orbit_cache[0];
+        for (int i = 1; i < ORBIT_CACHE_SIZE; i++) {
+            Vector3 pos = sat->orbit_cache[i];
+            DrawLine3D(prev_pos, pos, orbitColor);
+            prev_pos = pos;
+        }
     }
 }
 
@@ -184,7 +203,6 @@ static void DrawUIText(const char* text, float x, float y, float size, Color col
 }
 
 typedef enum { LOCK_NONE, LOCK_EARTH, LOCK_MOON } TargetLock;
-
 
 static void DrawLoadingScreen(float progress, const char* message) {
     BeginDrawing();
@@ -324,6 +342,8 @@ int main(void) {
 
     SetTargetFPS(cfg.target_fps);
 
+    int current_update_idx = 0;
+
     while (!WindowShouldClose()) {
         /*
         -----------------------------------------------------------------------------
@@ -351,6 +371,15 @@ int main(void) {
         if (!paused) {
             current_epoch += (GetFrameTime() * time_multiplier) / 86400.0; 
             current_epoch = normalize_epoch(current_epoch);
+        }
+
+        // Sequential orbit cache updater
+        if (sat_count > 0) {
+            int updates_per_frame = 50; 
+            for (int i = 0; i < updates_per_frame; i++) {
+                update_orbit_cache(&satellites[current_update_idx], current_epoch);
+                current_update_idx = (current_update_idx + 1) % sat_count;
+            }
         }
 
         // fading math
