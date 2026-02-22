@@ -1015,6 +1015,18 @@ int main(void) {
         sprintf(top_text, "%s | Speed: %gx %s", datetime_str, time_multiplier, (time_multiplier == 0.0) ? "[PAUSED]" : "");
         DrawUIText(top_text, 230*cfg.ui_scale, 15*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_main);
 
+        // real-time indicator rendering
+        if (time_multiplier == 1.0 && fabs(current_epoch - get_current_real_time_epoch()) < (5.0 / 86400.0)) {
+            float blink_alpha = (sinf(GetTime() * 4.0f) * 0.5f + 0.5f);
+            
+            int oldStyle = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
+            GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, ColorToInt(ApplyAlpha(cfg.ui_accent, blink_alpha)));
+            GuiLabel((Rectangle){ 230*cfg.ui_scale, 36*cfg.ui_scale, 20*cfg.ui_scale, 20*cfg.ui_scale }, "#212#");
+            GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, oldStyle);
+
+            DrawUIText("REAL TIME", 255*cfg.ui_scale, 40*cfg.ui_scale, 16*cfg.ui_scale, cfg.ui_accent);
+        }
+
         // global UI style configuration
         GuiSetStyle(DEFAULT, TEXT_SIZE, 16 * cfg.ui_scale);
         GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToInt(cfg.ui_primary));
@@ -1212,10 +1224,20 @@ int main(void) {
             } else {
                 for (int i = 0; i < num_passes; i++) {
                     Rectangle row = { pd_x + 10*cfg.ui_scale, pd_y + (40 + i*55)*cfg.ui_scale, passesWindow.width - 20*cfg.ui_scale, 45*cfg.ui_scale };
+                    Rectangle rowBtn = { row.x, row.y, row.width - 40*cfg.ui_scale, row.height };
+                    Rectangle jumpBtn = { row.x + row.width - 35*cfg.ui_scale, row.y, 35*cfg.ui_scale, row.height };
                     
-                    if (GuiButton(row, "")) {
+                    if (GuiButton(rowBtn, "")) {
                         show_polar_dialog = true;
                         selected_pass_idx = i;
+                    }
+
+                    if (GuiButton(jumpBtn, "#134#")) {
+                        current_epoch = passes[i].aos_epoch;
+                        time_multiplier = 1.0;
+                        saved_multiplier = 1.0;
+                        show_polar_dialog = true;
+                        selected_pass_idx = 0;
                     }
                     
                     char aos_str[16], los_str[16];
@@ -1234,12 +1256,12 @@ int main(void) {
                     float lh = 20 * cfg.ui_scale;
                     
                     GuiLabel((Rectangle){ lx, ly, 120 * cfg.ui_scale, lh }, aos_info);
-                    GuiLabel((Rectangle){ lx + 140 * cfg.ui_scale, ly, 120 * cfg.ui_scale, lh }, los_info);
-                    GuiLabel((Rectangle){ lx + 280 * cfg.ui_scale, ly, 120 * cfg.ui_scale, lh }, max_info);
+                    GuiLabel((Rectangle){ lx + 130 * cfg.ui_scale, ly, 120 * cfg.ui_scale, lh }, los_info);
+                    GuiLabel((Rectangle){ lx + 260 * cfg.ui_scale, ly, 120 * cfg.ui_scale, lh }, max_info);
 
                     if (current_epoch >= passes[i].aos_epoch && current_epoch <= passes[i].los_epoch) {
                         float prog = (current_epoch - passes[i].aos_epoch) / (passes[i].los_epoch - passes[i].aos_epoch);
-                        Rectangle pb_bg = { row.x + 10*cfg.ui_scale, row.y + 35*cfg.ui_scale, row.width - 20*cfg.ui_scale, 4*cfg.ui_scale };
+                        Rectangle pb_bg = { rowBtn.x + 10*cfg.ui_scale, rowBtn.y + 35*cfg.ui_scale, rowBtn.width - 20*cfg.ui_scale, 4*cfg.ui_scale };
                         Rectangle pb_fg = { pb_bg.x, pb_bg.y, pb_bg.width * prog, pb_bg.height };
                         DrawRectangleRec(pb_bg, cfg.ui_secondary);
                         DrawRectangleRec(pb_fg, cfg.ui_accent);
