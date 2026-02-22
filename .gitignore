@@ -1,4 +1,8 @@
+### Girlypop ignore ###
+# Directories With Compiled Files
 bin/
 build/
+
+# Dynamic Files With Dynamic Data or PIIs
 /date.tle
 /settings.json
