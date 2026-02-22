@@ -1,4 +1,5 @@
 #include "astro.h"
+#include "types.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -244,7 +245,7 @@ void update_orbit_cache(Satellite* sat, double current_epoch) {
     sat->orbit_cached = true;
 }
 
-void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, double* az, double* el) {
+void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double* az, double* el) {
     double sat_r = Vector3Length(eci_pos);
     if (sat_r == 0) { *az = 0; *el = -90; return; }
     
@@ -260,9 +261,11 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, d
     double lat_rad = obs_lat * DEG2RAD;
     double lon_rad = obs_lon * DEG2RAD;
 
-    double o_x = EARTH_RADIUS_KM * cos(lat_rad) * cos(lon_rad);
-    double o_y = EARTH_RADIUS_KM * cos(lat_rad) * sin(lon_rad);
-    double o_z = EARTH_RADIUS_KM * sin(lat_rad);
+    double obs_rad = EARTH_RADIUS_KM + obs_alt/1000.0;
+
+    double o_x = obs_rad * cos(lat_rad) * cos(lon_rad);
+    double o_y = obs_rad * cos(lat_rad) * sin(lon_rad);
+    double o_z = obs_rad * sin(lat_rad);
 
     double dx = s_x - o_x;
     double dy = s_y - o_y;
@@ -292,7 +295,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
     double gmst = epoch_to_gmst(t);
     double az, el;
     
-    get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, &az, &el);
+    get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
     
     // back up if happens to already be in a pass to catch the true start
     if (el > 0) {
@@ -300,7 +303,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
             t -= (1.0 / 1440.0);
             t_unix = get_unix_from_epoch(t);
             gmst = epoch_to_gmst(t);
-            get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, &az, &el);
+            get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
         }
     }
 
@@ -310,7 +313,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
     for (int i = 0; i < 3 * 1440 && num_passes < MAX_PASSES; i++) {
         t_unix = get_unix_from_epoch(t);
         gmst = epoch_to_gmst(t);
-        get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, &az, &el);
+        get_az_el(calculate_position(sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
         
         if (el >= 0.0) {
             if (!in_pass) {
@@ -324,7 +327,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
                     double mid_unix = get_unix_from_epoch(t_mid);
                     double mid_gmst = epoch_to_gmst(t_mid);
                     double mid_az, mid_el;
-                    get_az_el(calculate_position(sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, &mid_az, &mid_el);
+                    get_az_el(calculate_position(sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, home_location.alt, &mid_az, &mid_el);
                     if (mid_el >= 0.0) t_high = t_mid;
                     else t_low = t_mid;
                 }
@@ -349,7 +352,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
                     double mid_unix = get_unix_from_epoch(t_mid);
                     double mid_gmst = epoch_to_gmst(t_mid);
                     double mid_az, mid_el;
-                    get_az_el(calculate_position(sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, &mid_az, &mid_el);
+                    get_az_el(calculate_position(sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, home_location.alt, &mid_az, &mid_el);
                     if (mid_el < 0.0) t_high = t_mid;
                     else t_low = t_mid;
                 }
@@ -364,7 +367,7 @@ void CalculatePasses(Satellite* sat, double start_epoch) {
                         double pt_unix = get_unix_from_epoch(pt);
                         double p_gmst = epoch_to_gmst(pt);
                         double p_az, p_el;
-                        get_az_el(calculate_position(sat, pt_unix), p_gmst, home_location.lat, home_location.lon, &p_az, &p_el);
+                        get_az_el(calculate_position(sat, pt_unix), p_gmst, home_location.lat, home_location.lon, home_location.alt, &p_az, &p_el);
                         current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
                     }
                 }

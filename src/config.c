@@ -1,4 +1,5 @@
 #include "config.h"
+#include "types.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -89,9 +90,10 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
                 char* name_ptr = strstr(hl_ptr, "\"name\"");
                 char* lat_ptr = strstr(hl_ptr, "\"lat\"");
                 char* lon_ptr = strstr(hl_ptr, "\"lon\"");
+                char* alt_ptr = strstr(hl_ptr, "\"alt\"");
                 char* obj_end = strchr(hl_ptr, '}');
 
-                if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end) {
+                if (name_ptr && lat_ptr && lon_ptr && alt_ptr && name_ptr < obj_end) {
                     char* colon_name = strchr(name_ptr, ':');
                     if (colon_name) {
                         char* quote_start = strchr(colon_name, '"');
@@ -102,6 +104,9 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
                     
                     char* colon_lon = strchr(lon_ptr, ':');
                     if (colon_lon) sscanf(colon_lon + 1, "%f", &home_location.lon);
+
+                    char* colon_alt = strchr(alt_ptr, ':');
+                    if (colon_alt) sscanf(colon_alt + 1, "%f", &home_location.alt);
                 }
             }
 
@@ -118,10 +123,11 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
                     char* name_ptr = strstr(m_ptr, "\"name\"");
                     char* lat_ptr = strstr(m_ptr, "\"lat\"");
                     char* lon_ptr = strstr(m_ptr, "\"lon\"");
+                    char* alt_ptr = strstr(m_ptr, "\"alt\"");
                     char* obj_end = strchr(m_ptr, '}');
                     if (!obj_end) obj_end = block_end;
 
-                    if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end) {
+                    if (name_ptr && lat_ptr && lon_ptr && alt_ptr && name_ptr < obj_end) {
                         char* colon_name = strchr(name_ptr, ':');
                         if (colon_name) {
                             char* quote_start = strchr(colon_name, '"');
@@ -132,6 +138,9 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
                         
                         char* colon_lon = strchr(lon_ptr, ':');
                         if (colon_lon) sscanf(colon_lon + 1, "%f", &markers[marker_count].lon);
+
+                        char* colon_alt = strchr(alt_ptr, ':');
+                        if (colon_alt) sscanf(colon_alt + 1, "%f", &markers[marker_count].alt);
                         
                         marker_count++;
                     }
@@ -195,12 +204,12 @@ void SaveAppConfig(const char* filename, AppConfig* config) {
     fprintf(file, "    \"show_clouds\": %s,\n", config->show_clouds ? "true" : "false");
     fprintf(file, "    \"show_night_lights\": %s,\n", config->show_night_lights ? "true" : "false");
     
-    fprintf(file, "    \"home_location\": {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f},\n", home_location.name, home_location.lat, home_location.lon);
+    fprintf(file, "    \"home_location\": {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f},\n", home_location.name, home_location.lat, home_location.lon, home_location.alt);
 
     fprintf(file, "    \"markers\": [\n");
     for (int i = 0; i < marker_count; i++) {
-        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f}%s\n", 
-            markers[i].name, markers[i].lat, markers[i].lon, 
+        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f}%s\n", 
+            markers[i].name, markers[i].lat, markers[i].lon, markers[i].alt,
             (i == marker_count - 1) ? "" : ",");
     }
     fprintf(file, "    ]\n");

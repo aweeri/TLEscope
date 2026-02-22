@@ -1368,7 +1368,7 @@ int main(void) {
                     double t_unix = get_unix_from_epoch(current_epoch);
                     double gmst = epoch_to_gmst(current_epoch);
                     double c_az, c_el;
-                    get_az_el(calculate_position(selected_sat, t_unix), gmst, home_location.lat, home_location.lon, &c_az, &c_el);
+                    get_az_el(calculate_position(selected_sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &c_az, &c_el);
                     
                     float r_c = r_max * (90 - c_el)/90.0f;
                     Vector2 pt_c = { cx + r_c * sin(c_az*DEG2RAD), cy - r_c * cos(c_az*DEG2RAD) };

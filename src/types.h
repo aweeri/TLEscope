@@ -41,6 +41,7 @@ typedef struct {
     char name[64];
     float lat;
     float lon;
+    float alt;
 } Marker;
 
 extern Satellite satellites[MAX_SATELLITES];
