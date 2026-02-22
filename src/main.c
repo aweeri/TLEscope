@@ -263,15 +263,20 @@ int main(void) {
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
-    int max_h = GetMonitorHeight(monitor) - 60; // Account for taskbar and title bar
+    int max_h = GetMonitorHeight(monitor);
 
     if (cfg.window_width >= max_w || cfg.window_height >= max_h) {
-        int new_w = (cfg.window_width < max_w) ? cfg.window_width : max_w;
-        int new_h = (cfg.window_height < max_h) ? cfg.window_height : max_h;
-        SetWindowSize(new_w, new_h);
-        SetWindowPosition(GetMonitorWidth(monitor)/2 - GetScreenWidth()/2, GetMonitorHeight(monitor)/2 - GetScreenHeight()/2);
+        SetWindowState(FLAG_WINDOW_MAXIMIZED);
+    } else {
+        // Center the window dynamically based on the current monitor's offset
+        Vector2 monitorPos = GetMonitorPosition(monitor);
+        SetWindowPosition(
+            (int)monitorPos.x + (max_w - cfg.window_width) / 2,
+            (int)monitorPos.y + (max_h - cfg.window_height) / 2
+        );
     }
 
     SetExitKey(0); // disable default exit key (ESC)
