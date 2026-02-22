@@ -243,7 +243,11 @@ static void DrawLoadingScreen(float progress, const char* message, Texture2D log
     Rectangle barOutline = { (screenW - barW)/2, startY, barW, barH };
     Rectangle barProgress = { barOutline.x + 3, barOutline.y + 3, (barW - 6) * progress, barH - 6 };
     
-    DrawRectangleRoundedLines(barOutline, 0.5f, 16, cfg.text_main);
+    #if defined(_WIN32) || defined(_WIN64)
+        DrawRectangleRoundedLines(barOutline, 0.5f, 16, 2.0f, cfg.text_main);
+    #else
+        DrawRectangleRoundedLines(barOutline, 0.5f, 16, cfg.text_main);
+    #endif
     if (progress > 0.0f) DrawRectangleRounded(barProgress, 0.5f, 16, cfg.text_secondary);
     
     Vector2 msgSize = MeasureTextEx(customFont, message, 18 * cfg.ui_scale, 1.0f);
