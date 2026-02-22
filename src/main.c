@@ -374,6 +374,10 @@ int main(void) {
     bool hide_unselected = false;
     float unselected_fade = 1.0f;
 
+    bool is_auto_warping = false;
+    double auto_warp_target = 0.0;
+    double auto_warp_initial_diff = 0.0;
+
     Satellite* hovered_sat = NULL;
     Satellite* selected_sat = NULL;
     TargetLock active_lock = LOCK_EARTH;
@@ -417,6 +421,7 @@ int main(void) {
         // handle keyboard shortcuts
         if (!is_typing) {
             if (IsKeyPressed(KEY_SPACE)) {
+                is_auto_warping = false;
                 if (time_multiplier != 0.0) {
                     saved_multiplier = time_multiplier;
                     time_multiplier = 0.0;
@@ -424,11 +429,12 @@ int main(void) {
                     time_multiplier = saved_multiplier != 0.0 ? saved_multiplier : 1.0;
                 }
             }
-            if (IsKeyPressed(KEY_PERIOD)) time_multiplier = StepTimeMultiplier(time_multiplier, true);
-            if (IsKeyPressed(KEY_COMMA)) time_multiplier = StepTimeMultiplier(time_multiplier, false);
+            if (IsKeyPressed(KEY_PERIOD)) { is_auto_warping = false; time_multiplier = StepTimeMultiplier(time_multiplier, true); }
+            if (IsKeyPressed(KEY_COMMA)) { is_auto_warping = false; time_multiplier = StepTimeMultiplier(time_multiplier, false); }
             if (IsKeyPressed(KEY_M)) is_2d_view = !is_2d_view;
             
             if (IsKeyPressed(KEY_SLASH)) {
+                is_auto_warping = false;
                 if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) current_epoch = get_current_real_time_epoch(); 
                 else {
                     time_multiplier = 1.0; 
@@ -442,6 +448,29 @@ int main(void) {
 
         if (cfg.ui_scale < 0.5f) cfg.ui_scale = 0.5f;
         if (cfg.ui_scale > 4.0f) cfg.ui_scale = 4.0f;
+
+        // smooth auto-warp integration @juliasatt you're a genius
+        if (is_auto_warping) {
+            double diff_sec = (auto_warp_target - current_epoch) * 86400.0;
+            if (diff_sec <= 0.0) {
+                current_epoch = auto_warp_target;
+                time_multiplier = 1.0;
+                saved_multiplier = 1.0;
+                is_auto_warping = false;
+            } else {
+                double base_speed = auto_warp_initial_diff / 2.0;
+                double eased_speed = fmin(base_speed, diff_sec * 3.0); 
+                if (eased_speed < 1.0) eased_speed = 1.0;
+                time_multiplier = eased_speed;
+                
+                if (diff_sec <= time_multiplier * GetFrameTime()) {
+                    current_epoch = auto_warp_target;
+                    time_multiplier = 1.0;
+                    saved_multiplier = 1.0;
+                    is_auto_warping = false;
+                }
+            }
+        }
 
         // update simulation time and satellite positions
         current_epoch += (GetFrameTime() * time_multiplier) / 86400.0; 
@@ -1016,12 +1045,12 @@ int main(void) {
         DrawUIText(top_text, 230*cfg.ui_scale, 15*cfg.ui_scale, 20*cfg.ui_scale, cfg.text_main);
 
         // real-time indicator rendering
-        if (time_multiplier == 1.0 && fabs(current_epoch - get_current_real_time_epoch()) < (5.0 / 86400.0)) {
+        if (time_multiplier == 1.0 && fabs(current_epoch - get_current_real_time_epoch()) < (5.0 / 86400.0) && !is_auto_warping) {
             float blink_alpha = (sinf(GetTime() * 4.0f) * 0.5f + 0.5f);
             
             int oldStyle = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
             GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, ColorToInt(ApplyAlpha(cfg.ui_accent, blink_alpha)));
-            GuiLabel((Rectangle){ 230*cfg.ui_scale, 36*cfg.ui_scale, 20*cfg.ui_scale, 20*cfg.ui_scale }, "#212#");
+            GuiLabel((Rectangle){ 230*cfg.ui_scale, 34*cfg.ui_scale, 20*cfg.ui_scale, 20*cfg.ui_scale }, "#212#");
             GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, oldStyle);
 
             DrawUIText("REAL TIME", 255*cfg.ui_scale, 40*cfg.ui_scale, 16*cfg.ui_scale, cfg.ui_accent);
@@ -1051,8 +1080,9 @@ int main(void) {
         if (GuiButton(btnHelp, "#193#")) show_help = !show_help;
         if (GuiButton(btnSet, "#142#")) show_settings = !show_settings;
 
-        if (GuiButton(btnRewind, "#118#")) time_multiplier = StepTimeMultiplier(time_multiplier, false);
+        if (GuiButton(btnRewind, "#118#")) { is_auto_warping = false; time_multiplier = StepTimeMultiplier(time_multiplier, false); }
         if (GuiButton(btnPlayPause, (time_multiplier == 0.0) ? "#131#" : "#132#")) {
+            is_auto_warping = false;
             if (time_multiplier != 0.0) {
                 saved_multiplier = time_multiplier;
                 time_multiplier = 0.0;
@@ -1060,9 +1090,10 @@ int main(void) {
                 time_multiplier = saved_multiplier != 0.0 ? saved_multiplier : 1.0;
             }
         }
-        if (GuiButton(btnFastForward, "#119#")) time_multiplier = StepTimeMultiplier(time_multiplier, true);
+        if (GuiButton(btnFastForward, "#119#")) { is_auto_warping = false; time_multiplier = StepTimeMultiplier(time_multiplier, true); }
         
         if (GuiButton(btnNow, "#143#")) { 
+            is_auto_warping = false;
             current_epoch = get_current_real_time_epoch();
             time_multiplier = 1.0;
             saved_multiplier = 1.0;
@@ -1171,6 +1202,7 @@ int main(void) {
             if (GuiTextBox((Rectangle){ td_x + 250*cfg.ui_scale, td_y + 90*cfg.ui_scale, 50*cfg.ui_scale, 32*cfg.ui_scale }, text_sec, 4, edit_sec)) edit_sec = !edit_sec;
 
             if (GuiButton((Rectangle){ td_x + 340*cfg.ui_scale, td_y + 45*cfg.ui_scale, 160*cfg.ui_scale, 77*cfg.ui_scale }, "Apply Date/Time")) {
+                is_auto_warping = false;
                 struct tm t = {0};
                 t.tm_year = atoi(text_year) - 1900;
                 t.tm_mon = atoi(text_month) - 1;
@@ -1197,6 +1229,7 @@ int main(void) {
             if (GuiTextBox((Rectangle){ td_x + 170*cfg.ui_scale, td_y + 165*cfg.ui_scale, 160*cfg.ui_scale, 32*cfg.ui_scale }, text_unix, 64, edit_unix)) edit_unix = !edit_unix;
 
             if (GuiButton((Rectangle){ td_x + 340*cfg.ui_scale, td_y + 165*cfg.ui_scale, 160*cfg.ui_scale, 32*cfg.ui_scale }, "Apply Epoch")) {
+                is_auto_warping = false;
                 double ep;
                 if (sscanf(text_unix, "%lf", &ep) == 1) current_epoch = unix_to_epoch(ep);
                 show_time_dialog = false;
@@ -1233,11 +1266,13 @@ int main(void) {
                     }
 
                     if (GuiButton(jumpBtn, "#134#")) {
-                        current_epoch = passes[i].aos_epoch;
-                        time_multiplier = 1.0;
-                        saved_multiplier = 1.0;
-                        show_polar_dialog = true;
-                        selected_pass_idx = 0;
+                        auto_warp_target = passes[i].aos_epoch;
+                        auto_warp_initial_diff = (auto_warp_target - current_epoch) * 86400.0;
+                        if (auto_warp_initial_diff > 0.0) {
+                            is_auto_warping = true;
+                            show_polar_dialog = true;
+                            selected_pass_idx = 0; 
+                        }
                     }
                     
                     char aos_str[16], los_str[16];
