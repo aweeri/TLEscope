@@ -8,7 +8,7 @@
     "orbits_to_draw": 3.00,
     "show_clouds": false,
     "show_night_lights": true,
-    "home_location": {"name": "Home", "lat": 0, "lon": 0},
+    "home_location": {"name": "Home", "lat": 0, "lon": 0, "alt": 0},
     "markers": [
     {"name": "Cape Canaveral", "lat": 28.3922, "lon": -80.6077},
     {"name": "Vandenberg", "lat": 34.7420, "lon": -120.5724},
