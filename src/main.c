@@ -261,7 +261,7 @@ bool show_ui = true;
 int main(void) {
     LoadAppConfig("settings.json", &cfg);
 
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
     InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
     SetExitKey(0); // disable default exit key (ESC)
 
