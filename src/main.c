@@ -261,8 +261,19 @@ bool show_ui = true;
 int main(void) {
     LoadAppConfig("settings.json", &cfg);
 
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+    int monitor = GetCurrentMonitor();
+    int max_w = GetMonitorWidth(monitor);
+    int max_h = GetMonitorHeight(monitor) - 60; // Account for taskbar and title bar
+
+    if (cfg.window_width >= max_w || cfg.window_height >= max_h) {
+        int new_w = (cfg.window_width < max_w) ? cfg.window_width : max_w;
+        int new_h = (cfg.window_height < max_h) ? cfg.window_height : max_h;
+        SetWindowSize(new_w, new_h);
+        SetWindowPosition(GetMonitorWidth(monitor)/2 - GetScreenWidth()/2, GetMonitorHeight(monitor)/2 - GetScreenHeight()/2);
+    }
+
     SetExitKey(0); // disable default exit key (ESC)
 
     // load app icons and textures
