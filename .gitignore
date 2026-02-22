@@ -1,3 +1,7 @@
+### Compiled Files ###
 bin/
 build/
+
+### Static files ###
 /date.tle
+/settings.json
