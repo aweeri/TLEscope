@@ -46,6 +46,7 @@ typedef struct {
 extern Satellite satellites[MAX_SATELLITES];
 extern int sat_count;
 
+extern Marker home_location;
 extern Marker markers[MAX_MARKERS];
 extern int marker_count;
 
@@ -74,6 +75,10 @@ typedef struct {
     Color apoapsis;
     Color footprint_bg;
     Color footprint_border;
+
+    Color ui_primary;
+    Color ui_secondary;
+    Color ui_accent;
 } AppConfig;
 
 #endif // TYPES_H

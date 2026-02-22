@@ -11,5 +11,8 @@
     "periapsis": "#87CEEBFF",
     "apoapsis": "#FFA500FF",
     "footprint_bg": "#FFFFFF22",
-    "footprint_border": "#FFFFFF88"
+    "footprint_border": "#FFFFFF88",
+    "ui_primary": "#202020FF",
+    "ui_secondary": "#404040FF",
+    "ui_accent": "#66FF66FF"
 }

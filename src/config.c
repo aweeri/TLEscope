@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+Marker home_location;
+
 // turn hex strings into real colors
 Color ParseHexColor(const char* hexStr, Color fallback) {
     if (!hexStr || hexStr[0] != '#') return fallback;
@@ -20,7 +22,7 @@ Color ParseHexColor(const char* hexStr, Color fallback) {
 
 // read the json file and grab our settings
 void LoadAppConfig(const char* filename, AppConfig* config) {
-    // Default theme configuration
+    // default theme configuration
     strcpy(config->theme, "default");
 
     if (FileExists(filename)) {
@@ -81,6 +83,28 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
                 config->show_night_lights = true;
             }
 
+            // load home location
+            char* hl_ptr = strstr(text, "\"home_location\"");
+            if (hl_ptr) {
+                char* name_ptr = strstr(hl_ptr, "\"name\"");
+                char* lat_ptr = strstr(hl_ptr, "\"lat\"");
+                char* lon_ptr = strstr(hl_ptr, "\"lon\"");
+                char* obj_end = strchr(hl_ptr, '}');
+
+                if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end) {
+                    char* colon_name = strchr(name_ptr, ':');
+                    if (colon_name) {
+                        char* quote_start = strchr(colon_name, '"');
+                        if (quote_start) sscanf(quote_start + 1, "%63[^\"]", home_location.name);
+                    }
+                    char* colon_lat = strchr(lat_ptr, ':');
+                    if (colon_lat) sscanf(colon_lat + 1, "%f", &home_location.lat);
+                    
+                    char* colon_lon = strchr(lon_ptr, ':');
+                    if (colon_lon) sscanf(colon_lon + 1, "%f", &home_location.lon);
+                }
+            }
+
             // load the map markers
             marker_count = 0;
             char* m_ptr = strstr(text, "\"markers\"");
@@ -118,7 +142,7 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
         }
     }
 
-    // Load colors from the selected theme file
+    // load colors from the selected theme file
     char theme_path[256];
     snprintf(theme_path, sizeof(theme_path), "themes/%s/theme.json", config->theme);
     
@@ -146,8 +170,40 @@ void LoadAppConfig(const char* filename, AppConfig* config) {
             PARSE_COLOR("apoapsis", apoapsis);
             PARSE_COLOR("footprint_bg", footprint_bg);
             PARSE_COLOR("footprint_border", footprint_border);
+            
+            PARSE_COLOR("ui_primary", ui_primary);
+            PARSE_COLOR("ui_secondary", ui_secondary);
+            PARSE_COLOR("ui_accent", ui_accent);
 
             UnloadFileText(theme_text);
         }
     }
+}
+
+void SaveAppConfig(const char* filename, AppConfig* config) {
+    FILE* file = fopen(filename, "w");
+    if (!file) return;
+
+    fprintf(file, "{\n");
+    fprintf(file, "    \"theme\": \"%s\",\n", config->theme);
+    fprintf(file, "    \"window_width\": %d,\n", config->window_width);
+    fprintf(file, "    \"window_height\": %d,\n", config->window_height);
+    fprintf(file, "    \"target_fps\": %d,\n", config->target_fps);
+    fprintf(file, "    \"ui_scale\": %.2f,\n", config->ui_scale);
+    fprintf(file, "    \"earth_rotation_offset\": %.2f,\n", config->earth_rotation_offset);
+    fprintf(file, "    \"orbits_to_draw\": %.2f,\n", config->orbits_to_draw);
+    fprintf(file, "    \"show_clouds\": %s,\n", config->show_clouds ? "true" : "false");
+    fprintf(file, "    \"show_night_lights\": %s,\n", config->show_night_lights ? "true" : "false");
+    
+    fprintf(file, "    \"home_location\": {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f},\n", home_location.name, home_location.lat, home_location.lon);
+
+    fprintf(file, "    \"markers\": [\n");
+    for (int i = 0; i < marker_count; i++) {
+        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f}%s\n", 
+            markers[i].name, markers[i].lat, markers[i].lon, 
+            (i == marker_count - 1) ? "" : ",");
+    }
+    fprintf(file, "    ]\n");
+    fprintf(file, "}\n");
+    fclose(file);
 }

@@ -3,13 +3,13 @@
     "window_width": 1920,
     "window_height": 1080,
     "target_fps": 120,
-    "ui_scale": 1.0,
-    "earth_rotation_offset": 0.0,
-    "orbits_to_draw": 3.0,
+    "ui_scale": 1.00,
+    "earth_rotation_offset": 0.00,
+    "orbits_to_draw": 3.00,
     "show_clouds": false,
-    
+    "show_night_lights": true,
+    "home_location": {"name": "Home", "lat": 0, "lon": 0},
     "markers": [
-    {"name": "QTH", "lat": 50.2945, "lon": 18.6714},
     {"name": "Cape Canaveral", "lat": 28.3922, "lon": -80.6077},
     {"name": "Vandenberg", "lat": 34.7420, "lon": -120.5724},
     {"name": "Kourou", "lat": 5.2360, "lon": -52.7750},
