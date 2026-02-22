@@ -11,10 +11,10 @@
 - **Accurate Terminator Line Simulation**: Easily preview sunlight conditions, in 2D and 3D.
 <img width="50%" alt="image" src="https://github.com/user-attachments/assets/0a490c57-5627-4d5f-a495-fac82730f663" />
 
-
 - **​Coverage Analysis**: Real-time rendering of Line-of-Sight (LOS) coverage areas and comprehensive orbital characteristics.
 <img width="45%" alt="image" src="https://github.com/user-attachments/assets/5cdf9629-5ae7-415e-8fa7-5ec3a2c953ef" />
 <img width="45%" alt="image" src="https://github.com/user-attachments/assets/d13e7e8d-61ab-408d-b802-3fe6b8c56259" />
+<img width="90%" alt="image" src="https://github.com/user-attachments/assets/4e3f7d58-517b-4a12-b9e4-bc100b111b57" />
 
 - **​TLE Data Integration**: Efficiently load and parse TLE data for individual satellites or entire constellations.
 <img width="100%" alt="image" src="https://github.com/user-attachments/assets/74b80b20-6c57-4fa9-a426-4469445156a4" />
