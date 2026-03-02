@@ -25,8 +25,7 @@
 - **​TLE Data Integration with alternative sources**: Efficiently load and parse TLE data for individual satellites or entire constellations.<br>
 <img width="963" height="608" alt="image" src="https://github.com/user-attachments/assets/029451e5-0567-4af0-9c91-04d63636e131" /><br>
 
-- **​ReTLEctor**: Got restricted, rate limited, or banned from accessing celestrak? TLEscope gets around this common problem by supporting Retlector, TLE source made specifically as a non rate limited alternative to celestrak.
-<br>
+- **​ReTLEctor**: Got restricted, rate limited, or banned from accessing celestrak? TLEscope gets around this common problem by supporting Retlector, TLE source made specifically as a non rate limited alternative to celestrak.<br>
 <img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" />
 
 - **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. <br>
