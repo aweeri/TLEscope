@@ -3,9 +3,6 @@
   <br>
   <a href="https://github.com/aweeri/TLEscope/stargazers"><img src="https://img.shields.io/github/stars/aweeri/TLEscope?style=for-the-badge&color=yellow" alt="Stars"></a> <a href="https://github.com/aweeri/TLEscope/network/members"><img src="https://img.shields.io/github/forks/aweeri/TLEscope?style=for-the-badge&color=lightgrey" alt="Forks"></a> <a href="https://github.com/aweeri/TLEscope/issues"><img src="https://img.shields.io/github/issues/aweeri/TLEscope?style=for-the-badge&color=orange" alt="Issues"></a> <a href="https://github.com/aweeri/TLEscope/graphs/contributors"><img src="https://img.shields.io/github/contributors/aweeri/TLEscope?style=for-the-badge&color=blueviolet" alt="Contributors"></a> <a href="https://github.com/aweeri/TLEscope/pulse"><img src="https://img.shields.io/github/last-commit/aweeri/TLEscope?style=for-the-badge&color=brightgreen" alt="Last Commit"></a>
 </p>
-<img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" />
-<img width="477" height="695" alt="scope" src="https://github.com/user-attachments/assets/65bcb181-6ed5-4c1b-a5d8-25a56020746e" />
-<img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" />
 
 # **TLEscope**
 ​TLEscope is a satellite visualization tool designed to transform Two-Line Element (TLE) sets into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
@@ -25,15 +22,25 @@
 <img width="45%" alt="image" src="https://github.com/user-attachments/assets/5af3467e-abc9-4e57-910f-4bc179fb2808" /> <br>
 
 
-- **​TLE Data Integration**: Efficiently load and parse TLE data for individual satellites or entire constellations.
+- **​TLE Data Integration with alternative sources**: Efficiently load and parse TLE data for individual satellites or entire constellations.
 <br>
 <img width="963" height="608" alt="image" src="https://github.com/user-attachments/assets/029451e5-0567-4af0-9c91-04d63636e131" />
-
-- **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences.
+<br>
+<br>
+**ReTLEctor**: Got restricted, rate limited, or banned from accessing celestrak? TLEscope gets around this common problem by supporting Retlector, TLE source made specifically as a non rate limited alternative to celestrak.
+<br>
+<img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" />
+<br>
+- **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. <br>
+<img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" />
 
 - **For nerds, By nerds**:
 TLEscope comes equipped with tools designed for RF engineers, satellite operators, and people who *just* want to know when to expect the next sunlit ISS pass.
-<img width="769" height="581" alt="image" src="https://github.com/user-attachments/assets/45495333-5f00-4c6c-af66-9933264e5e80" />
+<img width="769" height="581" alt="image" src="https://github.com/user-attachments/assets/45495333-5f00-4c6c-af66-9933264e5e80" /> <br>
+
+**Satellite Scope**: Wondering what was that signal that you picked up while receiving LRIT? With one of the latest features of TLEscope, Satellite Scope we got you covered. Enter in your antenna beam width, aiming, and search away. Useful for anyone from a space researcher trying to find out the source of an unknown sporadic signal, to just someone with binoculars interested in finding out what passing space object they just saw.
+
+<img width="477" height="695" alt="scope" src="https://github.com/user-attachments/assets/65bcb181-6ed5-4c1b-a5d8-25a56020746e" />
 
 - **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
