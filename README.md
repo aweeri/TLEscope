@@ -26,7 +26,7 @@
 <img width="963" height="608" alt="image" src="https://github.com/user-attachments/assets/029451e5-0567-4af0-9c91-04d63636e131" /><br>
 
 - **​ReTLEctor**: Got restricted, rate limited, or banned from accessing celestrak? TLEscope gets around this common problem by supporting Retlector, TLE source made specifically as a non rate limited alternative to celestrak.<br>
-<img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" />
+<img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" /><br>
 
 - **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. <br>
 <img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" />
