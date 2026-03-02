@@ -56,7 +56,7 @@ TLEscope provides also packages on following systems/distributions:
 - Arch Linux:
   - AUR
     * [`tlescope-bin`](https://aur.archlinux.org/packages/tlescope-bin): Downloads and install the latest stable version of TLEscope from [Releases](https://github.com/aweeri/TLEscope/releases).
-    * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-bin): Clones the latest commit of this repository and installs on the system.
+    * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-git): Clones the latest commit of this repository and installs on the system.
 
 ### **Building From Source**
 TLEscope uses gcc for Linux builds and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
