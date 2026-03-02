@@ -13,8 +13,8 @@ LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
 CURL_FIX = $(shell x86_64-w64-mingw32-pkg-config --libs --static libcurl 2>/dev/null | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g' || echo "-lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32")
 
 LDFLAGS_WIN = $(LIB_WIN_PATH) -lraylib -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -lopengl32 -lgdi32 -lwinmm -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
-DIST_LINUX = dist/TLEscope-Linux
-DIST_WIN   = dist/TLEscope-Windows
+DIST_LINUX = dist/TLEscope-Linux-Portable
+DIST_WIN   = dist/TLEscope-Win-Portable
 
 INSTALL_DIR ?= /opt/TLEscope
 LINK_DIR    ?= /usr/local/bin
