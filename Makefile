@@ -20,7 +20,7 @@ INSTALL_DIR ?= /opt/TLEscope
 LINK_DIR    ?= /usr/local/bin
 APP_DIR     ?= /usr/share/applications
 
-.PHONY: all linux windows clean build bin install uninstall
+.PHONY: all linux windows win-installer clean build bin install uninstall
 
 all: linux
 
@@ -44,6 +44,12 @@ windows: bin/TLEscope.exe
 	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
 	cp /usr/x86_64-w64-mingw32/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
+
+win-installer: windows
+	@echo "Building Windows installer..."
+	convert logo.png $(DIST_WIN)/logo.ico 2>/dev/null || echo "Warning: ImageMagick not installed, skipping .ico generation"
+	makensis installer.nsi
+	@echo "Installer built at dist/TLEscope-Installer.exe"
 
 # yes makefile this data copied juuuuuuuust fine and is safe and sound don't worry about it :3 
 # microsoft, and I mean this sincerely, please keep bloating windows so that people stop using it and annoying me about it thanks bye.
