@@ -63,6 +63,7 @@ jobs:
             mingw-w64-x86_64-openssl
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-nsis
+            mingw-w64-x86_64-imagemagick
 
       - name: Link MinGW to Expected Makefile Path
         run: |
