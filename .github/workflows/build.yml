@@ -65,20 +65,8 @@ jobs:
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-imagemagick
 
-      - name: Link MinGW to Expected Makefile Path
-        run: |
-          # The Makefile expects /usr/x86_64-w64-mingw32/
-          # We create a symlink from the MSYS2 mingw64 directory to satisfy this.
-          mkdir -p /usr
-          ln -s /mingw64 /usr/x86_64-w64-mingw32
-
       - name: Compile and Bundle Windows
-        run: |
-          # Generate the flags dynamically using MSYS2's native pkg-config, stripping the rogue zstd/R flags
-          CURL_FLAGS=$(pkg-config --libs --static libcurl | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
-          
-          # Pass CURL_FIX directly to make, which overrides the broken $(shell) assignment inside the Makefile
-          make win-installer CURL_FIX="$CURL_FLAGS"
+        run: make win-installer MINGW_PREFIX=/mingw64 PKG_CONFIG_WIN=pkg-config
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
@@ -124,11 +112,22 @@ jobs:
           mv TLEscope-Installer/TLEscope-Installer.exe ../
           cd ..
 
+      - name: Clean Existing Release Assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            gh release delete "${{ github.ref_name }}" -y || true
+          fi
+
       - name: Force Update Nightly Tag
         if: startsWith(github.ref, 'refs/heads/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          gh release delete nightly --cleanup-tag -y || true
           git tag -f nightly
           git push -f origin nightly
 

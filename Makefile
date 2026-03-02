@@ -1,16 +1,19 @@
+MINGW_PREFIX   ?= /usr/x86_64-w64-mingw32
+PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
+
 CC_LINUX = gcc
 CC_WIN   = x86_64-w64-mingw32-gcc
 CFLAGS     = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized
 CFLAGS_WIN = $(CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
-LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I/usr/x86_64-w64-mingw32/include -L/usr/x86_64-w64-mingw32/lib
+LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 
 SRC       = src/main.c src/astro.c src/config.c src/ui.c
 OBJ       = $(SRC:src/%.c=build/%.o)
 
 LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
-CURL_FIX = $(shell x86_64-w64-mingw32-pkg-config --libs --static libcurl 2>/dev/null | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g' || echo "-lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32")
+CURL_FIX = $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g' || echo "-lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32")
 
 LDFLAGS_WIN = $(LIB_WIN_PATH) -lraylib -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -lopengl32 -lgdi32 -lwinmm -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
 DIST_LINUX = dist/TLEscope-Linux-Portable
@@ -37,12 +40,12 @@ linux: bin/TLEscope
 windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
 	cp bin/TLEscope.exe $(DIST_WIN)/
-	cp /usr/x86_64-w64-mingw32/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
+	cp $(MINGW_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp -r themes/ $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
 	cp data.tle $(DIST_WIN)/ 2>/dev/null || true
 	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
-	cp /usr/x86_64-w64-mingw32/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
+	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
 
 win-installer: windows
