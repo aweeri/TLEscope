@@ -62,6 +62,7 @@ jobs:
             mingw-w64-x86_64-libssh2
             mingw-w64-x86_64-openssl
             mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-nsis
 
       - name: Link MinGW to Expected Makefile Path
         run: |
@@ -76,13 +77,20 @@ jobs:
           CURL_FLAGS=$(pkg-config --libs --static libcurl | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
           
           # Pass CURL_FIX directly to make, which overrides the broken $(shell) assignment inside the Makefile
-          make windows CURL_FIX="$CURL_FLAGS"
+          make win-installer CURL_FIX="$CURL_FLAGS"
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TLEscope-Win-Portable
           path: dist/TLEscope-Win-Portable/
+          retention-days: 14
+
+      - name: Upload Windows Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLEscope-Installer
+          path: dist/TLEscope-Installer.exe
           retention-days: 14
 
   release:
