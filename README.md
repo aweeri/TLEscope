@@ -23,7 +23,6 @@
 
 
 - **​TLE Data Integration with alternative sources**: Efficiently load and parse TLE data for individual satellites or entire constellations.
-<br>
 <img width="963" height="608" alt="image" src="https://github.com/user-attachments/assets/029451e5-0567-4af0-9c91-04d63636e131" />
 <br>
 <br>
