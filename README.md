@@ -31,7 +31,6 @@
 - **​ReTLEctor**: Got restricted, rate limited, or banned from accessing celestrak? TLEscope gets around this common problem by supporting Retlector, TLE source made specifically as a non rate limited alternative to celestrak.
 <br>
 <img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" />
-<br>
 
 - **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. <br>
 <img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" />
@@ -40,8 +39,7 @@
 TLEscope comes equipped with tools designed for RF engineers, satellite operators, and people who *just* want to know when to expect the next sunlit ISS pass.
 <img width="769" height="581" alt="image" src="https://github.com/user-attachments/assets/45495333-5f00-4c6c-af66-9933264e5e80" /> <br>
 
-**Satellite Scope**: Wondering what was that signal that you picked up while receiving LRIT? With one of the latest features of TLEscope, Satellite Scope we got you covered. Enter in your antenna beam width, aiming, and search away. Useful for anyone from a space researcher trying to find out the source of an unknown sporadic signal, to just someone with binoculars interested in finding out what passing space object they just saw.
-
+- **Satellite Scope**: One of the latest features of TLEscope, Satellite Scope, allows you to see any and all satellites in your antenna beam width (or visual field of view ). Useful for anyone from a space researcher trying to find out the source of an unknown sporadic signal, to just someone with binoculars interested in finding out what passing space object they just saw. <br>
 <img width="477" height="695" alt="scope" src="https://github.com/user-attachments/assets/65bcb181-6ed5-4c1b-a5d8-25a56020746e" />
 
 - **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
