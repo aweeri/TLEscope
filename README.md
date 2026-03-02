@@ -10,7 +10,7 @@
 <img width="2381" height="1235" alt="image" src="https://github.com/user-attachments/assets/a410cb2c-28ef-4e7f-86b5-f8a68ccac478" />
 
 
-### Not interested in the market pitch? [__Click Here__](https://github.com/aweeri/TLEscope?tab=readme-ov-file#download) to skip directly to downloads.
+### Not interested in the market pitch? [__Click Here__](#download-from-github) to skip directly to downloads.
 
 ### ​**Features**
 - **​Dual-View Visualization**: Seamlessly toggle between an interactive 3D orbital space and a 2D projection featuring accurate satellite ground tracks.
@@ -45,11 +45,18 @@ You can find the roadmap here: [ROADMAP.md](https://github.com/aweeri/TLEscope/b
 ### **​Development & Contributions**
 ​TLEscope is an evolving project with a rich roadmap. We welcome bug reports, feature requests, and code contributions via the project's issue tracker.
 
-### **Download**
+### **Download from GitHub**
 To download TLEscope, grab a portable zip from the [Relases tab](https://github.com/aweeri/TLEscope/releases), then extract it's contents into a directory of choice.
 You can choose between nightly and complete relases:
 - [**Stable**](https://github.com/aweeri/TLEscope/releases) relases are properly versioned notable milestone builds. They may not have the latest features, but they are a stable and safe choice. 
 - [**Nightly**](https://github.com/aweeri/TLEscope/releases/tag/nightly) relases are always up to date with the latest commits, as long as they [compile correctly](https://github.com/aweeri/TLEscope/actions). Do not complain too much if things don't work as expected.
+
+### **Download from a package manager**
+TLEscope provides also packages on following systems/distributions:
+- Arch Linux:
+  - AUR
+    * [`tlescope-bin`](https://aur.archlinux.org/packages/tlescope-bin): Downloads and install the latest stable version of TLEscope from [Releases](https://github.com/aweeri/TLEscope/releases).
+    * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-bin): Clones the latest commit of this repository and installs on the system.
 
 ### **Building From Source**
 TLEscope uses gcc for Linux builds and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
