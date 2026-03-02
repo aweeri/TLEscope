@@ -29,7 +29,7 @@
 <img width="552" height="643" alt="tle" src="https://github.com/user-attachments/assets/e22efe09-bb26-4c92-8f70-f375a11e9966" /><br>
 
 - **​Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. <br>
-<img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" />
+<img width="751" height="368" alt="custom" src="https://github.com/user-attachments/assets/391bff77-e373-4b79-b52f-6f847d550415" /> <br>
 
 - **For nerds, By nerds**:
 TLEscope comes equipped with tools designed for RF engineers, satellite operators, and people who *just* want to know when to expect the next sunlit ISS pass.
