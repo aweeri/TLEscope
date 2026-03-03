@@ -83,9 +83,45 @@ jobs:
           path: dist/TLEscope-Installer.exe
           retention-days: 14
 
+  build-windows-arm64:
+    name: Build Windows ARM64
+    runs-on: windows-11-arm
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 (MinGW Environment)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          install: >-
+            mingw-w64-clang-aarch64-make
+            mingw-w64-clang-aarch64-clang
+            mingw-w64-clang-aarch64-curl
+            mingw-w64-clang-aarch64-ngtcp2
+            mingw-w64-clang-aarch64-nghttp3
+            mingw-w64-clang-aarch64-zstd
+            mingw-w64-clang-aarch64-libssh2
+            mingw-w64-clang-aarch64-openssl
+            mingw-w64-clang-aarch64-pkgconf
+
+      - name: Compile and Bundle Windows ARM64
+        run: mingw32-make windows-arm64
+
+      - name: Upload Windows ARM64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLEscope-Win-arm64-Portable
+          path: dist/TLEscope-Win-arm64-Portable/
+          retention-days: 14
+
   release:
     name: Publish Release
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-windows-arm64]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
@@ -108,6 +144,7 @@ jobs:
           
           zip -r ../TLEscope-Linux-Portable.zip TLEscope-Linux-Portable/
           zip -r ../TLEscope-Win-Portable.zip TLEscope-Win-Portable/
+          zip -r ../TLEscope-Win-arm64-Portable.zip TLEscope-Win-arm64-Portable/
           
           # Move installer out of its artifact subdirectory for flat publishing
           mv TLEscope-Installer/TLEscope-Installer.exe ../
@@ -143,6 +180,7 @@ jobs:
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Win-Portable.zip
+            TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
 
       - name: Publish Release
@@ -153,4 +191,5 @@ jobs:
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Win-Portable.zip
+            TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe

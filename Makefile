@@ -1,13 +1,23 @@
 MINGW_PREFIX   ?= /usr/x86_64-w64-mingw32
-PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
+CLANG64_PREFIX   ?= /clangarm64
 
 CC_LINUX = gcc
-CC_WIN   = x86_64-w64-mingw32-gcc
 CFLAGS     = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized
 CFLAGS_WIN = $(CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
+# Sets _WIN variables for each possible architecture
+ifeq ($(MSYSTEM),CLANGARM64)
+	PKG_CONFIG_WIN ?= pkg-config
+	CC_WIN = clang
+	LIB_WIN_PATH = -Ilib/raylib_win_arm64/include -Llib/raylib_win_arm64/lib -I$(CLANG64_PREFIX)/include -L$(CLANG64_PREFIX)/lib
+	override DIST_WIN = dist/TLEscope-Win-arm64-Portable
+else
+	PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
+    CC_WIN = x86_64-w64-mingw32-gcc
+	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
+endif
+
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
-LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 
 SRC       = src/main.c src/astro.c src/config.c src/ui.c
 OBJ       = $(SRC:src/%.c=build/%.o)
@@ -23,7 +33,7 @@ INSTALL_DIR ?= /opt/TLEscope
 LINK_DIR    ?= /usr/local/bin
 APP_DIR     ?= /usr/share/applications
 
-.PHONY: all linux windows win-installer clean build bin install uninstall
+.PHONY: all linux windows windows-arm64 win-installer clean build bin install uninstall
 
 all: linux
 
@@ -48,6 +58,17 @@ windows: bin/TLEscope.exe
 	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
 
+windows-arm64: bin/TLEscope.exe
+	@mkdir -p $(DIST_WIN)
+	cp bin/TLEscope.exe $(DIST_WIN)/
+	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
+	cp -r themes/ $(DIST_WIN)/
+	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
+	cp data.tle $(DIST_WIN)/ 2>/dev/null || true
+	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
+	cp $(CLANG64_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
+	@echo "Windows ARM64 build bundled in $(DIST_WIN)/, run it from there!"
+
 win-installer: windows
 	@echo "Building Windows installer..."
 	convert logo.png $(DIST_WIN)/logo.ico 2>/dev/null || echo "Warning: ImageMagick not installed, skipping .ico generation"
@@ -61,6 +82,9 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(LDFLAGS_LIN)
 
 bin/TLEscope.exe: $(SRC) | bin
+	$(CC_WIN) $(CFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+
+bin/TLEscope-arm64.exe: $(SRC) | bin
 	$(CC_WIN) $(CFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.c | build
