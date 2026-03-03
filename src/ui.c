@@ -500,33 +500,43 @@ void DrawUIText(Font font, const char *text, float x, float y, float size, Color
 
 double StepTimeMultiplier(double current, bool increase)
 {
+    double next = current;
+
     if (increase)
     {
         if (current == 0.0)
-            return 0.25;
-        if (current >= 0.25)
-            return current * 2.0;
-        if (current <= -0.25)
+            next = 0.25;
+        else if (current >= 0.25)
+            next = current * 2.0;
+        else if (current <= -0.25)
         {
             if (current == -0.25)
-                return 0.0;
-            return current / 2.0;
+                next = 0.0;
+            else
+                next = current / 2.0;
         }
     }
     else
     {
         if (current == 0.0)
-            return -0.25;
-        if (current <= -0.25)
-            return current * 2.0;
-        if (current >= 0.25)
+            next = -0.25;
+        else if (current <= -0.25)
+            next = current * 2.0;
+        else if (current >= 0.25)
         {
             if (current == 0.25)
-                return 0.0;
-            return current / 2.0;
+                next = 0.0;
+            else
+                next = current / 2.0;
         }
     }
-    return current;
+
+    if (next > 1048576.0)
+        next = 1048576.0;
+    if (next < -1048576.0)
+        next = -1048576.0;
+
+    return next;
 }
 
 double unix_to_epoch(double target_unix)
@@ -907,6 +917,26 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     *ctx->scope_el = scope_el;
     *ctx->scope_beam = scope_beam;
 
+    if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_F))
+    {
+        if (!show_sat_mgr_dialog && !opened_once_sat_mgr)
+        {
+            FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &sm_x, &sm_y);
+            opened_once_sat_mgr = true;
+        }
+        show_sat_mgr_dialog = true;
+        BringToFront(WND_SAT_MGR);
+        
+        edit_year = edit_month = edit_day = edit_hour = edit_min = edit_sec = edit_unix = false;
+        edit_doppler_freq = edit_doppler_res = edit_doppler_file = false;
+        edit_min_el = false;
+        edit_hl_name = edit_hl_lat = edit_hl_lon = edit_hl_alt = false;
+        edit_fps = false;
+        edit_scope_az = edit_scope_el = edit_scope_beam = false;
+        
+        edit_sat_search = true;
+    }
+
     if (IsKeyPressed(KEY_ESCAPE))
     {
         if (IsUITyping())
@@ -917,6 +947,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             edit_hl_name = edit_hl_lat = edit_hl_lon = edit_hl_alt = false;
             edit_fps = false;
             edit_scope_az = edit_scope_el = edit_scope_beam = false;
+        }
+        else if (*ctx->selected_sat != NULL)
+        {
+            *ctx->selected_sat = NULL;
         }
         else if (!show_first_run_dialog)
         {
@@ -1312,7 +1346,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, disabled_text);
 
     HIGHLIGHT_START(show_settings)
-    if (GuiButton(btnSet, "#142#"))
+    if (GuiButton(btnSet, "#142#") || (!IsUITyping() && IsKeyPressed(KEY_ONE)))
     {
         if (!show_settings && !opened_once_settings)
         {
@@ -1326,7 +1360,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_help)
-    if (GuiButton(btnHelp, "#193#"))
+    if (GuiButton(btnHelp, "#193#") || (!IsUITyping() && IsKeyPressed(KEY_SEVEN)))
     {
         if (!show_help && !opened_once_help)
         {
@@ -1339,12 +1373,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(*ctx->is_2d_view)
-    if (GuiButton(btn2D3D, *ctx->is_2d_view ? "#161#" : "#160#"))
+    if (GuiButton(btn2D3D, *ctx->is_2d_view ? "#161#" : "#160#") || (!IsUITyping() && IsKeyPressed(KEY_EIGHT)))
         *ctx->is_2d_view = !*ctx->is_2d_view;
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_sat_mgr_dialog)
-    if (GuiButton(btnSatMgr, "#43#"))
+    if (GuiButton(btnSatMgr, "#43#") || (!IsUITyping() && IsKeyPressed(KEY_THREE)))
     {
         if (!show_sat_mgr_dialog && !opened_once_sat_mgr)
         {
@@ -1357,12 +1391,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(*ctx->hide_unselected)
-    if (GuiButton(btnHideUnselected, *ctx->hide_unselected ? "#44#" : "#45#"))
+    if (GuiButton(btnHideUnselected, *ctx->hide_unselected ? "#44#" : "#45#") || (!IsUITyping() && IsKeyPressed(KEY_NINE)))
         *ctx->hide_unselected = !*ctx->hide_unselected;
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_tle_mgr_dialog)
-    if (GuiButton(btnTLEMgr, "#1#"))
+    if (GuiButton(btnTLEMgr, "#1#") || (!IsUITyping() && IsKeyPressed(KEY_TWO)))
     {
         if (!show_tle_mgr_dialog && !opened_once_tle_mgr)
         {
@@ -1375,7 +1409,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(cfg->highlight_sunlit)
-    if (GuiButton(btnSunlit, "#147#"))
+    if (GuiButton(btnSunlit, "#147#") || (!IsUITyping() && IsKeyPressed(KEY_ZERO)))
         cfg->highlight_sunlit = !cfg->highlight_sunlit;
     HIGHLIGHT_END()
 
@@ -1385,7 +1419,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_polar_dialog)
-    if (GuiButton(btnPolar, "#64#"))
+    if (GuiButton(btnPolar, "#64#") || (!IsUITyping() && IsKeyPressed(KEY_FIVE)))
     {
         if (!show_polar_dialog && !opened_once_polar)
         {
@@ -1398,7 +1432,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_scope_dialog)
-    if (GuiButton(btnScope, "#103#"))
+    if (GuiButton(btnScope, "#103#") || (!IsUITyping() && IsKeyPressed(KEY_SIX)))
     {
         if (!show_scope_dialog && !opened_once_scope)
         {
@@ -1451,7 +1485,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     HIGHLIGHT_START(show_time_dialog)
-    if (GuiButton(btnClock, "#139#"))
+    if (GuiButton(btnClock, "#139#") || (!IsUITyping() && IsKeyPressed(KEY_GRAVE)))
     {
         if (!show_time_dialog)
         {
@@ -1479,7 +1513,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_passes_dialog)
-    if (GuiButton(btnPasses, "#208#"))
+    if (GuiButton(btnPasses, "#208#") || (!IsUITyping() && IsKeyPressed(KEY_FOUR)))
     {
         if (!show_passes_dialog)
         {
@@ -2982,7 +3016,7 @@ case WND_SCOPE:
         20 * cfg->ui_scale, cfg->text_main
     );
     DrawUIText(
-        customFont, TextFormat("Speed: %gx %s", *ctx->time_multiplier, (*ctx->time_multiplier == 0.0) ? "[PAUSED]" : ""), btn_start_x + buttons_w + 20 * cfg->ui_scale,
+        customFont, TextFormat("Speed: %.10gx %s", *ctx->time_multiplier, (*ctx->time_multiplier == 0.0) ? "[PAUSED]" : ""), btn_start_x + buttons_w + 20 * cfg->ui_scale,
         GetScreenHeight() - 35 * cfg->ui_scale, 20 * cfg->ui_scale, cfg->text_main
     );
 

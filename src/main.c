@@ -645,12 +645,48 @@ int main(void)
                     time_multiplier = saved_multiplier != 0.0 ? saved_multiplier : 1.0;
                 }
             }
+            
+            static double warp_hold_start = 0.0;
+            static double last_warp_step = 0.0;
+            bool step_fwd = false;
+            bool step_bwd = false;
+
             if (IsKeyPressed(KEY_PERIOD))
+            {
+                step_fwd = true;
+                warp_hold_start = GetTime();
+                last_warp_step = GetTime();
+            }
+            else if (IsKeyDown(KEY_PERIOD))
+            {
+                if (GetTime() - warp_hold_start > 0.4 && GetTime() - last_warp_step > 0.08)
+                {
+                    step_fwd = true;
+                    last_warp_step = GetTime();
+                }
+            }
+
+            if (IsKeyPressed(KEY_COMMA))
+            {
+                step_bwd = true;
+                warp_hold_start = GetTime();
+                last_warp_step = GetTime();
+            }
+            else if (IsKeyDown(KEY_COMMA))
+            {
+                if (GetTime() - warp_hold_start > 0.4 && GetTime() - last_warp_step > 0.08)
+                {
+                    step_bwd = true;
+                    last_warp_step = GetTime();
+                }
+            }
+
+            if (step_fwd)
             {
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, true);
             }
-            if (IsKeyPressed(KEY_COMMA))
+            if (step_bwd)
             {
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, false);
@@ -659,6 +695,23 @@ int main(void)
                 is_2d_view = !is_2d_view;
             if (IsKeyPressed(KEY_RIGHT_BRACKET))
                 ToggleTLEWarning();
+
+            if (IsKeyPressed(KEY_C))
+                cfg.show_clouds = !cfg.show_clouds;
+            if (IsKeyPressed(KEY_N))
+                cfg.show_night_lights = !cfg.show_night_lights;
+            if (IsKeyPressed(KEY_L))
+                cfg.show_markers = !cfg.show_markers;
+
+            if (IsKeyPressed(KEY_HOME))
+            {
+                active_lock = LOCK_EARTH;
+                target_camDistance = 10.0f;
+                target_camAngleX = 0.785f;
+                target_camAngleY = 0.5f;
+                target_camera2d_zoom = 1.0f;
+                target_camera2d_target = (Vector2){0.0f, 0.0f};
+            }
 
             if (IsKeyPressed(KEY_SLASH))
             {
