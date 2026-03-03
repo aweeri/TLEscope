@@ -134,15 +134,6 @@ static bool show_doppler_dialog = false;
 static bool show_tle_warning = false;
 static bool show_exit_dialog = false;
 
-static bool opened_once_settings = false;
-static bool opened_once_help = false;
-static bool opened_once_sat_mgr = false;
-static bool opened_once_tle_mgr = false;
-static bool opened_once_time = false;
-static bool opened_once_passes = false;
-static bool opened_once_polar = false;
-static bool opened_once_doppler = false;
-
 static bool show_sat_mgr_dialog = false;
 static bool drag_sat_mgr = false;
 static Vector2 drag_sat_mgr_off = {0};
@@ -189,6 +180,7 @@ static Vector2 drag_time_off = {0};
 static float td_x = 300.0f, td_y = 100.0f;
 
 static Vector2 passes_scroll = {0};
+static Vector2 help_scroll = {0};
 
 static char text_doppler_freq[32] = "137625000";
 static char text_doppler_res[32] = "1";
@@ -229,7 +221,6 @@ static bool edit_fps = false;
 
 /* satellite scope variables */
 static bool show_scope_dialog = false;
-static bool opened_once_scope = false;
 static bool drag_scope = false;
 static Vector2 drag_scope_off = {0};
 static float sc_x = 400.0f, sc_y = 150.0f;
@@ -597,7 +588,7 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
     Rectangle active[10];
     int count = 0;
     if (show_help)
-        active[count++] = (Rectangle){hw_x, hw_y, 900 * cfg->ui_scale, 140 * cfg->ui_scale};
+        active[count++] = (Rectangle){hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale};
     if (show_settings)
         active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale};
     if (show_time_dialog)
@@ -683,7 +674,7 @@ bool IsMouseOverUI(AppConfig *cfg)
     bool over_window = false;
     float pass_w = 357 * cfg->ui_scale, pass_h = 380 * cfg->ui_scale;
 
-    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 900 * cfg->ui_scale, 140 * cfg->ui_scale}))
+    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale}))
         over_window = true;
     if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale}))
         over_window = true;
@@ -919,10 +910,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_F))
     {
-        if (!show_sat_mgr_dialog && !opened_once_sat_mgr)
+        if (!show_sat_mgr_dialog)
         {
             FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &sm_x, &sm_y);
-            opened_once_sat_mgr = true;
         }
         show_sat_mgr_dialog = true;
         BringToFront(WND_SAT_MGR);
@@ -959,7 +949,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     /* calculate interactive window rects */
-    Rectangle helpWindow = {hw_x, hw_y, 900 * cfg->ui_scale, 140 * cfg->ui_scale};
+    Rectangle helpWindow = {hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale};
     Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 495 * cfg->ui_scale};
     Rectangle timeWindow = {td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     Rectangle tleWindow = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 130 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 130 * cfg->ui_scale};
@@ -1348,11 +1338,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_settings)
     if (GuiButton(btnSet, "#142#") || (!IsUITyping() && IsKeyPressed(KEY_ONE)))
     {
-        if (!show_settings && !opened_once_settings)
+        if (!show_settings)
         {
             FindSmartWindowPosition(250 * cfg->ui_scale, 495 * cfg->ui_scale, cfg, &sw_x, &sw_y);
             sprintf(text_fps, "%d", cfg->target_fps);
-            opened_once_settings = true;
         }
         show_settings = !show_settings;
         BringToFront(WND_SETTINGS);
@@ -1362,10 +1351,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_help)
     if (GuiButton(btnHelp, "#193#") || (!IsUITyping() && IsKeyPressed(KEY_SEVEN)))
     {
-        if (!show_help && !opened_once_help)
+        if (!show_help)
         {
-            FindSmartWindowPosition(900 * cfg->ui_scale, 140 * cfg->ui_scale, cfg, &hw_x, &hw_y);
-            opened_once_help = true;
+            FindSmartWindowPosition(380 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
         }
         show_help = !show_help;
         BringToFront(WND_HELP);
@@ -1380,10 +1368,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_sat_mgr_dialog)
     if (GuiButton(btnSatMgr, "#43#") || (!IsUITyping() && IsKeyPressed(KEY_THREE)))
     {
-        if (!show_sat_mgr_dialog && !opened_once_sat_mgr)
+        if (!show_sat_mgr_dialog)
         {
             FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &sm_x, &sm_y);
-            opened_once_sat_mgr = true;
         }
         show_sat_mgr_dialog = !show_sat_mgr_dialog;
         BringToFront(WND_SAT_MGR);
@@ -1398,10 +1385,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_tle_mgr_dialog)
     if (GuiButton(btnTLEMgr, "#1#") || (!IsUITyping() && IsKeyPressed(KEY_TWO)))
     {
-        if (!show_tle_mgr_dialog && !opened_once_tle_mgr)
+        if (!show_tle_mgr_dialog)
         {
             FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &tm_x, &tm_y);
-            opened_once_tle_mgr = true;
         }
         show_tle_mgr_dialog = !show_tle_mgr_dialog;
         BringToFront(WND_TLE_MGR);
@@ -1421,10 +1407,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_polar_dialog)
     if (GuiButton(btnPolar, "#64#") || (!IsUITyping() && IsKeyPressed(KEY_FIVE)))
     {
-        if (!show_polar_dialog && !opened_once_polar)
+        if (!show_polar_dialog)
         {
             FindSmartWindowPosition(300 * cfg->ui_scale, 430 * cfg->ui_scale, cfg, &pl_x, &pl_y);
-            opened_once_polar = true;
         }
         show_polar_dialog = !show_polar_dialog;
         BringToFront(WND_POLAR);
@@ -1434,10 +1419,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(show_scope_dialog)
     if (GuiButton(btnScope, "#103#") || (!IsUITyping() && IsKeyPressed(KEY_SIX)))
     {
-        if (!show_scope_dialog && !opened_once_scope)
+        if (!show_scope_dialog)
         {
             FindSmartWindowPosition(360 * cfg->ui_scale, 560 * cfg->ui_scale, cfg, &sc_x, &sc_y);
-            opened_once_scope = true;
         }
         show_scope_dialog = !show_scope_dialog;
         BringToFront(WND_SCOPE);
@@ -1489,11 +1473,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_time_dialog)
         {
-            if (!opened_once_time)
-            {
-                FindSmartWindowPosition(252 * cfg->ui_scale, 320 * cfg->ui_scale, cfg, &td_x, &td_y);
-                opened_once_time = true;
-            }
+            FindSmartWindowPosition(252 * cfg->ui_scale, 320 * cfg->ui_scale, cfg, &td_x, &td_y);
             time_t t_unix = (time_t)get_unix_from_epoch(*ctx->current_epoch);
             struct tm *tm_info = gmtime(&t_unix);
             if (tm_info)
@@ -1517,11 +1497,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_passes_dialog)
         {
-            if (!opened_once_passes)
-            {
-                FindSmartWindowPosition(357 * cfg->ui_scale, 380 * cfg->ui_scale, cfg, &pd_x, &pd_y);
-                opened_once_passes = true;
-            }
+            FindSmartWindowPosition(357 * cfg->ui_scale, 380 * cfg->ui_scale, cfg, &pd_x, &pd_y);
             if (multi_pass_mode)
                 CalculatePasses(NULL, *ctx->current_epoch);
             else if (*ctx->selected_sat)
@@ -1898,11 +1874,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 {
                     if (!show_tle_mgr_dialog)
                     {
-                        if (!opened_once_tle_mgr)
-                        {
-                            FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &tm_x, &tm_y);
-                            opened_once_tle_mgr = true;
-                        }
+                        FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &tm_x, &tm_y);
                         show_tle_mgr_dialog = true;
                         BringToFront(WND_TLE_MGR);
                     }
@@ -1923,15 +1895,80 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             }
             if (GuiWindowBox(helpWindow, "#193# Help & Controls"))
                 show_help = false;
-            DrawUIText(
-                customFont,
-                *ctx->is_2d_view ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D. Space: Pause." : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D. Space: Pause.",
-                hw_x + 10 * cfg->ui_scale, hw_y + 35 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_secondary
-            );
-            DrawUIText(
-                customFont, "Time: '.' (Faster 2x), ',' (Slower 0.5x), '/' (1x Speed), 'Shift+/' (Reset)", hw_x + 10 * cfg->ui_scale, hw_y + 65 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_secondary
-            );
-            DrawUIText(customFont, TextFormat("UI Scale: '-' / '+' (%.1fx)", cfg->ui_scale), hw_x + 10 * cfg->ui_scale, hw_y + 95 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_secondary);
+
+            Rectangle contentRec = {0, 0, helpWindow.width - 20 * cfg->ui_scale, 620 * cfg->ui_scale};
+            Rectangle viewRec = {0};
+
+            int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
+            int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+
+            GuiScrollPanel((Rectangle){hw_x, hw_y + 30 * cfg->ui_scale, helpWindow.width, helpWindow.height - 30 * cfg->ui_scale}, NULL, contentRec, &help_scroll, &viewRec);
+
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
+
+            BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
+            float cur_x = hw_x + 10 * cfg->ui_scale + help_scroll.x;
+            float cur_y = hw_y + 35 * cfg->ui_scale + help_scroll.y;
+
+            #define DRAW_HEADER(title) \
+                DrawUIText(customFont, title, cur_x, cur_y, 18 * cfg->ui_scale, cfg->ui_accent); \
+                cur_y += 26 * cfg->ui_scale
+
+            #define DRAW_ROW(key, desc) \
+                DrawUIText(customFont, key, cur_x + 5 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_main); \
+                DrawUIText(customFont, desc, cur_x + 120 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_secondary); \
+                cur_y += 22 * cfg->ui_scale
+
+            DRAW_HEADER("Windows & Menus");
+            DRAW_ROW("1 - 0", "Top menu tools");
+            DRAW_ROW("` (Tilde)", "Date & Time clock");
+            DRAW_ROW("Ctrl + F", "Quick search satellites");
+            DRAW_ROW("Esc", "Cancel typing, deselect, or exit");
+            DRAW_ROW("Tab", "Cycle text inputs");
+
+            cur_y += 10 * cfg->ui_scale;
+            DRAW_HEADER("Time Controls");
+            DRAW_ROW("Space", "Play / Pause");
+            DRAW_ROW(". / ,", "Faster / Slower (holdable)");
+            DRAW_ROW("/", "Real-time speed (1x)");
+            DRAW_ROW("Shift + /", "Reset time multiplier");
+
+            cur_y += 10 * cfg->ui_scale;
+            DRAW_HEADER("Camera & Visuals");
+            DRAW_ROW("RMB / Drag", "Orbit camera / Pan 2D map");
+            DRAW_ROW("Shift + RMB", "Pan camera in 3D");
+            DRAW_ROW("Home", "Reset camera position");
+            DRAW_ROW("M", "Toggle 2D/3D map");
+            DRAW_ROW("C", "Toggle Clouds");
+            DRAW_ROW("N", "Toggle Night Lights");
+            DRAW_ROW("L", "Toggle Labels/Markers");
+            DRAW_ROW("- / +", "Adjust UI scale");
+
+            cur_y += 15 * cfg->ui_scale;
+            DRAW_HEADER("About & Open Source");
+            DrawUIText(customFont, "TLEscope is open-source software.", cur_x, cur_y, 14 * cfg->ui_scale, cfg->text_secondary);
+            cur_y += 18 * cfg->ui_scale;
+            DrawUIText(customFont, "Licensed under the AGPL-3.0 license.", cur_x, cur_y, 14 * cfg->ui_scale, cfg->text_secondary);
+            cur_y += 24 * cfg->ui_scale;
+
+            Rectangle repoBtn = {cur_x, cur_y, 200 * cfg->ui_scale, 28 * cfg->ui_scale};
+            if (is_topmost && CheckCollisionPointRec(GetMousePosition(), viewRec)) {
+                if (GuiButton(repoBtn, "#198# GitHub Repository")) {
+                    OpenURL("https://github.com/aweeri/TLEscope");
+                }
+            } else {
+                GuiDisable();
+                GuiButton(repoBtn, "#198# GitHub Repository");
+                GuiEnable();
+            }
+
+            #undef DRAW_HEADER
+            #undef DRAW_ROW
+
+            EndScissorMode();
             break;
         }
 
@@ -2246,11 +2283,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         {
                             if (!show_polar_dialog)
                             {
-                                if (!opened_once_polar)
-                                {
-                                    FindSmartWindowPosition(300 * cfg->ui_scale, 430 * cfg->ui_scale, cfg, &pl_x, &pl_y);
-                                    opened_once_polar = true;
-                                }
+                                FindSmartWindowPosition(300 * cfg->ui_scale, 430 * cfg->ui_scale, cfg, &pl_x, &pl_y);
                                 show_polar_dialog = true;
                                 BringToFront(WND_POLAR);
                             }
@@ -2441,11 +2474,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 {
                     if (!show_doppler_dialog)
                     {
-                        if (!opened_once_doppler)
-                        {
-                            FindSmartWindowPosition(320 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &dop_x, &dop_y);
-                            opened_once_doppler = true;
-                        }
+                        FindSmartWindowPosition(320 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &dop_x, &dop_y);
                         show_doppler_dialog = true;
                         BringToFront(WND_DOPPLER);
                     }
@@ -2937,10 +2966,7 @@ case WND_SCOPE:
         if (GuiButton((Rectangle){startX + btnWidth + spacing, tleWarnWindow.y + 105 * cfg->ui_scale, btnWidth, 35 * cfg->ui_scale}, "#1# Manage")) {
             show_tle_warning = false;
             if (!show_tle_mgr_dialog) {
-                if (!opened_once_tle_mgr) {
-                    FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &tm_x, &tm_y);
-                    opened_once_tle_mgr = true;
-                }
+                FindSmartWindowPosition(400 * cfg->ui_scale, 500 * cfg->ui_scale, cfg, &tm_x, &tm_y);
                 show_tle_mgr_dialog = true;
                 BringToFront(WND_TLE_MGR);
             }
