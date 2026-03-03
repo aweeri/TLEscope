@@ -33,7 +33,7 @@ INSTALL_DIR ?= /opt/TLEscope
 LINK_DIR    ?= /usr/local/bin
 APP_DIR     ?= /usr/share/applications
 
-.PHONY: all linux windows win-installer clean build bin install uninstall
+.PHONY: all linux windows windows-arm64 win-installer clean build bin install uninstall
 
 all: linux
 
