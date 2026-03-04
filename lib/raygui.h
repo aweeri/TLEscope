@@ -1,3 +1,5 @@
+// NEVER update this if you like your rounded corners.
+
 /*******************************************************************************************
 *
 *   raygui v4.0 - A simple and easy-to-use immediate-mode gui library
@@ -4921,10 +4923,40 @@ static void GuiDrawRectangle(Rectangle rec, int borderWidth, Color borderColor, 
     float roundness = 0.05f;
     
     // dynamically calculate segments based on physical corner radius to minimize geometry
-    float radius = (rec.width > rec.height ? rec.height : rec.width) * roundness * 0.5f;
+    float minDim = (rec.width > rec.height ? rec.height : rec.width);
+    float radius = (minDim * 0.5f) * roundness;
+
+    // This entirely skips geometry generation, saving thousands of vertices in scrolling views.
+    if (radius < 0.5f || (borderWidth == 0 && radius < 1.0f))
+    {
+        if (color.a > 0)
+        {
+            DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, (int)rec.height, GuiFade(color, guiAlpha));
+        }
+
+        if (borderWidth > 0)
+        {
+            Color fadedBorder = GuiFade(borderColor, guiAlpha);
+            DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, borderWidth, fadedBorder);
+            DrawRectangle((int)rec.x, (int)(rec.y + rec.height - borderWidth), (int)rec.width, borderWidth, fadedBorder);
+            DrawRectangle((int)rec.x, (int)(rec.y + borderWidth), borderWidth, (int)(rec.height - 2*borderWidth), fadedBorder);
+            DrawRectangle((int)(rec.x + rec.width - borderWidth), (int)(rec.y + borderWidth), borderWidth, (int)(rec.height - 2*borderWidth), fadedBorder);
+        }
+#if defined(RAYGUI_DEBUG_RECS_BOUNDS)
+        DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, (int)rec.height, Fade(RED, 0.4f));
+#endif
+        return;
+    }
+    if (borderWidth > 0 && radius <= (float)borderWidth && minDim > 0.0f)
+    {
+        radius = (float)borderWidth + 0.25f;
+        roundness = radius / (minDim * 0.5f);
+        if (roundness > 1.0f) roundness = 1.0f;
+    }
+
     int segments = (int)(radius * 0.5f);
-    if (segments < 2) segments = 2; // Minimum segments for small UI elements
-    if (segments > 6) segments = 6; // Cap maximum segments to prevent tessellation 
+    if (segments < 2) segments = 2; // Keep minimum low to preserve batching performance
+    if (segments > 8) segments = 8; // Cap maximum segments to prevent tessellation 
 
     if (color.a > 0)
     {
