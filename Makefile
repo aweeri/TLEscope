@@ -33,7 +33,14 @@ INSTALL_DIR ?= /opt/TLEscope
 LINK_DIR    ?= /usr/local/bin
 APP_DIR     ?= /usr/share/applications
 
-.PHONY: all linux windows windows-arm64 win-installer clean build bin install uninstall
+# macOS (Apple Silicon / Intel)
+CC_MACOS = clang
+RAYLIB_CFLAGS = $(shell pkg-config --cflags raylib 2>/dev/null)
+RAYLIB_LIBS = $(shell pkg-config --libs raylib 2>/dev/null)
+LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
+DIST_MACOS = dist/TLEscope-macOS-Portable
+
+.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall
 
 all: linux
 
@@ -46,6 +53,16 @@ linux: bin/TLEscope
 	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
 	@echo "Linux build bundled in $(DIST_LINUX)/, do not run bin/*"
 	@echo "Here's your subshell command to run it! (cd $(DIST_LINUX)/ && ./TLEscope)"
+
+macos: bin/TLEscope-macos
+	@mkdir -p $(DIST_MACOS)
+	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
+	cp -r themes/ $(DIST_MACOS)/
+	cp settings.json $(DIST_MACOS)/ 2>/dev/null || true
+	cp data.tle $(DIST_MACOS)/ 2>/dev/null || true
+	cp logo*.png $(DIST_MACOS)/ 2>/dev/null || true
+	@echo "macOS build bundled in $(DIST_MACOS)/"
+	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 
 windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
@@ -80,6 +97,10 @@ win-installer: windows
 
 bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(LDFLAGS_LIN)
+
+bin/TLEscope-macos: $(SRC) | bin
+	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
+	$(CC_MACOS) $(CFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(SRC) | bin
 	$(CC_WIN) $(CFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
