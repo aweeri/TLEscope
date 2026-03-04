@@ -81,23 +81,10 @@ double get_unix_from_epoch(double epoch)
     double day = fmod(epoch, 1000.0);
 
     // pure mathematical unix conversion to avoid OS-level timegm() quantization and stutter
-    int leaps = 0;
-    if (year >= 1970)
-    {
-        for (int i = 1970; i < year; i++)
-        {
-            if ((i % 4 == 0 && i % 100 != 0) || (i % 400 == 0))
-                leaps++;
-        }
-    }
-    else
-    {
-        for (int i = year; i < 1970; i++)
-        {
-            if ((i % 4 == 0 && i % 100 != 0) || (i % 400 == 0))
-                leaps--;
-        }
-    }
+    int y = year - 1;
+    int leaps_to_year = (y / 4) - (y / 100) + (y / 400);
+    int leaps_to_1970 = (1969 / 4) - (1969 / 100) + (1969 / 400);
+    int leaps = leaps_to_year - leaps_to_1970;
 
     double unix_days = (year - 1970) * 365.0 + leaps + (day - 1.0);
     return unix_days * 86400.0;

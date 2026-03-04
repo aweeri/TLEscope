@@ -465,13 +465,18 @@ static void CalculateLunarPass(double base_epoch, double *aos, double *los, Vect
 bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius)
 {
     Vector3 v = Vector3Subtract(targetPos, camPos);
-    float L = Vector3Length(v);
-    Vector3 d = Vector3Scale(v, 1.0f / L);
-    float t = -Vector3DotProduct(camPos, d);
-    if (t > 0.0f && t < L)
+    float a = Vector3LengthSqr(v);
+    if (a < 0.000001f) return false;
+
+    float b = 2.0f * Vector3DotProduct(camPos, v);
+    float c = Vector3LengthSqr(camPos) - (earthRadius * earthRadius * 0.9801f); // 0.99^2 is 0.9801
+
+    float t = -b / (2.0f * a);
+
+    if (t > 0.0f && t < 1.0f)
     {
-        Vector3 closest = Vector3Add(camPos, Vector3Scale(d, t));
-        if (Vector3Length(closest) < earthRadius * 0.99f)
+        float minDistSqr = c - (b * b) / (4.0f * a);
+        if (minDistSqr < 0.0f)
             return true;
     }
     return false;
@@ -588,7 +593,7 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
     Rectangle active[10];
     int count = 0;
     if (show_help)
-        active[count++] = (Rectangle){hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale};
+        active[count++] = (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
     if (show_settings)
         active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale};
     if (show_time_dialog)
@@ -674,7 +679,7 @@ bool IsMouseOverUI(AppConfig *cfg)
     bool over_window = false;
     float pass_w = 357 * cfg->ui_scale, pass_h = 380 * cfg->ui_scale;
 
-    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale}))
+    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale}))
         over_window = true;
     if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale}))
         over_window = true;
@@ -900,6 +905,52 @@ static void AdvancedTextBox(Rectangle bounds, char *text, int bufSize, bool *edi
     }
 }
 
+static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *cfg, Font font)
+{
+    float scale = cfg->ui_scale;
+    float header_h = 24 * scale;
+
+    DrawRectangleRounded(bounds, 0.05f, 16, cfg->ui_primary);
+
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+    DrawRectangleRoundedLines(bounds, 0.05f, 16, 1.5f * scale, cfg->ui_secondary);
+#else
+    DrawRectangleRoundedLines(bounds, 0.05f, 16, cfg->ui_secondary);
+#endif
+
+    const char *titleText = title;
+    if (titleText[0] == '#') {
+        const char *end = strchr(titleText + 1, '#');
+        if (end) {
+            titleText = end + 1;
+            if (titleText[0] == ' ') titleText++;
+        }
+    }
+
+    DrawUIText(font, titleText, bounds.x + 12 * scale, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
+
+    DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->ui_secondary);
+
+    float btn_size = header_h - 8 * scale;
+    Rectangle closeBtn = {bounds.x + bounds.width - btn_size - 6 * scale, bounds.y + 4 * scale, btn_size, btn_size};
+    
+    bool hover = CheckCollisionPointRec(GetMousePosition(), closeBtn);
+    bool clicked = false;
+    
+    if (hover) {
+        DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(RED, 0.8f));
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
+    } else {
+        DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(cfg->ui_secondary, 0.3f));
+    }
+    
+    float pad = closeBtn.width * 0.3f;
+    DrawLineEx((Vector2){closeBtn.x + pad, closeBtn.y + pad}, (Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
+    DrawLineEx((Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + pad}, (Vector2){closeBtn.x + pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
+
+    return clicked;
+}
+
 /* main ui rendering loop */
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 {
@@ -949,7 +1000,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     /* calculate interactive window rects */
-    Rectangle helpWindow = {hw_x, hw_y, 380 * cfg->ui_scale, 480 * cfg->ui_scale};
+    Rectangle helpWindow = {hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
     Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 495 * cfg->ui_scale};
     Rectangle timeWindow = {td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     Rectangle tleWindow = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 130 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 130 * cfg->ui_scale};
@@ -1231,8 +1282,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             boxY = screenPos.y - boxH - (15.0f * cfg->ui_scale);
 
         Rectangle bgRec = {boxX, boxY, boxW, boxH};
-        DrawRectangleRec(bgRec, cfg->ui_bg);
-        DrawRectangleLinesEx(bgRec, 1.0f, cfg->ui_secondary);
+        DrawRectangleRounded(bgRec, 0.05f, 16, cfg->ui_bg);
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+        DrawRectangleRoundedLines(bgRec, 0.05f, 16, 1.5f * cfg->ui_scale, cfg->ui_secondary);
+#else
+        DrawRectangleRoundedLines(bgRec, 0.05f, 16, cfg->ui_secondary);
+#endif
         Color titleColor = (ctx->active_sat == ctx->hovered_sat) ? cfg->sat_highlighted : cfg->sat_selected;
 
         char sat_id_line[16]; /* 00900U 64063C */
@@ -1353,7 +1408,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_help)
         {
-            FindSmartWindowPosition(380 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+            FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
         }
         show_help = !show_help;
         BringToFront(WND_HELP);
@@ -1541,7 +1596,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 tm_y = GetMousePosition().y - drag_tle_mgr_off.y;
                 SnapWindow(&tm_x, &tm_y, tmMgrWindow.width, tmMgrWindow.height, cfg);
             }
-            if (GuiWindowBox(tmMgrWindow, "#1# TLE Manager"))
+            if (DrawMaterialWindow(tmMgrWindow, "#1# TLE Manager", cfg, customFont))
                 show_tle_mgr_dialog = false;
 
             char age_str[64] = "TLE Age: Unknown";
@@ -1567,7 +1622,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             total_height += 28 * cfg->ui_scale + (other_expanded ? cfg->custom_tle_source_count * 25 * cfg->ui_scale : 0);
             total_height += 28 * cfg->ui_scale + (manual_expanded ? (60 * cfg->ui_scale + cfg->manual_tle_count * 25 * cfg->ui_scale) : 0);
 
-            Rectangle contentRec = {0, 0, tmMgrWindow.width - 20 * cfg->ui_scale, total_height};
+            Rectangle contentRec = {0, 0, tmMgrWindow.width - 32 * cfg->ui_scale, total_height};
             Rectangle viewRec = {0};
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -1579,7 +1634,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
             GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
 
-            GuiScrollPanel((Rectangle){tm_x, tm_y + 65 * cfg->ui_scale, tmMgrWindow.width, tmMgrWindow.height - 65 * cfg->ui_scale}, NULL, contentRec, &tle_mgr_scroll, &viewRec);
+            GuiScrollPanel((Rectangle){tm_x + 8 * cfg->ui_scale, tm_y + 65 * cfg->ui_scale, tmMgrWindow.width - 16 * cfg->ui_scale, tmMgrWindow.height - 65 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &tle_mgr_scroll, &viewRec);
 
             GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
             GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
@@ -1587,9 +1642,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, oldPressL);
 
             BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
-            float current_y = tm_y + 65 * cfg->ui_scale + tle_mgr_scroll.y;
+            float current_y = viewRec.y + tle_mgr_scroll.y;
 
-            Rectangle retlectorHead = {tm_x + 5 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 10 * cfg->ui_scale, 24 * cfg->ui_scale};
+            Rectangle retlectorHead = {viewRec.x + tle_mgr_scroll.x, current_y, viewRec.width, 24 * cfg->ui_scale};
             if (is_topmost && CheckCollisionPointRec(GetMousePosition(), retlectorHead) && CheckCollisionPointRec(GetMousePosition(), viewRec))
             {
                 DrawRectangleRec(retlectorHead, ApplyAlpha(cfg->ui_secondary, 0.4f));
@@ -1599,7 +1654,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             else
                 DrawRectangleRec(retlectorHead, ApplyAlpha(cfg->ui_secondary, 0.15f));
             DrawUIText(
-                customFont, TextFormat("%s  RETLECTOR (Unrestricted)", retlector_expanded ? "v" : ">"), retlectorHead.x + 8 * cfg->ui_scale, retlectorHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
+                customFont, TextFormat("%s  RETLECTOR (Unrestricted)", retlector_expanded ? "v" : ">"), retlectorHead.x + 4 * cfg->ui_scale, retlectorHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
                 cfg->ui_accent
             );
             current_y += 28 * cfg->ui_scale;
@@ -1610,7 +1665,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                     if (current_y + 25 * cfg->ui_scale >= viewRec.y && current_y <= viewRec.y + viewRec.height)
                     {
                         GuiCheckBox(
-                            (Rectangle){tm_x + 15 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, RETLECTOR_SOURCES[i].name,
+                            (Rectangle){viewRec.x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, RETLECTOR_SOURCES[i].name,
                             &retlector_selected[i]
                         );
                     }
@@ -1618,7 +1673,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 }
             }
 
-            Rectangle celestrakHead = {tm_x + 5 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 10 * cfg->ui_scale, 24 * cfg->ui_scale};
+            Rectangle celestrakHead = {viewRec.x + tle_mgr_scroll.x, current_y, viewRec.width, 24 * cfg->ui_scale};
             if (is_topmost && CheckCollisionPointRec(GetMousePosition(), celestrakHead) && CheckCollisionPointRec(GetMousePosition(), viewRec))
             {
                 DrawRectangleRec(celestrakHead, ApplyAlpha(cfg->ui_secondary, 0.4f));
@@ -1628,7 +1683,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             else
                 DrawRectangleRec(celestrakHead, ApplyAlpha(cfg->ui_secondary, 0.15f));
             DrawUIText(
-                customFont, TextFormat("%s  CELESTRAK (infrequent pulls only)", celestrak_expanded ? "v" : ">"), celestrakHead.x + 8 * cfg->ui_scale, celestrakHead.y + 4 * cfg->ui_scale,
+                customFont, TextFormat("%s  CELESTRAK (infrequent pulls only)", celestrak_expanded ? "v" : ">"), celestrakHead.x + 4 * cfg->ui_scale, celestrakHead.y + 4 * cfg->ui_scale,
                 16 * cfg->ui_scale, cfg->ui_accent
             );
             current_y += 28 * cfg->ui_scale;
@@ -1639,14 +1694,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                     if (current_y + 25 * cfg->ui_scale >= viewRec.y && current_y <= viewRec.y + viewRec.height)
                     {
                         GuiCheckBox(
-                            (Rectangle){tm_x + 15 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, SOURCES[i].name, &celestrak_selected[i]
+                            (Rectangle){viewRec.x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, SOURCES[i].name, &celestrak_selected[i]
                         );
                     }
                     current_y += 25 * cfg->ui_scale;
                 }
             }
 
-            Rectangle otherHead = {tm_x + 5 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 10 * cfg->ui_scale, 24 * cfg->ui_scale};
+            Rectangle otherHead = {viewRec.x + tle_mgr_scroll.x, current_y, viewRec.width, 24 * cfg->ui_scale};
             if (is_topmost && CheckCollisionPointRec(GetMousePosition(), otherHead) && CheckCollisionPointRec(GetMousePosition(), viewRec))
             {
                 DrawRectangleRec(otherHead, ApplyAlpha(cfg->ui_secondary, 0.4f));
@@ -1656,7 +1711,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             else
                 DrawRectangleRec(otherHead, ApplyAlpha(cfg->ui_secondary, 0.15f));
             DrawUIText(
-                customFont, TextFormat("%s  CUSTOM SOURCES (settings.json)", other_expanded ? "v" : ">"), otherHead.x + 8 * cfg->ui_scale, otherHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
+                customFont, TextFormat("%s  CUSTOM SOURCES (settings.json)", other_expanded ? "v" : ">"), otherHead.x + 4 * cfg->ui_scale, otherHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
                 cfg->ui_accent
             );
             current_y += 28 * cfg->ui_scale;
@@ -1667,7 +1722,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                     if (current_y + 25 * cfg->ui_scale >= viewRec.y && current_y <= viewRec.y + viewRec.height)
                     {
                         GuiCheckBox(
-                            (Rectangle){tm_x + 15 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, cfg->custom_tle_sources[i].name,
+                            (Rectangle){viewRec.x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale}, cfg->custom_tle_sources[i].name,
                             &cfg->custom_tle_sources[i].selected
                         );
                     }
@@ -1675,7 +1730,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 }
             }
 
-            Rectangle manualHead = {tm_x + 5 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 10 * cfg->ui_scale, 24 * cfg->ui_scale};
+            Rectangle manualHead = {viewRec.x + tle_mgr_scroll.x, current_y, viewRec.width, 24 * cfg->ui_scale};
             if (is_topmost && CheckCollisionPointRec(GetMousePosition(), manualHead) && CheckCollisionPointRec(GetMousePosition(), viewRec))
             {
                 DrawRectangleRec(manualHead, ApplyAlpha(cfg->ui_secondary, 0.4f));
@@ -1685,7 +1740,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             else
                 DrawRectangleRec(manualHead, ApplyAlpha(cfg->ui_secondary, 0.15f));
             DrawUIText(
-                customFont, TextFormat("%s  MANUAL TLE ENTRY", manual_expanded ? "v" : ">"), manualHead.x + 8 * cfg->ui_scale, manualHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
+                customFont, TextFormat("%s  MANUAL TLE ENTRY", manual_expanded ? "v" : ">"), manualHead.x + 4 * cfg->ui_scale, manualHead.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale,
                 cfg->ui_accent
             );
             current_y += 28 * cfg->ui_scale;
@@ -1693,8 +1748,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             {
                 if (current_y + 25 * cfg->ui_scale >= viewRec.y && current_y <= viewRec.y + viewRec.height)
                 {
-                    AdvancedTextBox((Rectangle){tm_x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 70 * cfg->ui_scale, 24 * cfg->ui_scale}, new_tle_buf, 512, &edit_new_tle, false);
-                    if (GuiButton((Rectangle){tm_x + viewRec.width - 55 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 45 * cfg->ui_scale, 24 * cfg->ui_scale}, "Add"))
+                    AdvancedTextBox((Rectangle){viewRec.x + 4 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 60 * cfg->ui_scale, 24 * cfg->ui_scale}, new_tle_buf, 512, &edit_new_tle, false);
+                    if (GuiButton((Rectangle){viewRec.x + viewRec.width - 50 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 45 * cfg->ui_scale, 24 * cfg->ui_scale}, "Add"))
                     {
                         if (strlen(new_tle_buf) > 10 && cfg->manual_tle_count < MAX_MANUAL_TLES)
                         {
@@ -1726,9 +1781,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         char *delim = strchr(display_name, '|');
                         if (delim) *delim = '\0';
 
-                        GuiLabel((Rectangle){tm_x + 15 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 95 * cfg->ui_scale, 24 * cfg->ui_scale}, display_name);
+                        GuiLabel((Rectangle){viewRec.x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 85 * cfg->ui_scale, 24 * cfg->ui_scale}, display_name);
                         
-                        if (GuiButton((Rectangle){tm_x + viewRec.width - 75 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "C"))
+                        if (GuiButton((Rectangle){viewRec.x + viewRec.width - 70 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "C"))
                         {
                             char copy_buf[512];
                             strcpy(copy_buf, cfg->manual_tles[i]);
@@ -1738,7 +1793,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                             SetClipboardText(copy_buf);
                         }
 
-                        if (GuiButton((Rectangle){tm_x + viewRec.width - 40 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "X"))
+                        if (GuiButton((Rectangle){viewRec.x + viewRec.width - 35 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "X"))
                         {
                             for (int k = i; k < cfg->manual_tle_count - 1; k++) {
                                 strcpy(cfg->manual_tles[k], cfg->manual_tles[k+1]);
@@ -1766,7 +1821,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sm_y = GetMousePosition().y - drag_sat_mgr_off.y;
                 SnapWindow(&sm_x, &sm_y, smWindow.width, smWindow.height, cfg);
             }
-            if (GuiWindowBox(smWindow, "#43# Satellite Manager"))
+            if (DrawMaterialWindow(smWindow, "#43# Satellite Manager", cfg, customFont))
                 show_sat_mgr_dialog = false;
 
             AdvancedTextBox((Rectangle){sm_x + 10 * cfg->ui_scale, sm_y + 35 * cfg->ui_scale, smWindow.width - 90 * cfg->ui_scale, 24 * cfg->ui_scale}, sat_search_text, 64, &edit_sat_search, false);
@@ -1801,7 +1856,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
             if (filtered_count > 0)
             {
-                Rectangle contentRec = {0, 0, smWindow.width - 20 * cfg->ui_scale, filtered_count * 25 * cfg->ui_scale};
+                Rectangle contentRec = {0, 0, smWindow.width - 32 * cfg->ui_scale, filtered_count * 25 * cfg->ui_scale};
                 Rectangle viewRec = {0};
 
                 int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -1813,7 +1868,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
                 GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
 
-                GuiScrollPanel((Rectangle){sm_x, sm_y + 70 * cfg->ui_scale, smWindow.width, smWindow.height - 70 * cfg->ui_scale}, NULL, contentRec, &sat_mgr_scroll, &viewRec);
+                GuiScrollPanel((Rectangle){sm_x + 8 * cfg->ui_scale, sm_y + 70 * cfg->ui_scale, smWindow.width - 16 * cfg->ui_scale, smWindow.height - 70 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &sat_mgr_scroll, &viewRec);
 
                 GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
                 GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
@@ -1824,12 +1879,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 for (int k = 0; k < filtered_count; k++)
                 {
                     int sat_idx = filtered_indices[k];
-                    float item_y = sm_y + 70 * cfg->ui_scale + sat_mgr_scroll.y + k * 25 * cfg->ui_scale;
+                    float item_y = viewRec.y + sat_mgr_scroll.y + k * 25 * cfg->ui_scale;
                     if (item_y + 25 * cfg->ui_scale < viewRec.y || item_y > viewRec.y + viewRec.height)
                         continue;
 
-                    Rectangle cbRec = {sm_x + 10 * cfg->ui_scale + sat_mgr_scroll.x, item_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale};
-                    Rectangle textRec = {sm_x + 35 * cfg->ui_scale + sat_mgr_scroll.x, item_y, smWindow.width - 60 * cfg->ui_scale, 25 * cfg->ui_scale};
+                    Rectangle cbRec = {viewRec.x + 4 * cfg->ui_scale + sat_mgr_scroll.x, item_y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, 16 * cfg->ui_scale};
+                    Rectangle textRec = {viewRec.x + 24 * cfg->ui_scale + sat_mgr_scroll.x, item_y, viewRec.width - 28 * cfg->ui_scale, 25 * cfg->ui_scale};
 
                     bool was_active = satellites[sat_idx].is_active;
                     GuiCheckBox(cbRec, "", &satellites[sat_idx].is_active);
@@ -1861,7 +1916,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         else
                             *ctx->selected_sat = &satellites[sat_idx];
                     }
-                    DrawUIText(customFont, satellites[sat_idx].name, textRec.x + 5 * cfg->ui_scale, textRec.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, isTargeted ? cfg->ui_accent : cfg->text_main);
+                    DrawUIText(customFont, satellites[sat_idx].name, textRec.x + 4 * cfg->ui_scale, textRec.y + 4 * cfg->ui_scale, 16 * cfg->ui_scale, isTargeted ? cfg->ui_accent : cfg->text_main);
                 }
                 EndScissorMode();
             }
@@ -1893,10 +1948,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 hw_y = GetMousePosition().y - drag_help_off.y;
                 SnapWindow(&hw_x, &hw_y, helpWindow.width, helpWindow.height, cfg);
             }
-            if (GuiWindowBox(helpWindow, "#193# Help & Controls"))
+            if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont))
                 show_help = false;
 
-            Rectangle contentRec = {0, 0, helpWindow.width - 20 * cfg->ui_scale, 620 * cfg->ui_scale};
+            Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 620 * cfg->ui_scale};
             Rectangle viewRec = {0};
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -1904,14 +1959,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
             GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
 
-            GuiScrollPanel((Rectangle){hw_x, hw_y + 30 * cfg->ui_scale, helpWindow.width, helpWindow.height - 30 * cfg->ui_scale}, NULL, contentRec, &help_scroll, &viewRec);
+            GuiScrollPanel((Rectangle){hw_x + 8 * cfg->ui_scale, hw_y + 35 * cfg->ui_scale, helpWindow.width - 16 * cfg->ui_scale, helpWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &help_scroll, &viewRec);
 
             GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
             GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
 
             BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
-            float cur_x = hw_x + 10 * cfg->ui_scale + help_scroll.x;
-            float cur_y = hw_y + 35 * cfg->ui_scale + help_scroll.y;
+            float cur_x = viewRec.x + 4 * cfg->ui_scale + help_scroll.x;
+            float cur_y = viewRec.y + 4 * cfg->ui_scale + help_scroll.y;
 
             #define DRAW_HEADER(title) \
                 DrawUIText(customFont, title, cur_x, cur_y, 18 * cfg->ui_scale, cfg->ui_accent); \
@@ -1926,7 +1981,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             DRAW_ROW("1 - 0", "Top menu tools");
             DRAW_ROW("` (Tilde)", "Date & Time clock");
             DRAW_ROW("Ctrl + F", "Quick search satellites");
-            DRAW_ROW("Esc", "Cancel typing, deselect, or exit");
+            DRAW_ROW("Esc", "Cancel typing or exit");
             DRAW_ROW("Tab", "Cycle text inputs");
 
             cur_y += 10 * cfg->ui_scale;
@@ -2010,7 +2065,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sw_y = GetMousePosition().y - drag_settings_off.y;
                 SnapWindow(&sw_x, &sw_y, settingsWindow.width, settingsWindow.height, cfg);
             }
-            if (GuiWindowBox(settingsWindow, "#142# Settings"))
+            if (DrawMaterialWindow(settingsWindow, "#142# Settings", cfg, customFont))
                 show_settings = false;
 
             float sy = sw_y + 40 * cfg->ui_scale;
@@ -2132,7 +2187,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 td_y = GetMousePosition().y - drag_time_off.y;
                 SnapWindow(&td_x, &td_y, timeWindow.width, timeWindow.height, cfg);
             }
-            if (GuiWindowBox(timeWindow, "#139# Set Date & Time (UTC)"))
+            if (DrawMaterialWindow(timeWindow, "#139# Set Date & Time (UTC)", cfg, customFont))
                 show_time_dialog = false;
 
             float cur_y = td_y + 35 * cfg->ui_scale;
@@ -2198,7 +2253,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pd_y = GetMousePosition().y - drag_passes_off.y;
                 SnapWindow(&pd_x, &pd_y, passesWindow.width, passesWindow.height, cfg);
             }
-            if (GuiWindowBox(passesWindow, "#208# Upcoming Passes"))
+            if (DrawMaterialWindow(passesWindow, "#208# Upcoming Passes", cfg, customFont))
                 show_passes_dialog = false;
 
             if (GuiButton(
@@ -2229,7 +2284,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 if (passes[i].max_el >= min_el_threshold)
                     valid_passes[valid_count++] = i;
 
-            Rectangle contentRec = {0, 0, passesWindow.width - 20 * cfg->ui_scale, (valid_count == 0 ? 1 : valid_count) * 55 * cfg->ui_scale};
+            Rectangle contentRec = {0, 0, passesWindow.width - 32 * cfg->ui_scale, (valid_count == 0 ? 1 : valid_count) * 55 * cfg->ui_scale};
             Rectangle viewRec = {0};
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -2241,7 +2296,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
             GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
 
-            GuiScrollPanel((Rectangle){passesWindow.x, passesWindow.y + 60 * cfg->ui_scale, passesWindow.width, passesWindow.height - 60 * cfg->ui_scale}, NULL, contentRec, &passes_scroll, &viewRec);
+            GuiScrollPanel((Rectangle){passesWindow.x + 8 * cfg->ui_scale, passesWindow.y + 60 * cfg->ui_scale, passesWindow.width - 16 * cfg->ui_scale, passesWindow.height - 60 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &passes_scroll, &viewRec);
 
             GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
             GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
@@ -2252,14 +2307,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             if (!multi_pass_mode && !*ctx->selected_sat)
             {
                 DrawUIText(
-                    customFont, "No satellite targeted.", passesWindow.x + 20 * cfg->ui_scale + passes_scroll.x, passesWindow.y + 70 * cfg->ui_scale + passes_scroll.y, 16 * cfg->ui_scale,
+                    customFont, "No satellite targeted.", viewRec.x + 10 * cfg->ui_scale + passes_scroll.x, viewRec.y + 10 * cfg->ui_scale + passes_scroll.y, 16 * cfg->ui_scale,
                     cfg->text_main
                 );
             }
             else if (valid_count == 0)
             {
                 DrawUIText(
-                    customFont, "No passes meet your criteria.", passesWindow.x + 20 * cfg->ui_scale + passes_scroll.x, passesWindow.y + 70 * cfg->ui_scale + passes_scroll.y, 16 * cfg->ui_scale,
+                    customFont, "No passes meet your criteria.", viewRec.x + 10 * cfg->ui_scale + passes_scroll.x, viewRec.y + 10 * cfg->ui_scale + passes_scroll.y, 16 * cfg->ui_scale,
                     cfg->text_main
                 );
             }
@@ -2268,11 +2323,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 for (int k = 0; k < valid_count; k++)
                 {
                     int i = valid_passes[k];
-                    float item_y = passesWindow.y + 65 * cfg->ui_scale + passes_scroll.y + k * 55 * cfg->ui_scale;
+                    float item_y = viewRec.y + 4 * cfg->ui_scale + passes_scroll.y + k * 55 * cfg->ui_scale;
                     if (item_y + 55 * cfg->ui_scale < viewRec.y || item_y > viewRec.y + viewRec.height)
                         continue;
 
-                    Rectangle rowBtn = {passesWindow.x + 10 * cfg->ui_scale + passes_scroll.x, item_y, contentRec.width - 10 * cfg->ui_scale, 50 * cfg->ui_scale};
+                    Rectangle rowBtn = {viewRec.x + 4 * cfg->ui_scale + passes_scroll.x, item_y, viewRec.width - 8 * cfg->ui_scale, 50 * cfg->ui_scale};
                     bool isHovered = is_topmost && CheckCollisionPointRec(GetMousePosition(), rowBtn) && CheckCollisionPointRec(GetMousePosition(), viewRec);
                     bool isSelected = (show_polar_dialog && passes[i].sat == locked_pass_sat && fabs(passes[i].aos_epoch - locked_pass_aos) < (1.0 / 86400.0));
 
@@ -2330,7 +2385,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pl_y = GetMousePosition().y - drag_polar_off.y;
                 SnapWindow(&pl_x, &pl_y, polarWindow.width, polarWindow.height, cfg);
             }
-            if (GuiWindowBox(polarWindow, "#64# Polar Tracking Plot"))
+            if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont))
                 show_polar_dialog = false;
 
             if (GuiButton((Rectangle){pl_x + 10 * cfg->ui_scale, pl_y + 30 * cfg->ui_scale, polarWindow.width - 20 * cfg->ui_scale, 24 * cfg->ui_scale}, polar_lunar_mode ? "Mode: Lunar Tracking" : "Mode: Satellite Pass")) {
@@ -2520,7 +2575,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 dop_y = GetMousePosition().y - drag_doppler_off.y;
                 SnapWindow(&dop_x, &dop_y, dopplerWindow.width, dopplerWindow.height, cfg);
             }
-            if (GuiWindowBox(dopplerWindow, "#125# Doppler Shift Analysis"))
+            if (DrawMaterialWindow(dopplerWindow, "#125# Doppler Shift Analysis", cfg, customFont))
                 show_doppler_dialog = false;
 
             if (selected_pass_idx >= 0 && selected_pass_idx < num_passes)
@@ -2636,8 +2691,13 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         if (tt_x + textSize.x + 10 * cfg->ui_scale > dop_x + dopplerWindow.width)
                             tt_x = mouseX - textSize.x - 10 * cfg->ui_scale;
 
-                        DrawRectangle(tt_x, mouseY, textSize.x + 10 * cfg->ui_scale, textSize.y + 10 * cfg->ui_scale, ApplyAlpha(cfg->ui_bg, 0.9f));
-                        DrawRectangleLines(tt_x, mouseY, textSize.x + 10 * cfg->ui_scale, textSize.y + 10 * cfg->ui_scale, cfg->ui_secondary);
+                        Rectangle ttRec = {tt_x, mouseY, textSize.x + 10 * cfg->ui_scale, textSize.y + 10 * cfg->ui_scale};
+                        DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.9f));
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+                        DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
+#else
+                        DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
+#endif
                         DrawUIText(customFont, tooltip, tt_x + 5 * cfg->ui_scale, mouseY + 5 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
                     }
                 }
@@ -2666,7 +2726,7 @@ case WND_SCOPE:
                 sc_y = GetMousePosition().y - drag_scope_off.y;
                 SnapWindow(&sc_x, &sc_y, scopeWindow.width, scopeWindow.height, cfg);
             }
-            if (GuiWindowBox(scopeWindow, "#103# Satellite Scope"))
+            if (DrawMaterialWindow(scopeWindow, "#103# Satellite Scope", cfg, customFont))
                 show_scope_dialog = false;
 
             /* auto-aim scope if locked to a satellite */
@@ -2717,6 +2777,7 @@ case WND_SCOPE:
             /* setup eci vectors for SPEEDY culling */
             float rad_beam_half = (scope_beam / 2.0f) * DEG2RAD;
             float cos_beam_half = cosf(rad_beam_half);
+            float cos_beam_half_sqr = cos_beam_half * cos_beam_half;
             float c_az_rad = scope_az * DEG2RAD;
             float c_el_rad = scope_el * DEG2RAD;
 
@@ -2861,8 +2922,13 @@ case WND_SCOPE:
                 float t_y = hover_pos.y;
                 if (t_x + tt_size.x + 8 * cfg->ui_scale > sc_x + scopeWindow.width) t_x = hover_pos.x - tt_size.x - 10 * cfg->ui_scale;
                 
-                DrawRectangle(t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 8 * cfg->ui_scale, ApplyAlpha(cfg->ui_bg, 0.9f));
-                DrawRectangleLines(t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 8 * cfg->ui_scale, cfg->ui_secondary);
+                Rectangle ttRec = {t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 8 * cfg->ui_scale};
+                DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.9f));
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+                DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
+#else
+                DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
+#endif
                 DrawUIText(customFont, tt, t_x + 4 * cfg->ui_scale, t_y + 4 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
             }
 
@@ -2941,7 +3007,7 @@ case WND_SCOPE:
     if (show_tle_warning)
     {
         Rectangle tleWarnWindow = {(GetScreenWidth() - 480 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 160 * cfg->ui_scale) / 2.0f, 480 * cfg->ui_scale, 160 * cfg->ui_scale};
-        if (GuiWindowBox(tleWarnWindow, "#193# TLEs Outdated"))
+        if (DrawMaterialWindow(tleWarnWindow, "#193# TLEs Outdated", cfg, customFont))
             show_tle_warning = false;
         
         long days_old = data_tle_epoch > 0 ? (time(NULL) - data_tle_epoch) / 86400 : 999;
@@ -2980,7 +3046,7 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 180});
         Rectangle frRec = {(GetScreenWidth() - 520 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 240 * cfg->ui_scale) / 2.0f, 520 * cfg->ui_scale, 240 * cfg->ui_scale};
-        GuiWindowBox(frRec, "#198# Welcome to TLEscope!");
+        DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont);
         
         const char* msg1 = "Please select a graphics profile for your first run:";
         Vector2 msg1Size = MeasureTextEx(customFont, msg1, 16 * cfg->ui_scale, 1.0f);
@@ -3083,8 +3149,13 @@ case WND_SCOPE:
                     tt_x = GetScreenWidth() - tw - 5 * cfg->ui_scale;
                 if (tt_y + 24 * cfg->ui_scale > GetScreenHeight())
                     tt_y = m.y - 25 * cfg->ui_scale;
-                DrawRectangle(tt_x, tt_y, tw, 24 * cfg->ui_scale, ApplyAlpha(cfg->ui_bg, 0.6f));
-                DrawRectangleLines(tt_x, tt_y, tw, 24 * cfg->ui_scale, cfg->ui_primary);
+                Rectangle ttRec = {tt_x, tt_y, tw, 24 * cfg->ui_scale};
+                DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.8f));
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+                DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.0f * cfg->ui_scale, cfg->ui_secondary);
+#else
+                DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
+#endif
                 DrawUIText(customFont, tt_texts[i], tt_x + 6 * cfg->ui_scale, tt_y + 4 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
             }
         }
@@ -3153,7 +3224,7 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 150});
         Rectangle exitRec = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 140 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 140 * cfg->ui_scale};
-        if (GuiWindowBox(exitRec, "#159# Exit Application"))
+        if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont))
             show_exit_dialog = false;
         DrawUIText(customFont, "Are you sure you want to exit?", exitRec.x + 25 * cfg->ui_scale, exitRec.y + 45 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
         if (GuiButton((Rectangle){exitRec.x + 20 * cfg->ui_scale, exitRec.y + 85 * cfg->ui_scale, 120 * cfg->ui_scale, 30 * cfg->ui_scale}, "Yes"))

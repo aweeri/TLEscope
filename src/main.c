@@ -302,6 +302,12 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
         double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
         double time_step = (period_days * orbits_count) / segments;
 
+        Vector3 base_sun_dir = {0};
+        if (cfg.highlight_sunlit)
+        {
+            base_sun_dir = Vector3Normalize(calculate_sun_position(current_epoch));
+        }
+
         for (int i = 0; i <= segments; i++)
         {
             double t = (i == 0) ? current_epoch : (current_epoch - fmod(current_epoch, time_step) + (i * time_step));
@@ -314,8 +320,7 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
                 Color drawCol = orbitColor;
                 if (cfg.highlight_sunlit)
                 {
-                    Vector3 sun_dir = Vector3Normalize(calculate_sun_position(t));
-                    if (!is_sat_eclipsed(raw_pos, sun_dir))
+                    if (!is_sat_eclipsed(raw_pos, base_sun_dir))
                         drawCol = ApplyAlpha(cfg.sat_highlighted, alpha);
                     else
                         drawCol = ApplyAlpha(cfg.orbit_normal, alpha);
@@ -962,14 +967,25 @@ int main(void)
                     if (Vector3DistanceSqr(Camera3DParams.target, draw_pos) > (camDistance * camDistance * 16.0f))
                         continue;
 
-                    float distToCam = Vector3Distance(Camera3DParams.position, draw_pos);
-                    float hit_radius_3d = 0.015f * distToCam * cfg.ui_scale;
+                    Vector3 to_sat = Vector3Subtract(draw_pos, Camera3DParams.position);
+                    float distToCamSqr = Vector3LengthSqr(to_sat);
 
-                    RayCollision col = GetRayCollisionSphere(mouseRay, draw_pos, hit_radius_3d);
-                    if (col.hit && col.distance < closest_dist)
+                    if (distToCamSqr > 0.00001f)
                     {
-                        closest_dist = col.distance;
-                        hovered_sat = &satellites[i];
+                        float proj = Vector3DotProduct(to_sat, mouseRay.direction);
+                        if (proj > 0.0f) // Only check if in front of camera
+                        {
+                            Vector3 closest_on_ray = Vector3Scale(mouseRay.direction, proj);
+                            float distToRaySqr = Vector3DistanceSqr(to_sat, closest_on_ray);
+                            
+                            float hit_radius_sqr = 0.000225f * distToCamSqr * (cfg.ui_scale * cfg.ui_scale);
+
+                            if (distToRaySqr < hit_radius_sqr && proj < closest_dist)
+                            {
+                                closest_dist = proj;
+                                hovered_sat = &satellites[i];
+                            }
+                        }
                     }
                 }
             }
@@ -1251,6 +1267,12 @@ int main(void)
                         double period_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
                         double time_step = (period_days * cfg.orbits_to_draw) / segments;
 
+                        Vector3 base_sun_dir = {0};
+                        if (cfg.highlight_sunlit)
+                        {
+                            base_sun_dir = Vector3Normalize(calculate_sun_position(current_epoch));
+                        }
+
                         for (int j = 0; j <= segments; j++)
                         {
                             double t = (j == 0) ? current_epoch : (current_epoch - fmod(current_epoch, time_step) + (j * time_step));
@@ -1260,8 +1282,7 @@ int main(void)
 
                             if (cfg.highlight_sunlit)
                             {
-                                Vector3 sun_dir = Vector3Normalize(calculate_sun_position(t));
-                                is_sunlit_arr[j] = !is_sat_eclipsed(raw_pos, sun_dir);
+                                is_sunlit_arr[j] = !is_sat_eclipsed(raw_pos, base_sun_dir);
                             }
                         }
 

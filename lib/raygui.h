@@ -1806,17 +1806,21 @@ int GuiScrollPanel(Rectangle bounds, const char *text, Rectangle content, Vector
 
     int horizontalScrollBarWidth = hasHorizontalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
     int verticalScrollBarWidth =  hasVerticalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
+
+    float padCorner = 6.0f; // padding to prevent scrollbars and text from clipping over rounded corners
+    float padEdge = 2.0f;
+
     Rectangle horizontalScrollBar = { 
-        (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + verticalScrollBarWidth : (float)bounds.x) + GuiGetStyle(DEFAULT, BORDER_WIDTH), 
-        (float)bounds.y + bounds.height - horizontalScrollBarWidth - GuiGetStyle(DEFAULT, BORDER_WIDTH), 
-        (float)bounds.width - verticalScrollBarWidth - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH), 
+        (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + verticalScrollBarWidth : (float)bounds.x) + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, 
+        (float)bounds.y + bounds.height - horizontalScrollBarWidth - GuiGetStyle(DEFAULT, BORDER_WIDTH) - padEdge, 
+        (float)bounds.width - verticalScrollBarWidth - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - (padCorner * 2), 
         (float)horizontalScrollBarWidth 
     };
     Rectangle verticalScrollBar = { 
-        (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH) : (float)bounds.x + bounds.width - verticalScrollBarWidth - GuiGetStyle(DEFAULT, BORDER_WIDTH)), 
-        (float)bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH), 
+        (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padEdge : (float)bounds.x + bounds.width - verticalScrollBarWidth - GuiGetStyle(DEFAULT, BORDER_WIDTH) - padEdge), 
+        (float)bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, 
         (float)verticalScrollBarWidth, 
-        (float)bounds.height - horizontalScrollBarWidth - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) 
+        (float)bounds.height - horizontalScrollBarWidth - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - (padCorner * 2) 
     };
 
     // Make sure scroll bars have a minimum width/height
@@ -1834,8 +1838,8 @@ int GuiScrollPanel(Rectangle bounds, const char *text, Rectangle content, Vector
 
     // Calculate view area (area without the scrollbars)
     *view = (GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)?
-                RAYGUI_CLITERAL(Rectangle){ bounds.x + verticalScrollBarWidth + GuiGetStyle(DEFAULT, BORDER_WIDTH), bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH), bounds.width - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - verticalScrollBarWidth, bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - horizontalScrollBarWidth } :
-                RAYGUI_CLITERAL(Rectangle){ bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH), bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH), bounds.width - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - verticalScrollBarWidth, bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - horizontalScrollBarWidth };
+                RAYGUI_CLITERAL(Rectangle){ bounds.x + verticalScrollBarWidth + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, bounds.width - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - verticalScrollBarWidth - (padCorner * 2), bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - horizontalScrollBarWidth - (padCorner * 2) } :
+                RAYGUI_CLITERAL(Rectangle){ bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, bounds.y + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, bounds.width - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - verticalScrollBarWidth - (padCorner * 2), bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - horizontalScrollBarWidth - (padCorner * 2) };
 
     // Clip view area to the actual content size
     if (view->width > content.width) view->width = content.width;
@@ -3317,10 +3321,12 @@ int GuiListViewEx(Rectangle bounds, const char **text, int count, int *scrollInd
 
     if (useScrollBar)
     {
+        float padCorner = 6.0f;
+        float padEdge = 2.0f;
         Rectangle scrollBarBounds = {
-            bounds.x + bounds.width - GuiGetStyle(LISTVIEW, BORDER_WIDTH) - GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH),
-            bounds.y + GuiGetStyle(LISTVIEW, BORDER_WIDTH), (float)GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH),
-            bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH)
+            bounds.x + bounds.width - GuiGetStyle(LISTVIEW, BORDER_WIDTH) - GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) - padEdge,
+            bounds.y + GuiGetStyle(LISTVIEW, BORDER_WIDTH) + padCorner, (float)GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH),
+            bounds.height - 2*GuiGetStyle(DEFAULT, BORDER_WIDTH) - (padCorner * 2)
         };
 
         // Calculate percentage of visible items and apply same percentage to scrollbar
@@ -4912,23 +4918,32 @@ static void GuiDrawText(const char *text, Rectangle textBounds, int alignment, C
 // Gui draw rectangle using default raygui plain style with borders
 static void GuiDrawRectangle(Rectangle rec, int borderWidth, Color borderColor, Color color)
 {
+    float roundness = 0.05f;
+    
+    // dynamically calculate segments based on physical corner radius to minimize geometry
+    float radius = (rec.width > rec.height ? rec.height : rec.width) * roundness * 0.5f;
+    int segments = (int)(radius * 0.5f);
+    if (segments < 2) segments = 2; // Minimum segments for small UI elements
+    if (segments > 6) segments = 6; // Cap maximum segments to prevent tessellation 
+
     if (color.a > 0)
     {
         // Draw rectangle filled with color
-        DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, (int)rec.height, GuiFade(color, guiAlpha));
+        DrawRectangleRounded(rec, roundness, segments, GuiFade(color, guiAlpha));
     }
 
     if (borderWidth > 0)
     {
         // Draw rectangle border lines with color
-        DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, borderWidth, GuiFade(borderColor, guiAlpha));
-        DrawRectangle((int)rec.x, (int)rec.y + borderWidth, borderWidth, (int)rec.height - 2*borderWidth, GuiFade(borderColor, guiAlpha));
-        DrawRectangle((int)rec.x + (int)rec.width - borderWidth, (int)rec.y + borderWidth, borderWidth, (int)rec.height - 2*borderWidth, GuiFade(borderColor, guiAlpha));
-        DrawRectangle((int)rec.x, (int)rec.y + (int)rec.height - borderWidth, (int)rec.width, borderWidth, GuiFade(borderColor, guiAlpha));
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+        DrawRectangleRoundedLines(rec, roundness, segments, (float)borderWidth, GuiFade(borderColor, guiAlpha));
+#else
+        DrawRectangleRoundedLines(rec, roundness, segments, GuiFade(borderColor, guiAlpha));
+#endif
     }
 
 #if defined(RAYGUI_DEBUG_RECS_BOUNDS)
-    DrawRectangle((int)rec.x, (int)rec.y, (int)rec.width, (int)rec.height, Fade(RED, 0.4f));
+    DrawRectangleRounded(rec, roundness, segments, Fade(RED, 0.4f));
 #endif
 }
 
