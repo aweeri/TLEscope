@@ -84,7 +84,7 @@ typedef struct
     bool show_slant_range;
     bool show_scattering;
     bool hint_vsync;
-    bool first_run_done;
+    bool show_first_run_dialog;
 
     CustomTLESource custom_tle_sources[MAX_CUSTOM_TLE_SOURCES];
     int custom_tle_source_count;
