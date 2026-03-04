@@ -33,7 +33,7 @@ TLEscope comes equipped with tools designed for RF engineers, satellite operator
 
 - **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
-- **​Native OS Support**: Built for Linux and Windows.
+- **​Native OS Support**: Built for Linux, macOS, and Windows.
 
 ### ​**Design Philosophy**
 ​Most existing orbital tracking software suffers from dated, unintuitive interfaces. TLEscope bridges this gap by prioritizing both visual clarity and ease of use.
@@ -59,7 +59,7 @@ TLEscope provides also packages on following systems/distributions:
     * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-git): Clones the latest commit of this repository and installs on the system.
 
 ### **Building From Source**
-TLEscope uses gcc for Linux builds and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
+TLEscope uses gcc for Linux builds, clang with Homebrew's raylib for macOS, and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
 
 Install the required build tools and libraries, then clone the repository and execute the `make linux` command in the root directory of the project, after which run `./bin/TLEscope` (running from within `bin/` will NOT work). If you want to build a Windows executable, you will also need to install the `mingw-w64` package via your package manager of choice. Steps for typical system configurations can be found below:
 
@@ -87,6 +87,15 @@ git clone https://github.com/aweeri/TLEscope
 cd TLEscope
 make linux      # Results in dist/TLEscope-Linux/
 ```
+**macOS (Apple Silicon / Intel)**
+```
+brew install raylib
+git clone https://github.com/aweeri/TLEscope
+cd TLEscope
+make macos      # Results in dist/TLEscope-macOS-Portable/
+cd dist/TLEscope-macOS-Portable && ./TLEscope
+```
+
 **Windows systems**
 Install [MSYS2](https://www.msys2.org/), then run the following in a UCRT64 or MINGW64 terminal:
 ```
