@@ -1496,6 +1496,14 @@ int main(void)
 
             DrawModel(moonModel, draw_moon_pos, 1.0f, WHITE);
 
+            /* draw the sun on the skybox */
+            float sun_dist = 800.0f;
+            float sun_radius = sun_dist * tanf((0.15f / 2.0f) * DEG2RAD);
+            Vector3 sun_pos_3d = Vector3Add(Camera3DParams.position, Vector3Scale(sunDirWorld, sun_dist));
+            
+            DrawSphere(sun_pos_3d, sun_radius * 2.5f, ApplyAlpha((Color){ 255, 230, 100, 255 }, 0.15f));
+            DrawSphere(sun_pos_3d, sun_radius, (Color){ 255, 250, 180, 255 });
+
             /* 3d footprint triangles */
             if (active_sat && has_footprint && active_sat->is_active)
             {
