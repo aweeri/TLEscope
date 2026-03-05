@@ -159,7 +159,7 @@ const char *fsMoon3D = "#version 330\n"
                        "    float ambient = 0.01;\n"
                        "    float light = max(ambient, diffuse);\n"
                        "    finalColor = vec4(shadowColor * light, texel.a) * fragColor;\n"
-                       "}   \n";
+                       "}\n";
 
 /* atmospheric scattering glow shader */
 const char *fsAtmosphere3D = "#version 330\n"
@@ -225,8 +225,6 @@ static AppConfig cfg = {
     .ui_secondary = {64, 64, 64, 255},
     .ui_accent = {0, 255, 0, 255}
 };
-
-
 
 static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture;
@@ -617,6 +615,7 @@ int main(void)
     bool exit_app = false;
     bool is_ecliptic_frame = false;
     float current_ecliptic_angle = 0.0f;
+    bool is_pov_mode = false;
 
     bool show_scope = false;
     float scope_az = 180.0f;
@@ -724,6 +723,7 @@ int main(void)
                 target_camAngleY = 0.5f;
                 target_camera2d_zoom = 1.0f;
                 target_camera2d_target = (Vector2){0.0f, 0.0f};
+                Camera3DParams.fovy = 45.0f;
             }
 
             if (IsKeyPressed(KEY_SLASH))
@@ -943,9 +943,9 @@ int main(void)
                     float wheel = GetMouseWheelMove();
                     if (wheel != 0)
                     {
-                        if (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
+                        if (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT) || (is_pov_mode && selected_sat && selected_sat->is_active))
                         {
-                            Camera3DParams.fovy -= wheel * 1.0f;
+                            Camera3DParams.fovy -= wheel * 5.0f;
                             if (Camera3DParams.fovy < 10.0f) Camera3DParams.fovy = 10.0f;
                             if (Camera3DParams.fovy > 120.0f) Camera3DParams.fovy = 120.0f;
                         }
@@ -1110,6 +1110,41 @@ int main(void)
 
         Satellite *active_sat = hovered_sat ? hovered_sat : selected_sat;
 
+        if (!is_2d_view && is_pov_mode && selected_sat && selected_sat->is_active)
+        {
+            Vector3 sat_pos_3d = Vector3Scale(selected_sat->current_pos, 1.0f / DRAW_SCALE);
+            Camera3DParams.position = sat_pos_3d;
+            
+            float sat_dist = Vector3Length(sat_pos_3d);
+            float base_yaw = atan2f(sat_pos_3d.x, sat_pos_3d.z);
+            float base_pitch = asinf(fmaxf(-1.0f, fminf(1.0f, sat_pos_3d.y / sat_dist)));
+            
+            float final_yaw = camAngleX + base_yaw;
+            float final_pitch = camAngleY + base_pitch;
+
+            Vector3 look_dir = {
+                -cosf(final_pitch) * sinf(final_yaw),
+                -sinf(final_pitch),
+                -cosf(final_pitch) * cosf(final_yaw)
+            };
+            
+            Vector3 upVec = {
+                -sinf(final_pitch) * sinf(final_yaw),
+                cosf(final_pitch),
+                -sinf(final_pitch) * cosf(final_yaw)
+            };
+
+            if (current_ecliptic_angle > 0.0001f)
+            {
+                Matrix rot = MatrixRotateX(current_ecliptic_angle);
+                look_dir = Vector3Transform(look_dir, rot);
+                upVec = Vector3Transform(upVec, rot);
+            }
+
+            Camera3DParams.target = Vector3Add(sat_pos_3d, look_dir);
+            Camera3DParams.up = upVec;
+        }
+
 /* calculate radio footprint (visibility cone) */
 #define FP_RINGS 12
 #define FP_PTS 120
@@ -1198,7 +1233,7 @@ int main(void)
                 BeginScissorMode(sc_x, sc_y, sc_w, sc_h);
 
                 /* draw 2d footprint */
-                if (active_sat && has_footprint && active_sat->is_active)
+                if (active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
                 {
                     for (int i = 0; i < FP_RINGS; i++)
                     {
@@ -1266,7 +1301,7 @@ int main(void)
                     Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
-                    if (is_hl)
+                    if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
                     {
                         int segments = fmin(4000, fmax(50, (int)(400 * cfg.orbits_to_draw)));
                         Vector2 track_pts[4001];
@@ -1330,12 +1365,15 @@ int main(void)
 
                     float sat_mx, sat_my;
                     get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &sat_mx, &sat_my);
-                    for (int offset_i = -1; offset_i <= 1; offset_i++)
+                    if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
-                        DrawTexturePro(
-                            satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
-                            (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
-                        );
+                        for (int offset_i = -1; offset_i <= 1; offset_i++)
+                        {
+                            DrawTexturePro(
+                                satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
+                                (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
+                            );
+                        }
                     }
                 }
 
@@ -1513,7 +1551,7 @@ int main(void)
             DrawSphere(sun_pos_3d, sun_radius, (Color){ 255, 250, 180, 255 });
 
             /* 3d footprint triangles */
-            if (active_sat && has_footprint && active_sat->is_active)
+            if (active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
             {
                 for (int i = 0; i < FP_RINGS; i++)
                 {
@@ -1543,9 +1581,12 @@ int main(void)
                     continue;
 
                 bool is_hl = (active_sat == &satellites[i]);
-                draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha, global_orbit_step);
+                if (!(is_pov_mode && &satellites[i] == selected_sat))
+                {
+                    draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha, global_orbit_step);
+                }
 
-                if (is_hl)
+                if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
                 {
                     Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                     DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(cfg.orbit_highlighted, sat_alpha));
@@ -1642,7 +1683,8 @@ int main(void)
                 }
             }
 
-            if (active_sat && active_sat->is_active)
+            bool hide_apsis = (is_pov_mode && selected_sat != NULL && active_sat == selected_sat);
+            if (active_sat && active_sat->is_active && !hide_apsis)
             {
                 bool is_unselected = (selected_sat != NULL && active_sat != selected_sat);
                 float sat_alpha = is_unselected ? unselected_fade : 1.0f;
@@ -1685,10 +1727,13 @@ int main(void)
 
                 if (Vector3DotProduct(toTarget, camForward) > 0.0f && !IsOccludedByEarth(Camera3DParams.position, draw_pos, draw_earth_radius))
                 {
-                    Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
-                    sCol = ApplyAlpha(sCol, sat_alpha);
-                    Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
-                    DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, sCol);
+                    if (!(is_pov_mode && &satellites[i] == selected_sat))
+                    {
+                        Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
+                        sCol = ApplyAlpha(sCol, sat_alpha);
+                        Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
+                        DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, sCol);
+                    }
                 }
             }
 
@@ -1766,6 +1811,7 @@ int main(void)
             .hide_unselected = &hide_unselected,
             .picking_home = &picking_home,
             .is_ecliptic_frame = &is_ecliptic_frame,
+            .is_pov_mode = &is_pov_mode,
             .show_scope = &show_scope,
             .scope_az = &scope_az,
             .scope_el = &scope_el,

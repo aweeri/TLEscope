@@ -26,6 +26,7 @@ typedef struct
     bool *picking_home;
     bool *exit_app;
     bool *is_ecliptic_frame;
+    bool *is_pov_mode;
     bool *show_scope;
     float *scope_az;
     float *scope_el;

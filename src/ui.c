@@ -213,7 +213,7 @@ static Vector2 lunar_path_pts[100];
 static int lunar_num_pts = 0;
 static double last_lunar_calc_time = 0.0;
 
-static float tt_hover[16] = {0};
+static float tt_hover[18] = {0};
 static bool ui_initialized = false;
 static char text_fps[8] = "";
 static bool edit_fps = false;
@@ -703,28 +703,29 @@ bool IsMouseOverUI(AppConfig *cfg)
         return true;
 
     float center_x_bottom = (GetScreenWidth() - (5 * 35 - 5) * cfg->ui_scale) / 2.0f;
-    float center_x_top = (GetScreenWidth() - (12 * 35 - 5) * cfg->ui_scale) / 2.0f;
+    float center_x_top = (GetScreenWidth() - (13 * 35 - 5) * cfg->ui_scale) / 2.0f;
 
-    Rectangle btnRecs[] = {
-        {center_x_top, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 35 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 70 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 105 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 140 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 175 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 210 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 245 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 280 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 315 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 350 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_top + 385 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_bottom, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_bottom + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_bottom + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_bottom + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-        {center_x_bottom + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale}
-    };
-    for (int i = 0; i < 17; i++)
+        Rectangle btnRecs[] = {
+            {center_x_top, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 35 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 70 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 105 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 140 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 175 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 210 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 245 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 280 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 315 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 350 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 385 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_top + 420 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale}
+        };
+        for (int i = 0; i < 18; i++)
     {
         if (CheckCollisionPointRec(GetMousePosition(), btnRecs[i]))
             return true;
@@ -1222,7 +1223,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     GuiSetStyle(TEXTBOX, BASE_COLOR_PRESSED, ColorToInt(cfg->ui_primary));
 
     /* render context-sensitive satellite information box (drawn entirely under windows) */
-    if (ctx->active_sat && ctx->active_sat->is_active)
+    bool hide_info_box = (*ctx->is_pov_mode && *ctx->selected_sat != NULL && ctx->active_sat == *ctx->selected_sat);
+    if (ctx->active_sat && ctx->active_sat->is_active && !hide_info_box)
     {
         Vector2 screenPos;
         if (*ctx->is_2d_view)
@@ -1346,7 +1348,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     float buttons_w = (5 * 35 - 5) * cfg->ui_scale;
     float center_x_bottom = (GetScreenWidth() - buttons_w) / 2.0f;
     float btn_start_x = center_x_bottom;
-    float center_x_top = (GetScreenWidth() - (12 * 35 - 5) * cfg->ui_scale) / 2.0f;
+    float center_x_top = (GetScreenWidth() - (13 * 35 - 5) * cfg->ui_scale) / 2.0f;
 
     /* top/bottom bar buttons */
     Rectangle btnSet = {center_x_top, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
@@ -1361,6 +1363,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle btnSunlit = {center_x_top + 315 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnSlantRange = {center_x_top + 350 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnFrame = {center_x_top + 385 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
+    Rectangle btnPOV = {center_x_top + 420 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnRewind = {btn_start_x, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnPlayPause = {btn_start_x + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnFastForward = {btn_start_x + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
@@ -1482,6 +1485,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     HIGHLIGHT_START(*ctx->is_ecliptic_frame)
     if (GuiButton(btnFrame, *ctx->is_ecliptic_frame ? "#104#" : "#105#"))
         *ctx->is_ecliptic_frame = !*ctx->is_ecliptic_frame;
+    HIGHLIGHT_END()
+
+    HIGHLIGHT_START(*ctx->is_pov_mode)
+    if (GuiButton(btnPOV, *ctx->is_pov_mode ? "#44#" : "#42#"))
+        *ctx->is_pov_mode = !*ctx->is_pov_mode;
     HIGHLIGHT_END()
 
     if (GuiButton(btnRewind, "#118#"))
@@ -3106,7 +3114,7 @@ case WND_SCOPE:
         GetScreenHeight() - 35 * cfg->ui_scale, 20 * cfg->ui_scale, cfg->text_main
     );
 
-    const char *tt_texts[17] = {
+    const char *tt_texts[18] = {
         "Settings",
         "TLE Manager",
         "Satellite Manager",
@@ -3119,6 +3127,7 @@ case WND_SCOPE:
         "Highlight Sunlit Orbits",
         "Slant Range Line",
         "Toggle Frame (ECI/Ecliptic)",
+        "Toggle POV Mode",
         "Slower / Reverse",
         "Play / Pause",
         "Faster",
@@ -3126,10 +3135,10 @@ case WND_SCOPE:
         "Set Date & Time"
     };
 
-    for (int i = 0; i < 17; i++)
+    for (int i = 0; i < 18; i++)
     {
         if (top_hovered_wnd == -1 && CheckCollisionPointRec(
-                                         GetMousePosition(), (Rectangle[]){btnSet, btnTLEMgr, btnSatMgr, btnPasses, btnPolar, btnScope, btnHelp, btn2D3D, btnHideUnselected, btnSunlit, btnSlantRange, btnFrame, btnRewind,
+                                         GetMousePosition(), (Rectangle[]){btnSet, btnTLEMgr, btnSatMgr, btnPasses, btnPolar, btnScope, btnHelp, btn2D3D, btnHideUnselected, btnSunlit, btnSlantRange, btnFrame, btnPOV, btnRewind,
                                                                            btnPlayPause, btnFastForward, btnNow, btnClock}[i]
                                      ))
         {
