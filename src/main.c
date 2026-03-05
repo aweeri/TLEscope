@@ -494,6 +494,10 @@ int main(void)
     earthTexture = LoadTexture(TextFormat("themes/%s/earth.png", cfg.theme));
     earthNightTexture = LoadTexture(TextFormat("themes/%s/earth_night.png", cfg.theme));
 
+    /* make textures not blocky when zoomed in on*/
+    SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
@@ -531,6 +535,7 @@ int main(void)
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
     cloudModel = LoadModelFromMesh(cloudMesh);
     cloudTexture = LoadTexture(TextFormat("themes/%s/clouds.png", cfg.theme));
+    SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
 
@@ -544,6 +549,7 @@ int main(void)
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32);
     moonModel = LoadModelFromMesh(moonMesh);
     moonTexture = LoadTexture(TextFormat("themes/%s/moon.png", cfg.theme));
+    SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
     moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
     moonModel.materials[0].shader = shaderMoon;
     float earthRadSq = (EARTH_RADIUS_KM / DRAW_SCALE) * (EARTH_RADIUS_KM / DRAW_SCALE);
