@@ -38,7 +38,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->highlight_sunlit = false; // default
     config->show_slant_range = false; // default
     config->show_scattering = false;  // default
-    config->first_run_done = false;   // default
+    config->show_first_run_dialog = false; //default
     config->hint_vsync = false;       // default
     config->custom_tle_source_count = 0;
 
@@ -198,17 +198,6 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 if (true_ptr && (!comma || true_ptr < comma))
                 {
                     config->hint_vsync = true;
-                }
-            }
-
-            char *fr_ptr = strstr(text, "\"first_run_done\"");
-            if (fr_ptr)
-            {
-                char *comma = strchr(fr_ptr, ',');
-                char *true_ptr = strstr(fr_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->first_run_done = true;
                 }
             }
 
@@ -380,6 +369,33 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             UnloadFileText(text);
         }
     }
+    else {
+        printf("INFO: No config file found at the default location! Showing first run dialog!\n", filename);
+        sscanf("default","%63[^\"]",config->theme);
+        config->window_width = 1920;
+        config->window_height = 1080;
+        config->target_fps = 120;
+        config->ui_scale = 1.15;
+        config->earth_rotation_offset = 0.00;
+        config->orbits_to_draw = 3.00;
+        config->show_clouds = true;
+        config->show_night_lights = true;
+        config->show_markers = true;
+        config->show_statistics = false;
+        config->highlight_sunlit = false;
+        config->show_slant_range = false;
+        config->show_scattering = false;
+        config->hint_vsync = false;
+        sscanf("Home", "%63[^\"]", home_location.name);
+        home_location.lat = 0.00;
+        home_location.lon = 0.00;
+
+        config->show_first_run_dialog = true;
+
+        SaveAppConfig(filename, config);
+        
+
+    }
 
     // load colors from the selected theme file
     char theme_path[256];
@@ -454,7 +470,6 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_slant_range\": %s,\n", config->show_slant_range ? "true" : "false");
     fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
-    fprintf(file, "    \"first_run_done\": %s,\n", config->first_run_done ? "true" : "false");
 
     if (config->custom_tle_source_count > 0)
     {

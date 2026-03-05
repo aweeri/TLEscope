@@ -226,6 +226,8 @@ static AppConfig cfg = {
     .ui_accent = {0, 255, 0, 255}
 };
 
+
+
 static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture;
 static Texture2D periMark, apoMark;

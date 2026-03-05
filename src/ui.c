@@ -215,7 +215,6 @@ static double last_lunar_calc_time = 0.0;
 
 static float tt_hover[16] = {0};
 static bool ui_initialized = false;
-static bool show_first_run_dialog = false;
 static char text_fps[8] = "";
 static bool edit_fps = false;
 
@@ -656,18 +655,15 @@ void ToggleTLEWarning(void) { show_tle_warning = !show_tle_warning; }
 
 bool IsMouseOverUI(AppConfig *cfg)
 {
-    if (show_exit_dialog || show_first_run_dialog)
+    if (show_exit_dialog || cfg->show_first_run_dialog)
         return true;
     if (!ui_initialized)
     {
         pd_x = GetScreenWidth() - 400.0f;
         pd_y = GetScreenHeight() - 400.0f;
         LoadTLEState(cfg);
-        if (!cfg->first_run_done)
-        {
-            show_first_run_dialog = true;
-        }
-        else if (data_tle_epoch > 0)
+
+        if (!cfg->show_first_run_dialog && data_tle_epoch > 0)
         {
             long diff = time(NULL) - data_tle_epoch;
             if (diff > 2 * 86400)
@@ -993,9 +989,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
         {
             *ctx->selected_sat = NULL;
         }
-        else if (!show_first_run_dialog)
+        else if (!cfg->show_first_run_dialog)
         {
-            show_exit_dialog = !show_exit_dialog;
+            cfg->show_first_run_dialog = !cfg->show_first_run_dialog;
         }
     }
 
@@ -3042,7 +3038,7 @@ case WND_SCOPE:
         }
     }
 
-    if (show_first_run_dialog)
+    if (cfg->show_first_run_dialog)
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 180});
         Rectangle frRec = {(GetScreenWidth() - 520 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 240 * cfg->ui_scale) / 2.0f, 520 * cfg->ui_scale, 240 * cfg->ui_scale};
@@ -3069,8 +3065,7 @@ case WND_SCOPE:
             cfg->show_scattering = false;
             cfg->show_night_lights = true;
             cfg->target_fps = 60;
-            cfg->first_run_done = true;
-            show_first_run_dialog = false;
+            cfg->show_first_run_dialog = false;
             SetTargetFPS(cfg->target_fps);
             SaveAppConfig("settings.json", cfg);
             if (data_tle_epoch > 0 && time(NULL) - data_tle_epoch > 2 * 86400) show_tle_warning = true;
@@ -3088,8 +3083,7 @@ case WND_SCOPE:
             cfg->show_scattering = true;
             cfg->show_night_lights = true;
             cfg->target_fps = 120;
-            cfg->first_run_done = true;
-            show_first_run_dialog = false;
+            cfg->show_first_run_dialog = false;
             SetTargetFPS(cfg->target_fps);
             SaveAppConfig("settings.json", cfg);
             if (data_tle_epoch > 0 && time(NULL) - data_tle_epoch > 2 * 86400) show_tle_warning = true;
