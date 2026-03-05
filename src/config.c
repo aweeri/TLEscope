@@ -201,6 +201,18 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
 
+            // parse first run dialog toggle
+            char *sfr_ptr = strstr(text, "\"show_first_run_dialog\"");
+            if (sfr_ptr)
+            {
+                char *comma = strchr(sfr_ptr, ',');
+                char *true_ptr = strstr(sfr_ptr, "true");
+                if (true_ptr && (!comma || true_ptr < comma))
+                {
+                    config->show_first_run_dialog = true;
+                }
+            }
+
             // load manual TLEs
             char *mt_ptr = strstr(text, "\"manual_tles\"");
             if (mt_ptr)
@@ -370,7 +382,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         }
     }
     else {
-        printf("INFO: No config file found at the default location! Showing first run dialog!\n", filename);
+        printf("INFO: No config file found at %s! Showing first run dialog!\n", filename);
         sscanf("default","%63[^\"]",config->theme);
         config->window_width = 1920;
         config->window_height = 1080;
@@ -389,6 +401,12 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         sscanf("Home", "%63[^\"]", home_location.name);
         home_location.lat = 0.00;
         home_location.lon = 0.00;
+
+        marker_count = 1;
+        sscanf("Cape Canaveral", "%63[^\"]", markers[0].name);
+        markers[0].lat = 28.3922f;
+        markers[0].lon = -80.6077f;
+        markers[0].alt = 0.0f;
 
         config->show_first_run_dialog = true;
 
@@ -470,6 +488,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_slant_range\": %s,\n", config->show_slant_range ? "true" : "false");
     fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
+    fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
 
     if (config->custom_tle_source_count > 0)
     {

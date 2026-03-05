@@ -991,7 +991,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
         }
         else if (!cfg->show_first_run_dialog)
         {
-            cfg->show_first_run_dialog = !cfg->show_first_run_dialog;
+            show_exit_dialog = !show_exit_dialog;
         }
     }
 
