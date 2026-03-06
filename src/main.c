@@ -1076,6 +1076,7 @@ int main(void)
         }
 
         float smooth_speed = 10.0f * GetFrameTime();
+        if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp that thang to prevent spinny explosions when alt tabbed
 
         Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
         Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
