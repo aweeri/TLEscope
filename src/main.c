@@ -809,6 +809,18 @@ int main(void)
             if (hide_unselected && selected_sat != NULL && &satellites[i] != selected_sat)
                 continue;
             satellites[i].current_pos = calculate_position(&satellites[i], current_unix);
+
+            
+            /* spaghetti is good, but orbital spaghetti isn't.
+            sooooo if an orbital body ends up below 80% of earths radius, disable it because it's about to meet earth's theoritical singularity and get ejected at speeds higher than light speed. yeeeeeeeet*/
+            if (Vector3Length(satellites[i].current_pos) < EARTH_RADIUS_KM * 0.8f)
+            {
+                satellites[i].is_active = false;
+                if (selected_sat == &satellites[i])
+                    selected_sat = NULL;
+                continue;
+            }
+
             active_render_count++;
         }
 
