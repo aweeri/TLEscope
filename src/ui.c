@@ -101,11 +101,12 @@ typedef enum
     WND_DOPPLER,
     WND_SAT_MGR,
     WND_TLE_MGR,
-    WND_SCOPE,
-    WND_MAX
-} WindowID;
+        WND_SCOPE,
+        WND_SAT_INFO,
+        WND_MAX
+    } WindowID;
 
-static WindowID z_order[WND_MAX] = {WND_HELP, WND_SETTINGS, WND_TIME, WND_PASSES, WND_POLAR, WND_DOPPLER, WND_SAT_MGR, WND_TLE_MGR, WND_SCOPE};
+    static WindowID z_order[WND_MAX] = {WND_HELP, WND_SETTINGS, WND_TIME, WND_PASSES, WND_POLAR, WND_DOPPLER, WND_SAT_MGR, WND_TLE_MGR, WND_SCOPE, WND_SAT_INFO};
 
 static void BringToFront(WindowID id)
 {
@@ -241,6 +242,15 @@ static bool scope_show_leo = true;
 static bool scope_show_heo = true;
 static bool scope_show_geo = true;
 static bool scope_show_trails = true;
+
+static bool show_sat_info_dialog = false;
+static bool drag_sat_info = false;
+static Vector2 drag_sat_info_off = {0};
+static float si_x = 0.0f, si_y = 0.0f;
+static bool si_has_been_placed = false;
+static bool si_rolled_up = false;
+static Satellite *last_selected_sat = NULL;
+static Vector2 si_scroll = {0};
 
 static void LoadTLEState(AppConfig *cfg)
 {
@@ -609,6 +619,8 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
         active[count++] = (Rectangle){tm_x, tm_y, 400 * cfg->ui_scale, 500 * cfg->ui_scale};
     if (show_scope_dialog)
         active[count++] = (Rectangle){sc_x, sc_y, 360 * cfg->ui_scale, 560 * cfg->ui_scale};
+    if (show_sat_info_dialog)
+        active[count++] = (Rectangle){si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale};
 
     float candidates_x[] = {margin, sw - w - margin};
     float step_y = 20.0f * cfg->ui_scale;
@@ -692,6 +704,8 @@ bool IsMouseOverUI(AppConfig *cfg)
     if (show_tle_mgr_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){tm_x, tm_y, 400 * cfg->ui_scale, 500 * cfg->ui_scale}))
         over_window = true;
     if (show_scope_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sc_x, sc_y, 360 * cfg->ui_scale, 560 * cfg->ui_scale}))
+        over_window = true;
+    if (show_sat_info_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale}))
         over_window = true;
     if (show_tle_warning &&
         CheckCollisionPointRec(
@@ -956,6 +970,25 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     *ctx->scope_el = scope_el;
     *ctx->scope_beam = scope_beam;
 
+    if (*ctx->selected_sat != last_selected_sat)
+    {
+        if (*ctx->selected_sat != NULL)
+        {
+            show_sat_info_dialog = true;
+            if (!si_has_been_placed)
+            {
+                FindSmartWindowPosition(320 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &si_x, &si_y);
+                si_has_been_placed = true;
+            }
+            BringToFront(WND_SAT_INFO);
+        }
+        else
+        {
+            show_sat_info_dialog = false;
+        }
+        last_selected_sat = *ctx->selected_sat;
+    }
+
     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_F))
     {
         if (!show_sat_mgr_dialog)
@@ -1007,6 +1040,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle smWindow = {sm_x, sm_y, 400 * cfg->ui_scale, 500 * cfg->ui_scale};
     Rectangle tmMgrWindow = {tm_x, tm_y, 400 * cfg->ui_scale, 500 * cfg->ui_scale};
     Rectangle scopeWindow = {sc_x, sc_y, 360 * cfg->ui_scale, 560 * cfg->ui_scale};
+    Rectangle satInfoWindow = {si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale};
 
     /* process Z-Order mouse events safely by evaluating from top to bottom */
     int top_hovered_wnd = -1;
@@ -1055,6 +1089,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             break;
         }
         if (id == WND_SCOPE && show_scope_dialog && CheckCollisionPointRec(m, scopeWindow))
+        {
+            top_hovered_wnd = id;
+            break;
+        }
+        if (id == WND_SAT_INFO && show_sat_info_dialog && CheckCollisionPointRec(m, satInfoWindow))
         {
             top_hovered_wnd = id;
             break;
@@ -1114,12 +1153,17 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 drag_scope = true;
                 drag_scope_off = Vector2Subtract(m, (Vector2){sc_x, sc_y});
             }
+            else if (top == WND_SAT_INFO && CheckCollisionPointRec(m, (Rectangle){si_x, si_y, satInfoWindow.width - 30 * cfg->ui_scale, 24 * cfg->ui_scale}))
+            {
+                drag_sat_info = true;
+                drag_sat_info_off = Vector2Subtract(m, (Vector2){si_x, si_y});
+            }
         }
     }
 
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
     {
-        drag_help = drag_settings = drag_time_dialog = drag_passes = drag_polar = drag_doppler = drag_sat_mgr = drag_tle_mgr = drag_scope = false;
+        drag_help = drag_settings = drag_time_dialog = drag_passes = drag_polar = drag_doppler = drag_sat_mgr = drag_tle_mgr = drag_scope = drag_sat_info = false;
     }
 
     if (show_passes_dialog)
@@ -1222,79 +1266,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     GuiSetStyle(TEXTBOX, TEXT_COLOR_PRESSED, ColorToInt(cfg->text_main));
     GuiSetStyle(TEXTBOX, BASE_COLOR_PRESSED, ColorToInt(cfg->ui_primary));
 
-    /* render context-sensitive satellite information box (drawn entirely under windows) */
-    bool hide_info_box = (*ctx->is_pov_mode && *ctx->selected_sat != NULL && ctx->active_sat == *ctx->selected_sat);
-    if (ctx->active_sat && ctx->active_sat->is_active && !hide_info_box)
+    /* render context-sensitive apsis text markers */
+    bool hide_apsis_text = (*ctx->is_pov_mode && *ctx->selected_sat != NULL && ctx->active_sat == *ctx->selected_sat);
+    if (ctx->active_sat && ctx->active_sat->is_active && !hide_apsis_text)
     {
-        Vector2 screenPos;
-        if (*ctx->is_2d_view)
-        {
-            float sat_mx, sat_my;
-            get_map_coordinates(ctx->active_sat->current_pos, ctx->gmst_deg, cfg->earth_rotation_offset, ctx->map_w, ctx->map_h, &sat_mx, &sat_my);
-            float cam_x = ctx->camera2d->target.x;
-            while (sat_mx - cam_x > ctx->map_w / 2.0f)
-                sat_mx -= ctx->map_w;
-            while (sat_mx - cam_x < -ctx->map_w / 2.0f)
-                sat_mx += ctx->map_w;
-            screenPos = GetWorldToScreen2D((Vector2){sat_mx, sat_my}, *ctx->camera2d);
-        }
-        else
-        {
-            screenPos = GetWorldToScreen(Vector3Scale(ctx->active_sat->current_pos, 1.0f / DRAW_SCALE), *ctx->camera3d);
-        }
-
-        double r_km = Vector3Length(ctx->active_sat->current_pos);
-        double v_kms = sqrt(MU * (2.0 / r_km - 1.0 / ctx->active_sat->semi_major_axis));
-        float lat_deg = asinf(ctx->active_sat->current_pos.y / r_km) * RAD2DEG;
-        float lon_deg = (atan2f(-ctx->active_sat->current_pos.z, ctx->active_sat->current_pos.x) - ((ctx->gmst_deg + cfg->earth_rotation_offset) * DEG2RAD)) * RAD2DEG;
-
-        while (lon_deg > 180.0f)
-            lon_deg -= 360.0f;
-        while (lon_deg < -180.0f)
-            lon_deg += 360.0f;
-
-        Vector3 sun_pos = calculate_sun_position(*ctx->current_epoch);
-        Vector3 sun_dir = Vector3Normalize(sun_pos);
-        bool eclipsed = is_sat_eclipsed(ctx->active_sat->current_pos, sun_dir);
-
-        char info[512];
-        sprintf(
-            info, "Inc: %.2f deg\nRAAN: %.2f deg\nEcc: %.4f\nAlt: %.1f km\nSpeed: %.3f km/s\nLat: %.2f\nLon: %.2f\nEclipsed: %s", ctx->active_sat->inclination * RAD2DEG,
-            ctx->active_sat->raan * RAD2DEG, ctx->active_sat->eccentricity, r_km - EARTH_RADIUS_KM, v_kms, lat_deg, lon_deg, eclipsed ? "Yes" : "No"
-        );
-
-        float titleFontSize = 18.0f * cfg->ui_scale;
-        float infoFontSize = 14.0f * cfg->ui_scale;
-        Vector2 titleSize = MeasureTextEx(customFont, ctx->active_sat->name, titleFontSize, 1.0f);
-        Vector2 infoSize = MeasureTextEx(customFont, info, infoFontSize, 1.0f);
-        float padX = 10.0f * cfg->ui_scale;
-        float boxW = fmaxf(180.0f * cfg->ui_scale, fmaxf(titleSize.x, infoSize.x) + (padX * 2.0f));
-        float boxH = 175.0f * cfg->ui_scale;
-
-        float boxX = screenPos.x + (15.0f * cfg->ui_scale);
-        float boxY = screenPos.y + (15.0f * cfg->ui_scale);
-
-        if (boxX + boxW > GetScreenWidth())
-            boxX = screenPos.x - boxW - (15.0f * cfg->ui_scale);
-        if (boxY + boxH > GetScreenHeight())
-            boxY = screenPos.y - boxH - (15.0f * cfg->ui_scale);
-
-        Rectangle bgRec = {boxX, boxY, boxW, boxH};
-        DrawRectangleRounded(bgRec, 0.05f, 16, cfg->ui_bg);
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-        DrawRectangleRoundedLines(bgRec, 0.05f, 16, 1.5f * cfg->ui_scale, cfg->ui_secondary);
-#else
-        DrawRectangleRoundedLines(bgRec, 0.05f, 16, cfg->ui_secondary);
-#endif
-        Color titleColor = (ctx->active_sat == ctx->hovered_sat) ? cfg->sat_highlighted : cfg->sat_selected;
-
-        char sat_id_line[16]; /* 00900U 64063C */
-        snprintf(sat_id_line, sizeof(sat_id_line), "%.6s %.8s", ctx->active_sat->norad_id, ctx->active_sat->intl_designator);
-
-        DrawUIText(customFont, ctx->active_sat->name, boxX + padX, boxY + (10.0f * cfg->ui_scale), titleFontSize, titleColor);
-        DrawUIText(customFont, sat_id_line, boxX + padX, boxY + (28.0f * cfg->ui_scale), infoFontSize, cfg->text_main);
-        DrawUIText(customFont, info, boxX + padX, boxY + (48.0f * cfg->ui_scale), infoFontSize, cfg->text_main);
-
         Vector2 periScreen, apoScreen;
         bool show_peri = true, show_apo = true;
         double t_peri_unix, t_apo_unix;
@@ -2997,6 +2972,124 @@ case WND_SCOPE:
             GuiCheckBox((Rectangle){sc_x + 200 * cfg->ui_scale, ctrl_y, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "GEO", &scope_show_geo);
             GuiCheckBox((Rectangle){sc_x + 275 * cfg->ui_scale, ctrl_y, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Trails", &scope_show_trails);
             
+            break;
+        }
+
+        case WND_SAT_INFO:
+        {
+            if (!show_sat_info_dialog || !*ctx->selected_sat)
+                break;
+            if (drag_sat_info)
+            {
+                si_x = GetMousePosition().x - drag_sat_info_off.x;
+                si_y = GetMousePosition().y - drag_sat_info_off.y;
+                SnapWindow(&si_x, &si_y, satInfoWindow.width, satInfoWindow.height, cfg);
+            }
+            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont))
+            {
+                show_sat_info_dialog = false;
+                *ctx->selected_sat = NULL;
+                last_selected_sat = NULL;
+            }
+
+            float btn_sz = 16 * cfg->ui_scale;
+            Rectangle rollupBtn = {satInfoWindow.x + satInfoWindow.width - 2 * btn_sz - 10 * cfg->ui_scale, satInfoWindow.y + 4 * cfg->ui_scale, btn_sz, btn_sz};
+            int old_base = GuiGetStyle(BUTTON, BASE_COLOR_NORMAL);
+            int old_bord = GuiGetStyle(BUTTON, BORDER_COLOR_NORMAL);
+            GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToInt(BLANK));
+            GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToInt(BLANK));
+            
+            if (GuiButton(rollupBtn, si_rolled_up ? "#120#" : "#121#")) {
+                si_rolled_up = !si_rolled_up;
+            }
+            
+            GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, old_base);
+            GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, old_bord);
+
+            if (si_rolled_up) break;
+
+            if (*ctx->selected_sat)
+            {
+                Satellite *sat = *ctx->selected_sat;
+                double r_km = Vector3Length(sat->current_pos);
+                double v_kms = sqrt(MU * (2.0 / r_km - 1.0 / sat->semi_major_axis));
+                float lat_deg = asinf(sat->current_pos.y / r_km) * RAD2DEG;
+                float lon_deg = (atan2f(-sat->current_pos.z, sat->current_pos.x) - ((ctx->gmst_deg + cfg->earth_rotation_offset) * DEG2RAD)) * RAD2DEG;
+                while (lon_deg > 180.0f) lon_deg -= 360.0f;
+                while (lon_deg < -180.0f) lon_deg += 360.0f;
+
+                Vector3 sun_pos = calculate_sun_position(*ctx->current_epoch);
+                Vector3 sun_dir = Vector3Normalize(sun_pos);
+                bool eclipsed = is_sat_eclipsed(sat->current_pos, sun_dir);
+
+                double c_az, c_el;
+                get_az_el(sat->current_pos, ctx->gmst_deg, home_location.lat, home_location.lon, home_location.alt, &c_az, &c_el);
+                double s_range = get_sat_range(sat, *ctx->current_epoch, home_location);
+
+                double t_peri_unix, t_apo_unix;
+                get_apsis_times(sat, *ctx->current_epoch, &t_peri_unix, &t_apo_unix);
+                double real_rp = Vector3Length(calculate_position(sat, t_peri_unix)) - EARTH_RADIUS_KM;
+                double real_ra = Vector3Length(calculate_position(sat, t_apo_unix)) - EARTH_RADIUS_KM;
+
+                double period_min = (2.0 * PI / sat->mean_motion) / 60.0;
+                double revs_per_day = (sat->mean_motion * 86400.0) / (2.0 * PI);
+
+                double dt = 0.1 / 86400.0;
+                double r1 = get_sat_range(sat, *ctx->current_epoch - dt, home_location);
+                double r2 = get_sat_range(sat, *ctx->current_epoch + dt, home_location);
+                double range_rate = (r2 - r1) / 0.2;
+
+                Rectangle contentRec = {0, 0, satInfoWindow.width - 32 * cfg->ui_scale, 580 * cfg->ui_scale};
+                Rectangle viewRec = {0};
+                GuiScrollPanel((Rectangle){si_x + 8 * cfg->ui_scale, si_y + 35 * cfg->ui_scale, satInfoWindow.width - 16 * cfg->ui_scale, satInfoWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &si_scroll, &viewRec);
+
+                BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
+                float cur_x = viewRec.x + 4 * cfg->ui_scale + si_scroll.x;
+                float cur_y = viewRec.y + 4 * cfg->ui_scale + si_scroll.y;
+
+                #define DRAW_HEADER(title) \
+                    DrawUIText(customFont, title, cur_x, cur_y, 18 * cfg->ui_scale, cfg->ui_accent); \
+                    cur_y += 26 * cfg->ui_scale
+
+                #define DRAW_ROW(key, val) \
+                    DrawUIText(customFont, key, cur_x + 5 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_main); \
+                    DrawUIText(customFont, val, cur_x + 140 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_secondary); \
+                    cur_y += 22 * cfg->ui_scale
+
+                DRAW_HEADER("Identification");
+                DRAW_ROW("NORAD ID:", TextFormat("%.6s", sat->norad_id));
+                DRAW_ROW("Intl Desig:", TextFormat("%.8s", sat->intl_designator));
+
+                cur_y += 10 * cfg->ui_scale;
+                DRAW_HEADER("Orbital Information");
+                DRAW_ROW("Altitude:", TextFormat("%.1f km", r_km - EARTH_RADIUS_KM));
+                DRAW_ROW("Speed:", TextFormat("%.3f km/s", v_kms));
+                DRAW_ROW("Latitude:", TextFormat("%.3f deg", lat_deg));
+                DRAW_ROW("Longitude:", TextFormat("%.3f deg", lon_deg));
+                DRAW_ROW("Inclination:", TextFormat("%.3f deg", sat->inclination * RAD2DEG));
+                DRAW_ROW("Eccentricity:", TextFormat("%.5f", sat->eccentricity));
+                DRAW_ROW("RAAN:", TextFormat("%.3f deg", sat->raan * RAD2DEG));
+                DRAW_ROW("Arg Perigee:", TextFormat("%.3f deg", sat->arg_perigee * RAD2DEG));
+                DRAW_ROW("Mean Anom:", TextFormat("%.3f deg", sat->mean_anomaly * RAD2DEG));
+                DRAW_ROW("Mean Motion:", TextFormat("%.4f rev/d", revs_per_day));
+                DRAW_ROW("Period:", TextFormat("%.1f min", period_min));
+                DRAW_ROW("Semi-Major:", TextFormat("%.1f km", sat->semi_major_axis));
+                DRAW_ROW("Perigee Alt:", TextFormat("%.1f km", real_rp));
+                DRAW_ROW("Apogee Alt:", TextFormat("%.1f km", real_ra));
+                DRAW_ROW("Eclipsed:", eclipsed ? "Yes" : "No");
+
+                cur_y += 10 * cfg->ui_scale;
+                DRAW_HEADER("Relative");
+                DRAW_ROW("Azimuth:", TextFormat("%.1f deg", c_az));
+                DRAW_ROW("Elevation:", TextFormat("%.1f deg", c_el));
+                DRAW_ROW("Slant Range:", TextFormat("%.1f km", s_range));
+                DRAW_ROW("Relative Speed:", TextFormat("%.3f km/s", range_rate));
+
+                #undef DRAW_HEADER
+                #undef DRAW_ROW
+
+                EndScissorMode();
+            }
             break;
         }
 
