@@ -944,10 +944,10 @@ int main(void)
                     {
                         target_camAngleX -= mouseDelta.x * 0.005f;
                         target_camAngleY += mouseDelta.y * 0.005f;
-                        if (target_camAngleY > 1.5f)
-                            target_camAngleY = 1.5f;
-                        if (target_camAngleY < -1.5f)
-                            target_camAngleY = -1.5f;
+                        if (target_camAngleY > 1.57f)
+                            target_camAngleY = 1.57f;
+                        if (target_camAngleY < -1.57f)
+                            target_camAngleY = -1.57f;
                     }
                 }
                 if (!is_typing)
@@ -1128,24 +1128,37 @@ int main(void)
             Vector3 sat_pos_3d = Vector3Scale(selected_sat->current_pos, 1.0f / DRAW_SCALE);
             Camera3DParams.position = sat_pos_3d;
             
-            float sat_dist = Vector3Length(sat_pos_3d);
-            float base_yaw = atan2f(sat_pos_3d.x, sat_pos_3d.z);
-            float base_pitch = asinf(fmaxf(-1.0f, fminf(1.0f, sat_pos_3d.y / sat_dist)));
+            /* create an LVLH local coordinate frame */
+            double t_unix = get_unix_from_epoch(current_epoch);
+            Vector3 pos_next_3d = Vector3Scale(calculate_position(selected_sat, t_unix + 1.0), 1.0f / DRAW_SCALE);
             
-            float final_yaw = camAngleX + base_yaw;
-            float final_pitch = camAngleY + base_pitch;
+            Vector3 nadir = Vector3Normalize(Vector3Negate(sat_pos_3d));
+            Vector3 vel = Vector3Normalize(Vector3Subtract(pos_next_3d, sat_pos_3d));
+            
+            Vector3 right = Vector3Normalize(Vector3CrossProduct(vel, nadir));
+            Vector3 fwd = Vector3Normalize(Vector3CrossProduct(nadir, right));
+            Vector3 up = Vector3Negate(nadir);
 
-            Vector3 look_dir = {
-                -cosf(final_pitch) * sinf(final_yaw),
-                -sinf(final_pitch),
-                -cosf(final_pitch) * cosf(final_yaw)
-            };
+            /* map user camera angles onto the local orbital frame */
+            float cy = cosf(camAngleX);
+            float sy = sinf(camAngleX);
+            float cp = cosf(-camAngleY);
+            float sp = sinf(-camAngleY);
             
-            Vector3 upVec = {
-                -sinf(final_pitch) * sinf(final_yaw),
-                cosf(final_pitch),
-                -sinf(final_pitch) * cosf(final_yaw)
-            };
+            Vector3 local_look = { cp * sy, sp, cp * cy };
+            Vector3 look_dir = Vector3Add(
+                Vector3Add(Vector3Scale(right, local_look.x), Vector3Scale(up, local_look.y)),
+                Vector3Scale(fwd, local_look.z)
+            );
+            
+            Vector3 local_right = { cy, 0.0f, -sy };
+            Vector3 world_right = Vector3Add(
+                Vector3Scale(right, local_right.x),
+                Vector3Scale(fwd, local_right.z)
+            );
+            
+            /* up is down, down is up */
+            Vector3 upVec = Vector3Normalize(Vector3CrossProduct(look_dir, world_right));
 
             if (current_ecliptic_angle > 0.0001f)
             {

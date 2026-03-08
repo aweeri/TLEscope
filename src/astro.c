@@ -24,6 +24,7 @@ SatPass passes[MAX_PASSES];
 int num_passes = 0;
 Satellite *last_pass_calc_sat = NULL;
 
+/* string extraction (sscanf is a bit too beefy for tight TLE loops) */
 static double parse_tle_double(const char *str, int start, int len)
 {
     char buf[32] = {0};
@@ -31,6 +32,7 @@ static double parse_tle_double(const char *str, int start, int len)
     return atof(buf);
 }
 
+/* pulls the system clock and mashes it into our custom YYYYDDD.FFFF format */
 double get_current_real_time_epoch(void)
 {
     time_t now = time(NULL);
@@ -40,11 +42,12 @@ double get_current_real_time_epoch(void)
     double day_of_year = gmt->tm_yday + 1.0;
     double fraction_of_day = (gmt->tm_hour + gmt->tm_min / 60.0 + gmt->tm_sec / 3600.0) / 24.0;
 
-    // modified to return full YYYY format to make global time sim less fuckywucky,
-    // afterwards we can just use the YY format for SGP4 data.
+    /* modified to return full YYYY format to make global time sim less fuckywucky,
+       afterwards we just use the YY format for SGP4 data. */
     return (year * 1000.0) + day_of_year + fraction_of_day;
 }
 
+/* handles year rollover/underflow so the math doesnt explode when looking at past/future passes */
 double normalize_epoch(double epoch)
 {
     int year = (int)(epoch / 1000.0);
@@ -73,14 +76,14 @@ double normalize_epoch(double epoch)
     return (year * 1000.0) + day_of_year;
 }
 
-// utility to convert normalized epoch format to unix time for sgp4 math
+/* utility to convert normalized epoch format to unix time for sgp4 math */
 double get_unix_from_epoch(double epoch)
 {
     epoch = normalize_epoch(epoch);
     int year = (int)(epoch / 1000.0);
     double day = fmod(epoch, 1000.0);
 
-    // pure mathematical unix conversion to avoid OS-level timegm() quantization and stutter
+    /* pure mathematical unix conversion to avoid OS-level timegm() quantization and stutter */
     int y = year - 1;
     int leaps_to_year = (y / 4) - (y / 100) + (y / 400);
     int leaps_to_1970 = (1969 / 4) - (1969 / 100) + (1969 / 400);
@@ -90,6 +93,7 @@ double get_unix_from_epoch(double epoch)
     return unix_days * 86400.0;
 }
 
+/* sidereal time keeps the earth spinning under the sats; without this, everything is static */
 double epoch_to_gmst(double epoch)
 {
     double unix_time = get_unix_from_epoch(epoch);
@@ -101,6 +105,7 @@ double epoch_to_gmst(double epoch)
     return gmst;
 }
 
+/* pretty-print for the ui so humans can actually read the time */
 void epoch_to_datetime_str(double epoch, char *buffer)
 {
     epoch = normalize_epoch(epoch);
@@ -133,6 +138,7 @@ void epoch_to_datetime_str(double epoch, char *buffer)
     sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02.0f UTC", year, month, day, h, m, seconds);
 }
 
+/* rips lines from a TLE file and populates the satellite struct */
 bool add_satellite_from_tle(const char* line0, const char* line1, const char* line2)
 {
     if (sat_count >= MAX_SATELLITES) return false;
@@ -163,9 +169,11 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
         double initial_r[3] = {0};
         double initial_v[3] = {0};
 
+        /* shove the TLE into the sgp4 state machine */
         ConvertTLEToSGP4(&sat->satrec, &parsed_objs[0], 0.0, initial_r, initial_v);
         free(parsed_objs);
 
+        /* manual scraping for the rest of the struct because we like control */
         double raw_epoch = parse_tle_double(line1, 18, 14);
         int yy = (int)(raw_epoch / 1000.0);
         int year = (yy < 57) ? 2000 + yy : 1900 + yy;
@@ -191,6 +199,7 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
     return false;
 }
 
+/* bulk loading of celestial junk from flat files */
 void load_tle_data(const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -209,7 +218,7 @@ void load_tle_data(const char *filename)
         if (strncmp(line0, "# EPOCH:", 8) == 0)
         {
             unsigned int mask = 0, cust_mask = 0, ret_mask = 0;
-            // scan past it, variables are unused here but keeps pointer advanced
+            /* scan past it, variables are unused here but keeps pointer advanced */
             if (strstr(line0, "RET_MASK:"))
             {
                 sscanf(line0, "# EPOCH:%*d MASK:%u CUST_MASK:%u RET_MASK:%u", &mask, &cust_mask, &ret_mask);
@@ -221,7 +230,7 @@ void load_tle_data(const char *filename)
         }
         else
         {
-            rewind(file); // not a header, restart
+            rewind(file); /* not a header, restart */
         }
     }
 
@@ -242,6 +251,7 @@ void load_tle_data(const char *filename)
     fclose(file);
 }
 
+/* parsing for strings that were likely copy-pasted in a hurry */
 void load_manual_tles(AppConfig *config)
 {
     for (int i = 0; i < config->manual_tle_count; i++)
@@ -264,7 +274,8 @@ void load_manual_tles(AppConfig *config)
     }
 }
 
-// precalculated unix time passed down to prevent excessyear/day conversions
+/* main sgp4 crank; outputs raw ECI coordinates */
+/* precalculated unix time passed down to prevent excessyear/day conversions */
 Vector3 calculate_position(Satellite *sat, double current_unix)
 {
     double tsince = (current_unix - sat->epoch_unix) / 60.0;
@@ -282,6 +293,7 @@ Vector3 calculate_position(Satellite *sat, double current_unix)
     return pos;
 }
 
+/* projects 3D orbital space onto a 2D equirectangular map plane */
 void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float map_w, float map_h, float *out_x, float *out_y)
 {
     float r = Vector3Length(pos);
@@ -304,6 +316,7 @@ void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float
     *out_y = (v - 0.5f) * map_h;
 }
 
+/* finds where the sat hits the high and low points of its orbit in 2D */
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset, float map_w, float map_h, Vector2 *out)
 {
     (void)gmst_deg;
@@ -328,6 +341,7 @@ void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double 
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
 }
 
+/* predicts the timestamps for the next perigee and apoapsis */
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix)
 {
     double current_unix = get_unix_from_epoch(current_time);
@@ -351,6 +365,7 @@ void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix,
     *out_apo_unix = get_unix_from_epoch(t_apo);
 }
 
+/* bakes the future orbital path into a vertex buffer so sgp4 isnt re-ran every frame */
 void update_orbit_cache(Satellite *sat, double current_epoch)
 {
     double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
@@ -364,6 +379,7 @@ void update_orbit_cache(Satellite *sat, double current_epoch)
     sat->orbit_cached = true;
 }
 
+/* converts raw orbital data into azimuth/elevation for a specific ground station */
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el)
 {
     double sat_r = Vector3Length(eci_pos);
@@ -376,7 +392,7 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, f
 
     double sat_lat = asin(eci_pos.y / sat_r);
     double sat_lon_eci = atan2(-eci_pos.z, eci_pos.x);
-    double theta = (gmst_deg + 0) * DEG2RAD; // assuming earth_rotation_offset handled befor
+    double theta = (gmst_deg + 0) * DEG2RAD; /* assuming earth_rotation_offset handled befor */
     double sat_lon_ecef = sat_lon_eci - theta;
 
     double s_x = sat_r * cos(sat_lat) * cos(sat_lon_ecef);
@@ -411,6 +427,7 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, f
         *az += 360.0;
 }
 
+/* qsort callback to keep passes chronological */
 int compare_passes(const void *a, const void *b)
 {
     const SatPass *p1 = (const SatPass *)a;
@@ -422,6 +439,7 @@ int compare_passes(const void *a, const void *b)
     return 0;
 }
 
+/* heavy lifting for pass prediction; brute force search with binary search refinement */
 void CalculatePasses(Satellite *sat, double start_epoch)
 {
     num_passes = 0;
@@ -444,7 +462,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
 
         get_az_el(calculate_position(current_sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
 
-        // back up if happens to already be in a pass to catch the true start
+        /* back up if happens to already be in a pass to catch the true start */
         if (el > 0)
         {
             for (int i = 0; i < 30 && el > 0; i++)
@@ -472,7 +490,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                 if (!in_pass)
                 {
                     in_pass = true;
-                    // binary search to find exact AOS
+                    /* binary search to find exact AOS because stepping by 1min is too crunchy for radio work */
                     double t_low = t - coarse_step;
                     double t_high = t;
                     for (int b = 0; b < 10; b++)
@@ -503,7 +521,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                 if (in_pass)
                 {
                     in_pass = false;
-                    // binary search to find exact LOS crossing
+                    /* binary search to find exact LOS crossing */
                     double t_low = t - coarse_step;
                     double t_high = t;
                     for (int b = 0; b < 10; b++)
@@ -525,7 +543,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                     double step = (current_pass.los_epoch - current_pass.aos_epoch) / 399.0;
                     if (step > 0)
                     {
-                        current_pass.max_el = -90.0f; // reset to find true max during high-res pass
+                        current_pass.max_el = -90.0f; /* reset to find true max during high-res pass */
                         for (int k = 0; k < 400; k++)
                         {
                             double pt = current_pass.aos_epoch + k * step;
@@ -535,7 +553,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                             get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home_location.lat, home_location.lon, home_location.alt, &p_az, &p_el);
                             current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
                             
-                            // Absolutely ensure max elevation is pinpointed precisely
+                            /* ensure max elevation is pinpointed */
                             if (p_el > current_pass.max_el)
                             {
                                 current_pass.max_el = (float)p_el;
@@ -579,10 +597,12 @@ void CalculatePasses(Satellite *sat, double start_epoch)
         }
     }
 
-    // Sort overall passes generated by timeframe chronological arrival order
+    /* make sure the list actually makes sense chronologically */
+    /* Sort overall passes generated by timeframe chronological arrival order */
     qsort(passes, num_passes, sizeof(SatPass), compare_passes);
 }
 
+/* formats the internal epoch into a HH:MM:SS string for quick glancing */
 void epoch_to_time_str(double epoch, char *str)
 {
     time_t t = (time_t)get_unix_from_epoch(epoch);
@@ -597,7 +617,7 @@ void epoch_to_time_str(double epoch, char *str)
     }
 }
 
-// i truly do hope this doesnt drift or something its so eyeballed istg
+/* i truly do hope this doesnt drift or something its so eyeballed istg */
 Vector3 calculate_sun_position(double current_time_days)
 {
     double unix_time = get_unix_from_epoch(current_time_days);
@@ -631,6 +651,7 @@ Vector3 calculate_sun_position(double current_time_days)
     return Vector3Normalize(pos);
 }
 
+/* basic shadow-cone check; tells us if the sat is in the dark (no visual/solar power) */
 bool is_sat_eclipsed(Vector3 pos_km, Vector3 sun_dir_norm)
 {
     float dot = Vector3DotProduct(pos_km, sun_dir_norm);
@@ -645,37 +666,37 @@ Vector3 calculate_moon_position(double current_time_days)
 {
     double unix_time = get_unix_from_epoch(current_time_days);
     double jd = (unix_time / 86400.0) + 2440587.5;
-    double D_days = jd - 2451545.0; // days since J2000
+    double D_days = jd - 2451545.0; /* days since J2000 */
 
-    // arguments needed later
+    /* some arguments */
     double L_moon = fmod(218.316 + 13.176396 * D_days, 360.0) * DEG2RAD;
     double M_moon = fmod(134.963 + 13.064993 * D_days, 360.0) * DEG2RAD;
     double F_moon = fmod(93.272 + 13.229350 * D_days, 360.0) * DEG2RAD;
 
-    // solar mean anomaly and lunar elongation hehe for perturbation calculations
+    /* solar mean anomaly and lunar elongation hehe for perturbation calculations */
     double M_sun = fmod(357.528 + 0.9856003 * D_days, 360.0) * DEG2RAD;
     double D_elong = fmod(297.850 + 12.190749 * D_days, 360.0) * DEG2RAD;
 
-    // she perturbate on my variation till I evect
+    /* she perturbate on my variation till I evect */
     double E = 1.0 - 0.002516 * cos(M_sun);
     double evection = 1.274 * DEG2RAD * sin(2.0 * D_elong - M_moon);
     double variation = 0.658 * DEG2RAD * sin(2.0 * D_elong);
     double annual_eq = -0.186 * DEG2RAD * E * sin(M_sun);
     double parallactic = -0.035 * DEG2RAD * sin(D_elong);
 
-    // apply perturbations to longitude and distance
+    /* apply perturbations to longitude and distance */
     double lambda = L_moon + evection + variation + annual_eq + parallactic + (6.289 * DEG2RAD) * sin(M_moon) + (-0.059 * DEG2RAD) * sin(2.0 * D_elong + M_moon);
 
     double beta = (5.128 * DEG2RAD) * sin(F_moon) + (0.280 * DEG2RAD) * sin(F_moon + M_moon) + (0.277 * DEG2RAD) * sin(F_moon - M_moon) + (0.173 * DEG2RAD) * sin(2.0 * D_elong - F_moon);
 
     double dist_km = 385001.0 - 20905.0 * cos(M_moon) - 3699.0 * cos(2.0 * D_elong - M_moon) - 2956.0 * cos(2.0 * D_elong);
 
-    // ecliptic to ECI because that wouldn't worky whatsoever
+    /* ecliptic to ECI because that wouldn't worky whatsoever */
     double x_ecl = dist_km * cos(beta) * cos(lambda);
     double y_ecl = dist_km * cos(beta) * sin(lambda);
     double z_ecl = dist_km * sin(beta);
 
-    // obliquity of the ecliptic (T is centuries since J2000)
+    /* obliquity of the ecliptic (T is centuries since J2000) */
     double T = D_days / 36525.0;
     double eps = (23.439291 - 0.0130042 * T) * DEG2RAD;
 
@@ -687,6 +708,7 @@ Vector3 calculate_moon_position(double current_time_days)
     return pos;
 }
 
+/* internal helper to figure out straight-line distance to a satellite */
 double get_sat_range(Satellite *sat, double epoch, Marker obs)
 {
     double t_unix = get_unix_from_epoch(epoch);
@@ -694,7 +716,7 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
 
     Vector3 eci = calculate_position(sat, t_unix);
 
-    // direct cartesian rotation (ECI to ECEF)
+    /* direct cartesian rotation (ECI to ECEF) */
     double cos_t = cos(theta);
     double sin_t = sin(theta);
 
@@ -702,7 +724,7 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
     double s_y = -eci.x * sin_t - eci.z * cos_t;
     double s_z = eci.y;
 
-    // observer ECEF calc
+    /* observer ECEF calc */
     double lat_rad = obs.lat * DEG2RAD;
     double lon_rad = obs.lon * DEG2RAD;
     double obs_rad = EARTH_RADIUS_KM + obs.alt / 1000.0;
@@ -712,7 +734,7 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
     double o_y = obs_rad * cos_lat * sin(lon_rad);
     double o_z = obs_rad * sin(lat_rad);
 
-    // dist
+    /* dist */
     double dx = s_x - o_x;
     double dy = s_y - o_y;
     double dz = s_z - o_z;
@@ -720,15 +742,16 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+/* shifts the frequency based on velocity relative to the observer; essential for tuning */
 double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq)
 {
-    // line-of-sight range
-    double dt = 0.1 / 86400.0; // 0.1 seconds step
+    /* line-of-sight range */
+    double dt = 0.1 / 86400.0; /* 0.1 seconds step */
     double r1 = get_sat_range(sat, epoch - dt, obs);
     double r2 = get_sat_range(sat, epoch + dt, obs);
-    double range_rate = (r2 - r1) / 0.2; // km/s
+    double range_rate = (r2 - r1) / 0.2; /* km/s */
 
-    double c = 299792.458; // in km/s
+    double c = 299792.458; /* in km/s */
     return base_freq * (c / (c + range_rate));
 }
 

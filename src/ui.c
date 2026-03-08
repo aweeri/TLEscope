@@ -1457,14 +1457,19 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
     HIGHLIGHT_END()
 
+    if (*ctx->is_pov_mode) GuiDisable();
     HIGHLIGHT_START(*ctx->is_ecliptic_frame)
     if (GuiButton(btnFrame, *ctx->is_ecliptic_frame ? "#104#" : "#105#"))
         *ctx->is_ecliptic_frame = !*ctx->is_ecliptic_frame;
     HIGHLIGHT_END()
+    if (*ctx->is_pov_mode) GuiEnable();
 
     HIGHLIGHT_START(*ctx->is_pov_mode)
     if (GuiButton(btnPOV, *ctx->is_pov_mode ? "#44#" : "#42#"))
+    {
         *ctx->is_pov_mode = !*ctx->is_pov_mode;
+        if (*ctx->is_pov_mode) *ctx->is_ecliptic_frame = false;
+    }
     HIGHLIGHT_END()
 
     if (GuiButton(btnRewind, "#118#"))
