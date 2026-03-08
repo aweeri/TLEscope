@@ -1386,6 +1386,11 @@ int main(void)
                                 satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
                                 (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
                             );
+
+                            if (is_hl && Camera2DParams.zoom > 0.1f)
+                            {
+                                DrawUIText(customFont, satellites[i].name, sat_mx + (offset_i * map_w) + (m_size_2d / 2.f) + 4.f, sat_my - (m_size_2d / 2.f), m_text_2d, sCol);
+                            }
                         }
                     }
                 }
@@ -1742,10 +1747,16 @@ int main(void)
                 {
                     if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
+                        bool is_hl = (active_sat == &satellites[i]);
                         Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
                         DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, sCol);
+
+                        if (is_hl)
+                        {
+                            DrawUIText(customFont, satellites[i].name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, sCol);
+                        }
                     }
                 }
             }
