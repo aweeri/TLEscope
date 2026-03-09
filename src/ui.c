@@ -1816,7 +1816,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             int filtered_indices[MAX_SATELLITES], filtered_count = 0;
             for (int i = 0; i < sat_count; i++)
             {
-                if (string_contains_ignore_case(satellites[i].name, sat_search_text))
+                if (string_contains_ignore_case(satellites[i].name, sat_search_text) || 
+                    string_contains_ignore_case(satellites[i].norad_id, sat_search_text) || 
+                    string_contains_ignore_case(satellites[i].intl_designator, sat_search_text))
+
                 {
                     filtered_indices[filtered_count++] = i;
                     if (doCheckAll)
