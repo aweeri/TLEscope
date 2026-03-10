@@ -229,6 +229,9 @@ static float scope_az = 180.0f;
 static float scope_el = 45.0f;
 static float scope_beam = 30.0f;
 
+static bool scope_drag_active = false;
+static Vector2 scope_drag_last = {0};
+
 static char text_scope_az[16] = "180.0";
 static char text_scope_el[16] = "45.0";
 static char text_scope_beam[16] = "30.0";
@@ -2729,6 +2732,61 @@ case WND_SCOPE:
 
             float scope_radius = 160 * cfg->ui_scale;
             Vector2 center = {sc_x + scopeWindow.width / 2.0f, sc_y + 40 * cfg->ui_scale + scope_radius};
+
+            /* direct mouse control of scope orientation and beam */
+            if (is_topmost)
+            {
+                Vector2 mouse = GetMousePosition();
+                float dx = mouse.x - center.x;
+                float dy = mouse.y - center.y;
+                float dist = sqrtf(dx * dx + dy * dy);
+
+                /* WHEN NOT LOCKED left-drag inside the viewfinder adjusts az/el  */
+                if (!scope_lock)
+                {
+                    if (!scope_drag_active && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && dist <= scope_radius)
+                    {
+                        scope_drag_active = true;
+                        scope_drag_last = mouse;
+                    }
+                    if (scope_drag_active && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+                    {
+                        Vector2 cur = mouse;
+                        Vector2 delta = Vector2Subtract(cur, scope_drag_last);
+                        scope_drag_last = cur;
+
+                        /* map pixels to angular offsets based on current beam */
+                        float pix_to_deg = (scope_beam / 2.0f) / scope_radius;
+                        scope_az += delta.x * pix_to_deg;
+                        scope_el -= delta.y * pix_to_deg;
+
+                        /* normalize / clamp */
+                        while (scope_az < 0.0f) scope_az += 360.0f;
+                        while (scope_az >= 360.0f) scope_az -= 360.0f;
+                        if (scope_el > 90.0f) scope_el = 90.0f;
+                        if (scope_el < -90.0f) scope_el = -90.0f;
+
+                        if (!edit_scope_az) snprintf(text_scope_az, sizeof(text_scope_az), "%.1f", scope_az);
+                        if (!edit_scope_el) snprintf(text_scope_el, sizeof(text_scope_el), "%.1f", scope_el);
+                    }
+                }
+
+                if (scope_drag_active && IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+                    scope_drag_active = false;
+
+                /* scroll wheel over viewfinder changes beam width */
+                if (dist <= scope_radius)
+                {
+                    float wheel = GetMouseWheelMove();
+                    if (wheel != 0.0f && !edit_scope_beam)
+                    {
+                        scope_beam -= wheel * 5.0f;
+                        if (scope_beam < 1.0f) scope_beam = 1.0f;
+                        if (scope_beam > 120.0f) scope_beam = 120.0f;
+                        snprintf(text_scope_beam, sizeof(text_scope_beam), "%.1f", scope_beam);
+                    }
+                }
+            }
 
             // push state back to context for 3d render
             *ctx->show_scope = true;
