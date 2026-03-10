@@ -5184,6 +5184,8 @@ static Vector3 ConvertHSVtoRGB(Vector3 hsv)
 // Scroll bar control (used by GuiScrollPanel())
 static int GuiScrollBar(Rectangle bounds, int value, int minValue, int maxValue)
 {
+    #define RAYGUI_MIN_SCROLLBAR_SLIDER_SIZE 10
+
     GuiState state = guiState;
 
     // Is the scrollbar horizontal or vertical?
@@ -5210,6 +5212,9 @@ static int GuiScrollBar(Rectangle bounds, int value, int minValue, int maxValue)
 
     const int valueRange = maxValue - minValue;
     int sliderSize = GuiGetStyle(SCROLLBAR, SCROLL_SLIDER_SIZE);
+
+    // Enforce a minimum slider size so it never disappears on very long lists
+    if (sliderSize < RAYGUI_MIN_SCROLLBAR_SLIDER_SIZE) sliderSize = RAYGUI_MIN_SCROLLBAR_SLIDER_SIZE;
 
     // Calculate rectangles for all of the components
     arrowUpLeft = RAYGUI_CLITERAL(Rectangle){

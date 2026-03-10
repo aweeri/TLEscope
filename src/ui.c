@@ -1599,7 +1599,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             }
             DrawUIText(customFont, age_str, tm_x + 10 * cfg->ui_scale, tm_y + 35 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
 
-            if (GuiButton((Rectangle){tm_x + tmMgrWindow.width - 110 * cfg->ui_scale, tm_y + 30 * cfg->ui_scale, 100 * cfg->ui_scale, 26 * cfg->ui_scale}, "Pull Data"))
+            if (GuiButton((Rectangle){tm_x + tmMgrWindow.width - 110 * cfg->ui_scale, tm_y + 30 * cfg->ui_scale, 100 * cfg->ui_scale, 26 * cfg->ui_scale}, "Apply"))
             {
                 PullTLEData(ctx, cfg);
             }
@@ -3103,7 +3103,28 @@ case WND_SCOPE:
 
                 Rectangle contentRec = {0, 0, satInfoWindow.width - 32 * cfg->ui_scale, 580 * cfg->ui_scale};
                 Rectangle viewRec = {0};
-                GuiScrollPanel((Rectangle){si_x + 8 * cfg->ui_scale, si_y + 35 * cfg->ui_scale, satInfoWindow.width - 16 * cfg->ui_scale, satInfoWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &si_scroll, &viewRec);
+
+                int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
+                int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
+                int oldFocusL = GuiGetStyle(LISTVIEW, BORDER_COLOR_FOCUSED);
+                int oldPressL = GuiGetStyle(LISTVIEW, BORDER_COLOR_PRESSED);
+                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
+                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+
+                GuiScrollPanel(
+                    (Rectangle){si_x + 8 * cfg->ui_scale, si_y + 35 * cfg->ui_scale, satInfoWindow.width - 16 * cfg->ui_scale, satInfoWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale},
+                    NULL,
+                    contentRec,
+                    &si_scroll,
+                    &viewRec
+                );
+
+                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, oldFocusD);
+                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, oldPressD);
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, oldFocusL);
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, oldPressL);
 
                 BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
                 float cur_x = viewRec.x + 4 * cfg->ui_scale + si_scroll.x;
