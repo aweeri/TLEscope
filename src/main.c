@@ -439,21 +439,28 @@ int main(void)
     LoadAppConfig("settings.json", &cfg);
 
     /* window setup and msaa */
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
     InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+
+    /* adjust ui scale based on monitor dpi */
+    Vector2 dpi_scale = GetWindowScaleDPI();
+    float max_dpi = fmaxf(dpi_scale.x, dpi_scale.y);
+    if (max_dpi > 0.0f) cfg.ui_scale *= max_dpi;
 
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
     int max_h = GetMonitorHeight(monitor);
+    int current_w = GetScreenWidth();
+    int current_h = GetScreenHeight();
 
-    if (cfg.window_width >= max_w || cfg.window_height >= max_h)
+    if (current_w >= max_w || current_h >= max_h)
     {
         SetWindowState(FLAG_WINDOW_MAXIMIZED);
     }
     else
     {
         Vector2 monitorPos = GetMonitorPosition(monitor);
-        SetWindowPosition((int)monitorPos.x + (max_w - cfg.window_width) / 2, (int)monitorPos.y + (max_h - cfg.window_height) / 2);
+        SetWindowPosition((int)monitorPos.x + (max_w - current_w) / 2, (int)monitorPos.y + (max_h - current_h) / 2);
     }
 
     SetExitKey(0);
