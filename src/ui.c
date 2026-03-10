@@ -433,7 +433,8 @@ static void *PullTLEThread(void *arg)
 
     pull_partial = (ok_count > 0 && fail_count > 0);
     __sync_synchronize(); /* ensure pull_partial is visible before pull_state on ARM */
-    pull_state = (ok_count > 0) ? PULL_DONE : PULL_ERROR;
+    if (fail_count > 0 && ok_count == 0) pull_state = PULL_ERROR;
+    else pull_state = PULL_DONE;
     return NULL;
 }
 
