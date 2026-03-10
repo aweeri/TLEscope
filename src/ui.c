@@ -23,6 +23,12 @@ typedef struct tagMSG *LPMSG;
 
 //TODO: explain better what in gods name happened above
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <process.h>
+#else
+#include <pthread.h>
+#endif
+
 #define RAYGUI_IMPLEMENTATION
 #include "../lib/raygui.h"
 
@@ -155,6 +161,16 @@ static bool other_expanded = false;
 static bool manual_expanded = true;
 static bool celestrak_selected[25] = {false};
 static long data_tle_epoch = -1;
+
+enum { PULL_IDLE = 0, PULL_BUSY, PULL_DONE, PULL_ERROR };
+static volatile int pull_state = PULL_IDLE;
+static volatile bool pull_partial = false;
+static AppConfig *pull_cfg = NULL;
+#if defined(_WIN32) || defined(_WIN64)
+static HANDLE pull_thread = NULL;
+#else
+static pthread_t pull_thread;
+#endif
 
 static char new_tle_buf[512] = "";
 static bool edit_new_tle = false;
@@ -311,9 +327,9 @@ static size_t write_memory_callback(void *contents, size_t size, size_t nmemb, v
     return realsize;
 }
 
-static void DownloadTLESource(CURL *curl, const char *url, FILE *out)
+static bool DownloadTLESource(CURL *curl, const char *url, FILE *out)
 {
-    if (!curl || !url || !out) return;
+    if (!curl || !url || !out) return false;
 
     struct MemoryStruct chunk;
     chunk.memory = malloc(1);
@@ -323,7 +339,7 @@ static void DownloadTLESource(CURL *curl, const char *url, FILE *out)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, ""); // handle compression
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, ""); /* handle compression */
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla 5.0 (compatible; TLEscope/3.X; +https://github.com/aweeri/TLEscope)"); //TODO: add version whenever aval internally
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -334,7 +350,8 @@ static void DownloadTLESource(CURL *curl, const char *url, FILE *out)
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
-    if (res == CURLE_OK && http_code == 200)
+    bool ok = (res == CURLE_OK && http_code == 200);
+    if (ok)
     {
         fwrite(chunk.memory, 1, chunk.size, out);
         fprintf(out, "\r\n");
@@ -345,6 +362,7 @@ static void DownloadTLESource(CURL *curl, const char *url, FILE *out)
     }
 
     free(chunk.memory);
+    return ok;
 }
 
 static void ReloadTLEsLocally(UIContext *ctx, AppConfig *cfg)
@@ -365,45 +383,88 @@ static void ReloadTLEsLocally(UIContext *ctx, AppConfig *cfg)
     LoadSatSelection();
 }
 
-static void PullTLEData(UIContext *ctx, AppConfig *cfg)
+/* background thread: downloads all selected TLE sources to data.tle */
+static void *PullTLEThread(void *arg)
 {
+    (void)arg;
+    AppConfig *cfg = pull_cfg;
+
     FILE *out = fopen("data.tle", "wb");
-    if (out)
+    if (!out)
     {
-        unsigned int mask = 0, ret_mask = 0, cust_mask = 0;
-        for (int i = 0; i < 25; i++)
-            if (celestrak_selected[i]) mask |= (1 << i);
+        pull_state = PULL_ERROR;
+        return NULL;
+    }
+
+    unsigned int mask = 0, ret_mask = 0, cust_mask = 0;
+    for (int i = 0; i < 25; i++)
+        if (celestrak_selected[i]) mask |= (1 << i);
+    for (int i = 0; i < NUM_RETLECTOR_SOURCES; i++)
+        if (retlector_selected[i]) ret_mask |= (1 << i);
+    for (int i = 0; i < cfg->custom_tle_source_count; i++)
+        if (cfg->custom_tle_sources[i].selected) cust_mask |= (1 << i);
+
+    fprintf(out, "# EPOCH:%ld MASK:%u CUST_MASK:%u RET_MASK:%u\r\n", (long)time(NULL), mask, cust_mask, ret_mask);
+
+    int ok_count = 0, fail_count = 0;
+    CURL *curl = curl_easy_init();
+    if (curl)
+    {
         for (int i = 0; i < NUM_RETLECTOR_SOURCES; i++)
-            if (retlector_selected[i]) ret_mask |= (1 << i);
+            if (ret_mask & (1 << i))
+            { if (DownloadTLESource(curl, RETLECTOR_SOURCES[i].url, out)) ok_count++; else fail_count++; }
+
+        for (int i = 0; i < 25; i++)
+            if (mask & (1 << i))
+            { if (DownloadTLESource(curl, SOURCES[i].url, out)) ok_count++; else fail_count++; }
+
         for (int i = 0; i < cfg->custom_tle_source_count; i++)
-            if (cfg->custom_tle_sources[i].selected) cust_mask |= (1 << i);
+            if (cust_mask & (1 << i))
+            { if (DownloadTLESource(curl, cfg->custom_tle_sources[i].url, out)) ok_count++; else fail_count++; }
 
-        fprintf(out, "# EPOCH:%ld MASK:%u CUST_MASK:%u RET_MASK:%u\r\n", (long)time(NULL), mask, cust_mask, ret_mask);
+        curl_easy_cleanup(curl);
+    }
+    else
+    {
+        printf("Failed to initialize libcurl.\n");
+    }
 
-        CURL *curl = curl_easy_init();
-        if (curl)
-        {
-            for (int i = 0; i < NUM_RETLECTOR_SOURCES; i++)
-                if (retlector_selected[i])
-                    DownloadTLESource(curl, RETLECTOR_SOURCES[i].url, out);
+    fclose(out);
 
-            for (int i = 0; i < 25; i++)
-                if (celestrak_selected[i])
-                    DownloadTLESource(curl, SOURCES[i].url, out);
+    pull_partial = (ok_count > 0 && fail_count > 0);
+    __sync_synchronize(); /* ensure pull_partial is visible before pull_state on ARM */
+    pull_state = (ok_count > 0) ? PULL_DONE : PULL_ERROR;
+    return NULL;
+}
 
-            for (int i = 0; i < cfg->custom_tle_source_count; i++)
-                if (cfg->custom_tle_sources[i].selected)
-                    DownloadTLESource(curl, cfg->custom_tle_sources[i].url, out);
+#if defined(_WIN32) || defined(_WIN64)
+static void PullTLEThreadWin(void *arg) { PullTLEThread(arg); }
+#endif
 
-            curl_easy_cleanup(curl);
-        }
-        else
-        {
-            printf("Failed to initialize libcurl.\n");
-        }
+/* called from main thread to kick off async pull */
+static void PullTLEData(AppConfig *cfg)
+{
+    if (pull_state == PULL_BUSY) return;
+    pull_state = PULL_BUSY;
+    pull_partial = false;
+    pull_cfg = cfg;
 
-        fclose(out);
+#if defined(_WIN32) || defined(_WIN64)
+    uintptr_t h = _beginthread(PullTLEThreadWin, 0, NULL);
+    if (h == (uintptr_t)-1L) { pull_state = PULL_ERROR; return; }
+    pull_thread = (HANDLE)h;
+#else
+    if (pthread_create(&pull_thread, NULL, PullTLEThread, NULL) != 0)
+    { pull_state = PULL_ERROR; return; }
+    pthread_detach(pull_thread);
+#endif
+}
 
+/* called each frame from DrawGUI to finish reload on the main thread */
+static void FinishPullIfDone(UIContext *ctx, AppConfig *cfg)
+{
+    if (pull_state == PULL_DONE)
+    {
         if (ctx)
         {
             *ctx->selected_sat = NULL;
@@ -424,6 +485,7 @@ static void PullTLEData(UIContext *ctx, AppConfig *cfg)
         }
         LoadSatSelection();
         data_tle_epoch = time(NULL);
+        pull_state = PULL_IDLE;
     }
 }
 
@@ -968,6 +1030,8 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 /* main ui rendering loop */
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 {
+    FinishPullIfDone(ctx, cfg);
+
     *ctx->show_scope = show_scope_dialog;
     *ctx->scope_az = scope_az;
     *ctx->scope_el = scope_el;
@@ -1599,9 +1663,17 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             }
             DrawUIText(customFont, age_str, tm_x + 10 * cfg->ui_scale, tm_y + 35 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
 
-            if (GuiButton((Rectangle){tm_x + tmMgrWindow.width - 110 * cfg->ui_scale, tm_y + 30 * cfg->ui_scale, 100 * cfg->ui_scale, 26 * cfg->ui_scale}, "Apply"))
             {
-                PullTLEData(ctx, cfg);
+                const char *btn_label = "Apply";
+                if (pull_state == PULL_BUSY) btn_label = "Pulling..";
+                else if (pull_state == PULL_ERROR) btn_label = "Error";
+                else if (pull_partial) btn_label = "Partial";
+                if (pull_state == PULL_BUSY) GuiDisable();
+                if (GuiButton((Rectangle){tm_x + tmMgrWindow.width - 110 * cfg->ui_scale, tm_y + 30 * cfg->ui_scale, 100 * cfg->ui_scale, 26 * cfg->ui_scale}, btn_label))
+                {
+                    PullTLEData(cfg);
+                }
+                if (pull_state == PULL_BUSY) GuiEnable();
             }
 
             float total_height = 28 * cfg->ui_scale + (retlector_expanded ? NUM_RETLECTOR_SOURCES * 25 * cfg->ui_scale : 0);
@@ -3205,10 +3277,13 @@ case WND_SCOPE:
         float spacing = 15 * cfg->ui_scale;
         float startX = tleWarnWindow.x + (tleWarnWindow.width - (3 * btnWidth + 2 * spacing)) / 2.0f;
 
-        if (GuiButton((Rectangle){startX, tleWarnWindow.y + 105 * cfg->ui_scale, btnWidth, 35 * cfg->ui_scale}, "#112# Update All")) {
-            PullTLEData(ctx, cfg);
+        if (pull_state == PULL_BUSY) GuiDisable();
+        if (GuiButton((Rectangle){startX, tleWarnWindow.y + 105 * cfg->ui_scale, btnWidth, 35 * cfg->ui_scale},
+            pull_state == PULL_BUSY ? "Pulling.." : "#112# Update All")) {
+            PullTLEData(cfg);
             show_tle_warning = false;
         }
+        if (pull_state == PULL_BUSY) GuiEnable();
         if (GuiButton((Rectangle){startX + btnWidth + spacing, tleWarnWindow.y + 105 * cfg->ui_scale, btnWidth, 35 * cfg->ui_scale}, "#1# Manage")) {
             show_tle_warning = false;
             if (!show_tle_mgr_dialog) {
