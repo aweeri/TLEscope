@@ -1,9 +1,9 @@
 ## TLEscope Feature Roadmap
 
+You can see the status of lesser bug reports and feature requests over at our discord server.
+<a href="https://discord.gg/uDmNsuZR4W"><img src="https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a> 
+
 ### Pass predictor
-- [x] viewing future passes on per-sat basis
-- [x] smooth timewarp until AOS button
-- [x] viewing all nearest passes over a marker
 - [x] button for doppler effect graphing of a given frequency with a csv export function of variable resolution
 - [ ] allow narrowing the area of interest; for example, only list passes that are in range and in the western side of the polar plot.
 ### TLE management
@@ -11,13 +11,14 @@
 - [ ] spacetrack puller
 - [x] custom source puller
 - [x] satellites list with toggles
-- [x] satellite search with a click to target feature
-- [x] selection persistence across sessions
+- [ ] rework the TLE manager and implement new data entry formats in accordance with https://celestrak.org/NORAD/documentation/gp-data-formats.php
+
 ### Antenna helpers
-- [ ] antenna rotator support
-- [ ] satellite finder with a window showing satellites in view;
-takes manual/rotator feedback az/el values and manual beam width and projects satellites onto a window. in addition to this when active, display the effective beam in 3d mode
+- [ ] antenna rotator controller window
+- [x] satellite finder with a window showing satellites in view;
+takes manual feedback az/el values and manual beam width and projects satellites onto a window. in addition to this when active, display the effective beam in 3d mode
+- [ ] rotator control takes over satellite scope when connected  
 
 ### Graphics
 - [ ] bundle more themes
-- [ ] make UIs more pleasing to look at
+- [ ] Improve UX (this will never be checked off the list is my guess)

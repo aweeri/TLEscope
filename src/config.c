@@ -461,6 +461,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             PARSE_COLOR("ui_secondary", ui_secondary);
             PARSE_COLOR("ui_accent", ui_accent);
 
+            PARSE_COLOR("scope_bg", scope_bg);
+            PARSE_COLOR("scope_horizon", scope_horizon);
+            PARSE_COLOR("overlay_dim", overlay_dim);
+
             UnloadFileText(theme_text);
         }
     }

@@ -2795,7 +2795,7 @@ case WND_SCOPE:
             *ctx->scope_beam = scope_beam;
 
             /* draw the viewfinder and horizon grid */
-            DrawCircleV(center, scope_radius, (Color){10, 15, 25, 255});
+            DrawCircleV(center, scope_radius, cfg->scope_bg);
 
             for (int y = (int)(center.y - scope_radius); y <= (int)(center.y + scope_radius); y++) {
                 float dy_screen = y - center.y; 
@@ -2805,7 +2805,7 @@ case WND_SCOPE:
                 // shade area below horizon
                 if (approx_el < 0) {
                     float half_width = sqrtf(fmaxf(0.0f, scope_radius * scope_radius - dy_screen * dy_screen));
-                    DrawLine((int)(center.x - half_width), y, (int)(center.x + half_width), y, (Color){45, 30, 20, 255});
+                    DrawLine((int)(center.x - half_width), y, (int)(center.x + half_width), y, cfg->scope_horizon);
                 }
             }
 
@@ -3224,7 +3224,7 @@ case WND_SCOPE:
 
     if (cfg->show_first_run_dialog)
     {
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 180});
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), cfg->overlay_dim);
         Rectangle frRec = {(GetScreenWidth() - 520 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 240 * cfg->ui_scale) / 2.0f, 520 * cfg->ui_scale, 240 * cfg->ui_scale};
         DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont);
         
@@ -3401,7 +3401,7 @@ case WND_SCOPE:
 
     if (show_exit_dialog)
     {
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 150});
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), ApplyAlpha(cfg->overlay_dim, 150.0f / 180.0f));
         Rectangle exitRec = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 140 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 140 * cfg->ui_scale};
         if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont))
             show_exit_dialog = false;

@@ -223,7 +223,10 @@ static AppConfig cfg = {
     .theme = "default",
     .ui_primary = {32, 32, 32, 255},
     .ui_secondary = {64, 64, 64, 255},
-    .ui_accent = {0, 255, 0, 255}
+    .ui_accent = {0, 255, 0, 255},
+    .scope_bg = {10, 15, 25, 255},
+    .scope_horizon = {45, 30, 20, 255},
+    .overlay_dim = {0, 0, 0, 180}
 };
 
 static Font customFont;

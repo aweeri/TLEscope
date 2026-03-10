@@ -14,5 +14,8 @@
     "footprint_border": "#FFFFFF88",
     "ui_primary": "#202020FF",
     "ui_secondary": "#404040FF",
-    "ui_accent": "#66FF66FF"
+    "ui_accent": "#66FF66FF",
+    "scope_bg": "#0A0F19FF",
+    "scope_horizon": "#2D1E14FF",
+    "overlay_dim": "#000000B4"
 }

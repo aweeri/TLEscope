@@ -109,6 +109,9 @@ typedef struct
     Color ui_primary;
     Color ui_secondary;
     Color ui_accent;
+    Color scope_bg;
+    Color scope_horizon;
+    Color overlay_dim;
 } AppConfig;
 
 #endif // TYPES_H
