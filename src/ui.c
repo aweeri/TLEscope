@@ -2770,13 +2770,9 @@ case WND_SCOPE:
 
             float h_lat_rad = home_location.lat * DEG2RAD;
             float h_lon_rad = (home_location.lon + ctx->gmst_deg) * DEG2RAD;
-            float obs_rad = EARTH_RADIUS_KM + home_location.alt / 1000.0f;
-            
-            Vector3 O_eci = {
-                cosf(h_lat_rad) * cosf(h_lon_rad) * obs_rad,
-                sinf(h_lat_rad) * obs_rad,
-                -cosf(h_lat_rad) * sinf(h_lon_rad) * obs_rad
-            };
+            double ecef_x, ecef_y, ecef_z;
+            geodetic_to_ecef(home_location.lat, home_location.lon + ctx->gmst_deg, home_location.alt, &ecef_x, &ecef_y, &ecef_z);
+            Vector3 O_eci = { (float)ecef_x, (float)ecef_z, (float)-ecef_y };
 
             Vector3 up = Vector3Normalize(O_eci);
             Vector3 east = {-sinf(h_lon_rad), 0.0f, -cosf(h_lon_rad)};

@@ -37,7 +37,7 @@ Vector3 calculate_moon_position(double current_time_days);
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset,
                   float map_w, float map_h, Vector2 *out);
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix);
-
+void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, double *oy, double *oz);
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el);
 void CalculatePasses(Satellite *sat, double start_epoch);
 void epoch_to_time_str(double epoch, char *str);

@@ -14,6 +14,23 @@
 
 #include <raymath.h>
 
+/* WGS-84 ellipsoid constants */
+#define WGS84_A  6378.137
+#define WGS84_E2 0.00669437999014
+
+/* geodetic lat/lon/alt to ECEF using WGS-84 instead of spherical earth */
+void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, double *oy, double *oz)
+{
+    double lat = lat_deg * DEG2RAD;
+    double lon = lon_deg * DEG2RAD;
+    double sin_lat = sin(lat), cos_lat = cos(lat);
+    double alt_km = alt_m / 1000.0;
+    double N = WGS84_A / sqrt(1.0 - WGS84_E2 * sin_lat * sin_lat);
+    *ox = (N + alt_km) * cos_lat * cos(lon);
+    *oy = (N + alt_km) * cos_lat * sin(lon);
+    *oz = (N * (1.0 - WGS84_E2) + alt_km) * sin_lat;
+}
+
 Satellite satellites[MAX_SATELLITES];
 int sat_count = 0;
 
@@ -399,19 +416,15 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, f
     double s_y = sat_r * cos(sat_lat) * sin(sat_lon_ecef);
     double s_z = sat_r * sin(sat_lat);
 
-    double lat_rad = obs_lat * DEG2RAD;
-    double lon_rad = obs_lon * DEG2RAD;
-
-    double obs_rad = EARTH_RADIUS_KM + obs_alt / 1000.0;
-
-    double o_x = obs_rad * cos(lat_rad) * cos(lon_rad);
-    double o_y = obs_rad * cos(lat_rad) * sin(lon_rad);
-    double o_z = obs_rad * sin(lat_rad);
+    double o_x, o_y, o_z;
+    geodetic_to_ecef(obs_lat, obs_lon, obs_alt, &o_x, &o_y, &o_z);
 
     double dx = s_x - o_x;
     double dy = s_y - o_y;
     double dz = s_z - o_z;
 
+    double lat_rad = obs_lat * DEG2RAD;
+    double lon_rad = obs_lon * DEG2RAD;
     double clat = cos(lat_rad);
     double slat = sin(lat_rad);
     double clon = cos(lon_rad);
@@ -724,15 +737,9 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
     double s_y = -eci.x * sin_t - eci.z * cos_t;
     double s_z = eci.y;
 
-    /* observer ECEF calc */
-    double lat_rad = obs.lat * DEG2RAD;
-    double lon_rad = obs.lon * DEG2RAD;
-    double obs_rad = EARTH_RADIUS_KM + obs.alt / 1000.0;
-
-    double cos_lat = cos(lat_rad);
-    double o_x = obs_rad * cos_lat * cos(lon_rad);
-    double o_y = obs_rad * cos_lat * sin(lon_rad);
-    double o_z = obs_rad * sin(lat_rad);
+    /* observer ECEF (WGS-84 ellipsoid) */
+    double o_x, o_y, o_z;
+    geodetic_to_ecef(obs.lat, obs.lon, obs.alt, &o_x, &o_y, &o_z);
 
     /* dist */
     double dx = s_x - o_x;
