@@ -1,0 +1,23 @@
+{
+    "bg_color": "#0E1220FF",
+    "orbit_normal": "#E0E7FF33",
+    "orbit_highlighted": "#F9FAFBFF",
+    "sat_normal": "#F9FAFBCC",
+    "sat_highlighted": "#FBBF24FF",
+    "sat_selected": "#34D399FF",
+    "text_main": "#E5E7EBFF",
+    "text_secondary": "#9CA3AFFF",
+    "ui_bg": "#020617CC",
+    "periapsis": "#38BDF8FF",
+    "apoapsis": "#F97316FF",
+    "footprint_bg": "#E5E7EB22",
+    "footprint_border": "#E5E7EB88",
+    "ui_primary": "#0B1120FF",
+    "ui_secondary": "#111827FF",
+    "ui_accent": "#F472B6FF",
+    "window_border": "#94A3B8FF",
+    "window_border_focus": "#F472B6FF",
+    "scope_bg": "#020617FF",
+    "scope_horizon": "#1F2933FF",
+    "overlay_dim": "#000000B4"
+}

@@ -460,6 +460,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             PARSE_COLOR("ui_primary", ui_primary);
             PARSE_COLOR("ui_secondary", ui_secondary);
             PARSE_COLOR("ui_accent", ui_accent);
+            PARSE_COLOR("window_border", window_border);
+            PARSE_COLOR("window_border_focus", window_border_focus);
 
             PARSE_COLOR("scope_bg", scope_bg);
             PARSE_COLOR("scope_horizon", scope_horizon);

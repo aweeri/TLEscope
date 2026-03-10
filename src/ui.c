@@ -231,6 +231,7 @@ static float scope_beam = 30.0f;
 
 static bool scope_drag_active = false;
 static Vector2 scope_drag_last = {0};
+static bool scope_drag_moved = false;
 
 static char text_scope_az[16] = "180.0";
 static char text_scope_el[16] = "45.0";
@@ -927,9 +928,9 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
     DrawRectangleRounded(bounds, 0.05f, 16, cfg->ui_primary);
 
 #if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(bounds, 0.05f, 16, 1.5f * scale, cfg->ui_secondary);
+    DrawRectangleRoundedLines(bounds, 0.05f, 16, 1.5f * scale, cfg->window_border);
 #else
-    DrawRectangleRoundedLines(bounds, 0.05f, 16, cfg->ui_secondary);
+    DrawRectangleRoundedLines(bounds, 0.05f, 16, cfg->window_border);
 #endif
 
     const char *titleText = title;
@@ -943,7 +944,7 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 
     DrawUIText(font, titleText, bounds.x + 12 * scale, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
 
-    DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->ui_secondary);
+    DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->window_border);
 
     float btn_size = header_h - 8 * scale;
     Rectangle closeBtn = {bounds.x + bounds.width - btn_size - 6 * scale, bounds.y + 4 * scale, btn_size, btn_size};
@@ -955,7 +956,7 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
         DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(RED, 0.8f));
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
     } else {
-        DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(cfg->ui_secondary, 0.3f));
+        DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(cfg->window_border, 0.3f));
     }
     
     float pad = closeBtn.width * 0.3f;
@@ -1251,10 +1252,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     GuiSetStyle(DEFAULT, BASE_COLOR_PRESSED, ColorToInt(cfg->ui_accent));
     GuiSetStyle(DEFAULT, BASE_COLOR_DISABLED, ColorToInt(cfg->ui_primary));
 
-    GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, ColorToInt(cfg->ui_secondary));
-    GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_accent));
-    GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_accent));
-    GuiSetStyle(DEFAULT, BORDER_COLOR_DISABLED, ColorToInt(cfg->ui_secondary));
+    GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, ColorToInt(cfg->window_border));
+    GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+    GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
+    GuiSetStyle(DEFAULT, BORDER_COLOR_DISABLED, ColorToInt(cfg->window_border));
 
     GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(cfg->text_main));
     GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED, ColorToInt(cfg->text_main));
@@ -1263,8 +1264,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     GuiSetStyle(CHECKBOX, TEXT_PADDING, 8 * cfg->ui_scale);
 
-    GuiSetStyle(TEXTBOX, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-    GuiSetStyle(TEXTBOX, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+    GuiSetStyle(TEXTBOX, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+    GuiSetStyle(TEXTBOX, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_FOCUSED, ColorToInt(cfg->text_main));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_PRESSED, ColorToInt(cfg->text_main));
     GuiSetStyle(TEXTBOX, BASE_COLOR_PRESSED, ColorToInt(cfg->ui_primary));
@@ -1320,8 +1321,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             DrawUIText(customFont, TextFormat("Apo: %.0f km", real_ra - EARTH_RADIUS_KM), apoScreen.x + x_offset, apoScreen.y - y_offset, text_size, cfg->apoapsis);
     }
 
-    int normal_border = ColorToInt(cfg->ui_secondary);
-    int accent_border = ColorToInt(cfg->ui_accent);
+    int normal_border = ColorToInt(cfg->window_border);
+    int accent_border = ColorToInt(cfg->window_border_focus);
 
     float buttons_w = (5 * 35 - 5) * cfg->ui_scale;
     float center_x_bottom = (GetScreenWidth() - buttons_w) / 2.0f;
@@ -1616,10 +1617,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
             int oldFocusL = GuiGetStyle(LISTVIEW, BORDER_COLOR_FOCUSED);
             int oldPressL = GuiGetStyle(LISTVIEW, BORDER_COLOR_PRESSED);
-            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
 
             GuiScrollPanel((Rectangle){tm_x + 8 * cfg->ui_scale, tm_y + 65 * cfg->ui_scale, tmMgrWindow.width - 16 * cfg->ui_scale, tmMgrWindow.height - 65 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &tle_mgr_scroll, &viewRec);
 
@@ -1853,10 +1854,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
                 int oldFocusL = GuiGetStyle(LISTVIEW, BORDER_COLOR_FOCUSED);
                 int oldPressL = GuiGetStyle(LISTVIEW, BORDER_COLOR_PRESSED);
-                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
 
                 GuiScrollPanel((Rectangle){sm_x + 8 * cfg->ui_scale, sm_y + 70 * cfg->ui_scale, smWindow.width - 16 * cfg->ui_scale, smWindow.height - 70 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &sat_mgr_scroll, &viewRec);
 
@@ -1946,8 +1947,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
             int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
-            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
 
             GuiScrollPanel((Rectangle){hw_x + 8 * cfg->ui_scale, hw_y + 35 * cfg->ui_scale, helpWindow.width - 16 * cfg->ui_scale, helpWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &help_scroll, &viewRec);
 
@@ -2281,10 +2282,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
             int oldFocusL = GuiGetStyle(LISTVIEW, BORDER_COLOR_FOCUSED);
             int oldPressL = GuiGetStyle(LISTVIEW, BORDER_COLOR_PRESSED);
-            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-            GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+            GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
 
             GuiScrollPanel((Rectangle){passesWindow.x + 8 * cfg->ui_scale, passesWindow.y + 60 * cfg->ui_scale, passesWindow.width - 16 * cfg->ui_scale, passesWindow.height - 60 * cfg->ui_scale - 8 * cfg->ui_scale}, NULL, contentRec, &passes_scroll, &viewRec);
 
@@ -2747,12 +2748,14 @@ case WND_SCOPE:
                     if (!scope_drag_active && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && dist <= scope_radius)
                     {
                         scope_drag_active = true;
+                        scope_drag_moved = false;
                         scope_drag_last = mouse;
                     }
                     if (scope_drag_active && IsMouseButtonDown(MOUSE_LEFT_BUTTON))
                     {
                         Vector2 cur = mouse;
                         Vector2 delta = Vector2Subtract(cur, scope_drag_last);
+                        if (fabsf(delta.x) > 1.0f || fabsf(delta.y) > 1.0f) scope_drag_moved = true;
                         scope_drag_last = cur;
 
                         /* map pixels to angular offsets based on current beam */
@@ -2772,7 +2775,10 @@ case WND_SCOPE:
                 }
 
                 if (scope_drag_active && IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+                {
                     scope_drag_active = false;
+                    scope_drag_moved = false;
+                }
 
                 /* scroll wheel over viewfinder changes beam width */
                 if (dist <= scope_radius)
@@ -2892,14 +2898,16 @@ case WND_SCOPE:
                     
                     Vector2 dot_pos = { center.x + r_dist * cosf(angle), center.y + r_dist * sinf(angle) };
 
-                    // figure out what color the dot should be
+                    // Figure out dot colors for better contrast in dark scope themes.
+                    // Inactive satellites use text_secondary instead of ui_secondary
+                    // to keep them visibly muted but not lost in the background.
                     Color dotColor = WHITE;
                     if (cfg->highlight_sunlit) {
                         bool eclipsed = is_sat_eclipsed(sat_pos, sun_dir);
                         dotColor = eclipsed ? GRAY : GOLD;
-                        if (!satellites[i].is_active) dotColor = ApplyAlpha(dotColor, 0.4f);
+                        if (!satellites[i].is_active) dotColor = ApplyAlpha(dotColor, 0.65f);
                     } else {
-                        dotColor = satellites[i].is_active ? cfg->ui_accent : cfg->ui_secondary;
+                        dotColor = satellites[i].is_active ? cfg->ui_accent : ApplyAlpha(cfg->text_secondary, 0.9f);
                     }
 
                     if (*ctx->selected_sat == &satellites[i]) {
@@ -2952,7 +2960,7 @@ case WND_SCOPE:
 
             /* render tooltip for hovered satellite */
             if (hover_sat_scope && is_topmost) {
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !scope_drag_active && !scope_drag_moved) {
                     *ctx->selected_sat = hover_sat_scope;
                 }
                 char tt[128];
@@ -3108,10 +3116,10 @@ case WND_SCOPE:
                 int oldPressD = GuiGetStyle(DEFAULT, BORDER_COLOR_PRESSED);
                 int oldFocusL = GuiGetStyle(LISTVIEW, BORDER_COLOR_FOCUSED);
                 int oldPressL = GuiGetStyle(LISTVIEW, BORDER_COLOR_PRESSED);
-                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->ui_secondary));
-                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_secondary));
+                GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
+                GuiSetStyle(LISTVIEW, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
 
                 GuiScrollPanel(
                     (Rectangle){si_x + 8 * cfg->ui_scale, si_y + 35 * cfg->ui_scale, satInfoWindow.width - 16 * cfg->ui_scale, satInfoWindow.height - 35 * cfg->ui_scale - 8 * cfg->ui_scale},

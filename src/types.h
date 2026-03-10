@@ -109,6 +109,8 @@ typedef struct
     Color ui_primary;
     Color ui_secondary;
     Color ui_accent;
+    Color window_border;
+    Color window_border_focus;
     Color scope_bg;
     Color scope_horizon;
     Color overlay_dim;
