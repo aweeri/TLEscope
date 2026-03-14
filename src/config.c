@@ -39,7 +39,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_slant_range = false; // default
     config->show_scattering = false;  // default
     config->show_first_run_dialog = false; //default
-    config->hint_vsync = false;       // default
+    config->hint_vsync = true;       // default
     config->custom_tle_source_count = 0;
 
     if (FileExists(filename))
@@ -397,7 +397,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->highlight_sunlit = false;
         config->show_slant_range = false;
         config->show_scattering = false;
-        config->hint_vsync = false;
+        config->hint_vsync = true;
         sscanf("Home", "%63[^\"]", home_location.name);
         home_location.lat = 0.00;
         home_location.lon = 0.00;

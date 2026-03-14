@@ -1310,6 +1310,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* configure raygui global styles */
     GuiSetFont(customFont);
+    GuiSetIconScale((int)fmaxf(1.0f, roundf(cfg->ui_scale)));
     GuiSetStyle(DEFAULT, TEXT_SIZE, 16 * cfg->ui_scale);
     GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToInt(cfg->ui_primary));
     GuiSetStyle(DEFAULT, LINE_COLOR, ColorToInt(cfg->ui_secondary));
@@ -2192,7 +2193,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 home_location.alt = atof(text_hl_alt);
                 cfg->target_fps = atoi(text_fps);
                 if (cfg->target_fps < 1) cfg->target_fps = 60;
-                SetTargetFPS(cfg->target_fps);
+                if (!cfg->hint_vsync) SetTargetFPS(cfg->target_fps);
+                else SetTargetFPS(0);
                 SaveAppConfig("settings.json", cfg);
                 if (show_passes_dialog)
                 {
@@ -3336,36 +3338,50 @@ case WND_SCOPE:
         Rectangle perfBtnRec = {startX, frRec.y + 90 * cfg->ui_scale, btnW, btnH};
         bool perfClicked = GuiButton(perfBtnRec, "");
         Vector2 pTitleSize = MeasureTextEx(customFont, "Performance", 16 * cfg->ui_scale, 1.0f);
-        Vector2 pSubSize = MeasureTextEx(customFont, "(60 FPS, Low VFX)", 14 * cfg->ui_scale, 1.0f);
+        Vector2 pSubSize = MeasureTextEx(customFont, "(Low VFX)", 14 * cfg->ui_scale, 1.0f);
         DrawUIText(customFont, "Performance", perfBtnRec.x + (perfBtnRec.width - pTitleSize.x) / 2.0f, perfBtnRec.y + 8 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
-        DrawUIText(customFont, "(60 FPS, Low VFX)", perfBtnRec.x + (perfBtnRec.width - pSubSize.x) / 2.0f, perfBtnRec.y + 26 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_secondary);
+        DrawUIText(customFont, "(Low VFX)", perfBtnRec.x + (perfBtnRec.width - pSubSize.x) / 2.0f, perfBtnRec.y + 26 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_secondary);
 
         if (perfClicked) {
             cfg->show_clouds = false;
             cfg->show_scattering = false;
             cfg->show_night_lights = true;
             cfg->target_fps = 60;
+            cfg->hint_vsync = true;
             cfg->show_first_run_dialog = false;
-            SetTargetFPS(cfg->target_fps);
+            if (!cfg->hint_vsync) SetTargetFPS(cfg->target_fps);
+            else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
+            if (!show_help) {
+                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                show_help = true;
+                BringToFront(WND_HELP);
+            }
             if (data_tle_epoch > 0 && time(NULL) - data_tle_epoch > 2 * 86400) show_tle_warning = true;
         }
 
         Rectangle aesBtnRec = {startX + btnW + spacing, frRec.y + 90 * cfg->ui_scale, btnW, btnH};
         bool aesClicked = GuiButton(aesBtnRec, "");
         Vector2 aTitleSize = MeasureTextEx(customFont, "Aesthetic", 16 * cfg->ui_scale, 1.0f);
-        Vector2 aSubSize = MeasureTextEx(customFont, "(120 FPS, High VFX)", 14 * cfg->ui_scale, 1.0f);
+        Vector2 aSubSize = MeasureTextEx(customFont, "(High VFX)", 14 * cfg->ui_scale, 1.0f);
         DrawUIText(customFont, "Aesthetic", aesBtnRec.x + (aesBtnRec.width - aTitleSize.x) / 2.0f, aesBtnRec.y + 8 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
-        DrawUIText(customFont, "(120 FPS, High VFX)", aesBtnRec.x + (aesBtnRec.width - aSubSize.x) / 2.0f, aesBtnRec.y + 26 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_secondary);
+        DrawUIText(customFont, "(High VFX)", aesBtnRec.x + (aesBtnRec.width - aSubSize.x) / 2.0f, aesBtnRec.y + 26 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_secondary);
 
         if (aesClicked) {
             cfg->show_clouds = true;
             cfg->show_scattering = true;
             cfg->show_night_lights = true;
             cfg->target_fps = 120;
+            cfg->hint_vsync = true;
             cfg->show_first_run_dialog = false;
-            SetTargetFPS(cfg->target_fps);
+            if (!cfg->hint_vsync) SetTargetFPS(cfg->target_fps);
+            else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
+            if (!show_help) {
+                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                show_help = true;
+                BringToFront(WND_HELP);
+            }
             if (data_tle_epoch > 0 && time(NULL) - data_tle_epoch > 2 * 86400) show_tle_warning = true;
         }
         

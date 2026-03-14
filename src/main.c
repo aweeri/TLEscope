@@ -634,7 +634,9 @@ int main(void)
     TargetLock active_lock = LOCK_EARTH;
     double last_left_click_time = 0.0;
 
-    SetTargetFPS(cfg.target_fps);
+    if (!cfg.hint_vsync) SetTargetFPS(cfg.target_fps);
+    else SetTargetFPS(0);
+    
     int current_update_idx = 0;
 
     /* main loop */
@@ -879,8 +881,16 @@ int main(void)
         /* vsync config check */
         if (cfg.hint_vsync != IsWindowState(FLAG_VSYNC_HINT))
         {
-            if (cfg.hint_vsync) SetWindowState(FLAG_VSYNC_HINT);
-            else ClearWindowState(FLAG_VSYNC_HINT);   
+            if (cfg.hint_vsync) 
+            {
+                SetWindowState(FLAG_VSYNC_HINT);
+                SetTargetFPS(0);
+            }
+            else 
+            {
+                ClearWindowState(FLAG_VSYNC_HINT);
+                SetTargetFPS(cfg.target_fps);
+            }
         }
         
         /* handle picking and camera in 2d mode */
