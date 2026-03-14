@@ -4967,11 +4967,7 @@ static void GuiDrawRectangle(Rectangle rec, int borderWidth, Color borderColor, 
     if (borderWidth > 0)
     {
         // Draw rectangle border lines with color
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-        DrawRectangleRoundedLines(rec, roundness, segments, (float)borderWidth, GuiFade(borderColor, guiAlpha));
-#else
-        DrawRectangleRoundedLines(rec, roundness, segments, GuiFade(borderColor, guiAlpha));
-#endif
+        DrawRectangleRoundedLinesEx(rec, roundness, segments, (float)borderWidth, GuiFade(borderColor, guiAlpha));
     }
 
 #if defined(RAYGUI_DEBUG_RECS_BOUNDS)

@@ -17,7 +17,12 @@ else
 	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 endif
 
+UNAME_M := $(shell uname -m)
+ifeq ($(UNAME_M),aarch64)
+LIB_LIN_PATH = -Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib
+else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
+endif
 
 SRC       = src/main.c src/astro.c src/config.c src/ui.c
 OBJ       = $(SRC:src/%.c=build/%.o)
@@ -40,7 +45,7 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib 2>/dev/null)
 LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall
+.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild
 
 all: linux
 
@@ -116,6 +121,16 @@ build:
 
 bin:
 	mkdir -p bin
+
+raylib:
+	./scripts/build-raylib.sh
+
+raylib-%:
+	./scripts/build-raylib.sh $*
+
+raylib-crossbuild:
+	docker build -f scripts/Dockerfile.crossbuild -t tlescope-crossbuild .
+	docker run --rm -v "$(PWD)/lib:/build/lib" tlescope-crossbuild
 
 clean:
 	rm -rf build bin dist

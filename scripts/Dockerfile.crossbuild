@@ -1,0 +1,30 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# base build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git ca-certificates curl pkg-config \
+    # linux x86_64 deps
+    libgl-dev libegl-dev libwayland-dev libxkbcommon-dev libdecor-0-dev \
+    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+    libcurl4-openssl-dev \
+    # linux arm64 cross-compiler
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    # windows x86_64 cross-compiler
+    gcc-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# windows arm64 cross-compiler (llvm-mingw)
+ARG LLVM_MINGW_VERSION=20260311
+RUN curl -fSL -o /tmp/llvm-mingw.tar.xz \
+    "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" \
+    && mkdir /opt/llvm-mingw \
+    && tar xf /tmp/llvm-mingw.tar.xz -C /opt/llvm-mingw --strip-components=1 \
+    && rm /tmp/llvm-mingw.tar.xz
+
+WORKDIR /build
+COPY . .
+
+# build all raylib variants + app
+CMD ["./scripts/crossbuild-all.sh"]

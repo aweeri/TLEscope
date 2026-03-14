@@ -1,0 +1,79 @@
+diff --git a/src/platforms/rcore_desktop_glfw.c b/src/platforms/rcore_desktop_glfw.c
+index baf2967..2c5b304 100644
+--- a/src/platforms/rcore_desktop_glfw.c
++++ b/src/platforms/rcore_desktop_glfw.c
+@@ -110,7 +110,7 @@ void ClosePlatform(void);        // Close platform
+ static void ErrorCallback(int error, const char *description);                             // GLFW3 Error Callback, runs on GLFW3 error
+ 
+ // Window callbacks events
+-static void WindowSizeCallback(GLFWwindow *window, int width, int height);                 // GLFW3 WindowSize Callback, runs when window is resized
++static void FramebufferSizeCallback(GLFWwindow *window, int width, int height);             // GLFW3 Framebuffer Size Callback, runs when framebuffer is resized
+ static void WindowPosCallback(GLFWwindow* window, int x, int y);                     // GLFW3 WindowPos Callback, runs when window is moved
+ static void WindowIconifyCallback(GLFWwindow *window, int iconified);                      // GLFW3 WindowIconify Callback, runs when window is minimized/restored
+ static void WindowMaximizeCallback(GLFWwindow* window, int maximized);                     // GLFW3 Window Maximize Callback, runs when window is maximized
+@@ -1571,6 +1571,16 @@ int InitPlatform(void)
+     #if !defined(__APPLE__)
+             glfwGetFramebufferSize(platform.handle, &fbWidth, &fbHeight);
+ 
++            // Derive logical screen size from framebuffer using content scale
++            // This fixes Wayland compositors where window size is stale after init
++            float xscale = 1.0f, yscale = 1.0f;
++            glfwGetWindowContentScale(platform.handle, &xscale, &yscale);
++            if (xscale > 0.0f && yscale > 0.0f)
++            {
++                CORE.Window.screen.width = (int)(fbWidth / xscale);
++                CORE.Window.screen.height = (int)(fbHeight / yscale);
++            }
++
+             // Screen scaling matrix is required in case desired screen area is different from display area
+             CORE.Window.screenScale = MatrixScale((float)fbWidth/CORE.Window.screen.width, (float)fbHeight/CORE.Window.screen.height, 1.0f);
+ 
+@@ -1629,7 +1639,7 @@ int InitPlatform(void)
+     // Initialize input events callbacks
+     //----------------------------------------------------------------------------
+     // Set window callback events
+-    glfwSetWindowSizeCallback(platform.handle, WindowSizeCallback);      // NOTE: Resizing not allowed by default!
++    glfwSetFramebufferSizeCallback(platform.handle, FramebufferSizeCallback);
+     glfwSetWindowPosCallback(platform.handle, WindowPosCallback);
+     glfwSetWindowMaximizeCallback(platform.handle, WindowMaximizeCallback);
+     glfwSetWindowIconifyCallback(platform.handle, WindowIconifyCallback);
+@@ -1707,23 +1717,33 @@ static void ErrorCallback(int error, const char *description)
+     TRACELOG(LOG_WARNING, "GLFW: Error: %i Description: %s", error, description);
+ }
+ 
+-// GLFW3 WindowSize Callback, runs when window is resizedLastFrame
+-// NOTE: Window resizing not allowed by default
+-static void WindowSizeCallback(GLFWwindow *window, int width, int height)
++// GLFW3 Framebuffer Size Callback, runs when framebuffer is resized
++// NOTE: Using framebuffer callback instead of window size callback for proper Wayland support
++static void FramebufferSizeCallback(GLFWwindow *window, int width, int height)
+ {
+     // Reset viewport and projection matrix for new size
+     SetupViewport(width, height);
+ 
+     CORE.Window.currentFbo.width = width;
+     CORE.Window.currentFbo.height = height;
++    CORE.Window.render.width = width;
++    CORE.Window.render.height = height;
+     CORE.Window.resizedLastFrame = true;
+ 
+     if (IsWindowFullscreen()) return;
+ 
+-    // Set current screen size
++    // Derive logical screen size from framebuffer size using content scale
++    float xscale = 1.0f, yscale = 1.0f;
++    glfwGetWindowContentScale(window, &xscale, &yscale);
++    CORE.Window.screen.width = (int)(width / ((xscale > 0.0f) ? xscale : 1.0f));
++    CORE.Window.screen.height = (int)(height / ((yscale > 0.0f) ? yscale : 1.0f));
+ 
+-    CORE.Window.screen.width = width;
+-    CORE.Window.screen.height = height;
++    // Update screen scale matrix and mouse scaling
++    if ((CORE.Window.flags & FLAG_WINDOW_HIGHDPI) > 0)
++    {
++        CORE.Window.screenScale = MatrixScale(xscale, yscale, 1.0f);
++        SetMouseScale(1.0f/xscale, 1.0f/yscale);
++    }
+ 
+     // NOTE: Postprocessing texture is not scaled to new size
+ }
