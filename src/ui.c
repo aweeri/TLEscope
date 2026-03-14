@@ -983,7 +983,7 @@ static void AdvancedTextBox(Rectangle bounds, char *text, int bufSize, bool *edi
     }
 }
 
-static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *cfg, Font font)
+static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *cfg, Font font, bool closable)
 {
     float scale = cfg->ui_scale;
     float header_h = 24 * scale;
@@ -1009,19 +1009,21 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 
     DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->window_border);
 
+    if (!closable) return false;
+
     float btn_size = header_h - 8 * scale;
     Rectangle closeBtn = {bounds.x + bounds.width - btn_size - 6 * scale, bounds.y + 4 * scale, btn_size, btn_size};
-    
+
     bool hover = CheckCollisionPointRec(GetMousePosition(), closeBtn);
     bool clicked = false;
-    
+
     if (hover) {
         DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(RED, 0.8f));
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
     } else {
         DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(cfg->window_border, 0.3f));
     }
-    
+
     float pad = closeBtn.width * 0.3f;
     DrawLineEx((Vector2){closeBtn.x + pad, closeBtn.y + pad}, (Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
     DrawLineEx((Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + pad}, (Vector2){closeBtn.x + pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
@@ -1649,7 +1651,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 tm_y = GetMousePosition().y - drag_tle_mgr_off.y;
                 SnapWindow(&tm_x, &tm_y, tmMgrWindow.width, tmMgrWindow.height, cfg);
             }
-            if (DrawMaterialWindow(tmMgrWindow, "#1# TLE Manager", cfg, customFont))
+            if (DrawMaterialWindow(tmMgrWindow, "#1# TLE Manager", cfg, customFont, true))
                 show_tle_mgr_dialog = false;
 
             char age_str[64] = "TLE Age: Unknown";
@@ -1882,7 +1884,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sm_y = GetMousePosition().y - drag_sat_mgr_off.y;
                 SnapWindow(&sm_x, &sm_y, smWindow.width, smWindow.height, cfg);
             }
-            if (DrawMaterialWindow(smWindow, "#43# Satellite Manager", cfg, customFont))
+            if (DrawMaterialWindow(smWindow, "#43# Satellite Manager", cfg, customFont, true))
                 show_sat_mgr_dialog = false;
 
             AdvancedTextBox((Rectangle){sm_x + 10 * cfg->ui_scale, sm_y + 35 * cfg->ui_scale, smWindow.width - 90 * cfg->ui_scale, 24 * cfg->ui_scale}, sat_search_text, 64, &edit_sat_search, false);
@@ -2012,7 +2014,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 hw_y = GetMousePosition().y - drag_help_off.y;
                 SnapWindow(&hw_x, &hw_y, helpWindow.width, helpWindow.height, cfg);
             }
-            if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont))
+            if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont, true))
                 show_help = false;
 
             Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 620 * cfg->ui_scale};
@@ -2129,7 +2131,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sw_y = GetMousePosition().y - drag_settings_off.y;
                 SnapWindow(&sw_x, &sw_y, settingsWindow.width, settingsWindow.height, cfg);
             }
-            if (DrawMaterialWindow(settingsWindow, "#142# Settings", cfg, customFont))
+            if (DrawMaterialWindow(settingsWindow, "#142# Settings", cfg, customFont, true))
                 show_settings = false;
 
             float sy = sw_y + 40 * cfg->ui_scale;
@@ -2251,7 +2253,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 td_y = GetMousePosition().y - drag_time_off.y;
                 SnapWindow(&td_x, &td_y, timeWindow.width, timeWindow.height, cfg);
             }
-            if (DrawMaterialWindow(timeWindow, "#139# Set Date & Time (UTC)", cfg, customFont))
+            if (DrawMaterialWindow(timeWindow, "#139# Set Date & Time (UTC)", cfg, customFont, true))
                 show_time_dialog = false;
 
             float cur_y = td_y + 35 * cfg->ui_scale;
@@ -2317,7 +2319,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pd_y = GetMousePosition().y - drag_passes_off.y;
                 SnapWindow(&pd_x, &pd_y, passesWindow.width, passesWindow.height, cfg);
             }
-            if (DrawMaterialWindow(passesWindow, "#208# Upcoming Passes", cfg, customFont))
+            if (DrawMaterialWindow(passesWindow, "#208# Upcoming Passes", cfg, customFont, true))
                 show_passes_dialog = false;
 
             if (GuiButton(
@@ -2449,7 +2451,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pl_y = GetMousePosition().y - drag_polar_off.y;
                 SnapWindow(&pl_x, &pl_y, polarWindow.width, polarWindow.height, cfg);
             }
-            if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont))
+            if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont, true))
                 show_polar_dialog = false;
 
             if (GuiButton((Rectangle){pl_x + 10 * cfg->ui_scale, pl_y + 30 * cfg->ui_scale, polarWindow.width - 20 * cfg->ui_scale, 24 * cfg->ui_scale}, polar_lunar_mode ? "Mode: Lunar Tracking" : "Mode: Satellite Pass")) {
@@ -2639,7 +2641,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 dop_y = GetMousePosition().y - drag_doppler_off.y;
                 SnapWindow(&dop_x, &dop_y, dopplerWindow.width, dopplerWindow.height, cfg);
             }
-            if (DrawMaterialWindow(dopplerWindow, "#125# Doppler Shift Analysis", cfg, customFont))
+            if (DrawMaterialWindow(dopplerWindow, "#125# Doppler Shift Analysis", cfg, customFont, true))
                 show_doppler_dialog = false;
 
             if (selected_pass_idx >= 0 && selected_pass_idx < num_passes)
@@ -2790,7 +2792,7 @@ case WND_SCOPE:
                 sc_y = GetMousePosition().y - drag_scope_off.y;
                 SnapWindow(&sc_x, &sc_y, scopeWindow.width, scopeWindow.height, cfg);
             }
-            if (DrawMaterialWindow(scopeWindow, "#103# Satellite Scope", cfg, customFont))
+            if (DrawMaterialWindow(scopeWindow, "#103# Satellite Scope", cfg, customFont, true))
                 show_scope_dialog = false;
 
             /* auto-aim scope if locked to a satellite */
@@ -3128,7 +3130,7 @@ case WND_SCOPE:
                 si_y = GetMousePosition().y - drag_sat_info_off.y;
                 SnapWindow(&si_x, &si_y, satInfoWindow.width, satInfoWindow.height, cfg);
             }
-            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont))
+            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont, true))
             {
                 show_sat_info_dialog = false;
                 *ctx->selected_sat = NULL;
@@ -3268,7 +3270,7 @@ case WND_SCOPE:
     if (show_tle_warning)
     {
         Rectangle tleWarnWindow = {(GetScreenWidth() - 480 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 160 * cfg->ui_scale) / 2.0f, 480 * cfg->ui_scale, 160 * cfg->ui_scale};
-        if (DrawMaterialWindow(tleWarnWindow, "#193# TLEs Outdated", cfg, customFont))
+        if (DrawMaterialWindow(tleWarnWindow, "#193# TLEs Outdated", cfg, customFont, true))
             show_tle_warning = false;
         
         long days_old = data_tle_epoch > 0 ? (time(NULL) - data_tle_epoch) / 86400 : 999;
@@ -3310,8 +3312,8 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), cfg->overlay_dim);
         Rectangle frRec = {(GetScreenWidth() - 520 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 240 * cfg->ui_scale) / 2.0f, 520 * cfg->ui_scale, 240 * cfg->ui_scale};
-        DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont);
-        
+        DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont, false);
+
         const char* msg1 = "Please select a graphics profile for your first run:";
         Vector2 msg1Size = MeasureTextEx(customFont, msg1, 16 * cfg->ui_scale, 1.0f);
         DrawUIText(customFont, msg1, frRec.x + (frRec.width - msg1Size.x) / 2.0f, frRec.y + 45 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
@@ -3487,7 +3489,7 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), ApplyAlpha(cfg->overlay_dim, 150.0f / 180.0f));
         Rectangle exitRec = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 140 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 140 * cfg->ui_scale};
-        if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont))
+        if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont, true))
             show_exit_dialog = false;
         DrawUIText(customFont, "Are you sure you want to exit?", exitRec.x + 25 * cfg->ui_scale, exitRec.y + 45 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
         if (GuiButton((Rectangle){exitRec.x + 20 * cfg->ui_scale, exitRec.y + 85 * cfg->ui_scale, 120 * cfg->ui_scale, 30 * cfg->ui_scale}, "Yes"))
