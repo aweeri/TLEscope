@@ -2,17 +2,27 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# base build tools
+# base build tools + x86_64 linux deps + cross-compilers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates curl pkg-config \
-    # linux x86_64 deps
     libgl-dev libegl-dev libwayland-dev libxkbcommon-dev libdecor-0-dev \
     libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
     libcurl4-openssl-dev \
-    # linux arm64 cross-compiler
     gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-    # windows x86_64 cross-compiler
     gcc-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# arm64 cross-link deps
+# pin existing sources to amd64, add ports.ubuntu.com for arm64
+RUN dpkg --add-architecture arm64 \
+    && sed -i '/^Architectures:/d; /^Types:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources \
+    && echo -e "Types: deb\nURIs: http://ports.ubuntu.com/\nSuites: noble noble-updates noble-security\nComponents: main restricted universe\nArchitectures: arm64\n" \
+       > /etc/apt/sources.list.d/arm64.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       libcurl4-openssl-dev:arm64 libgl-dev:arm64 libx11-dev:arm64 \
+       libxrandr-dev:arm64 libxi-dev:arm64 libxcursor-dev:arm64 \
+       libxinerama-dev:arm64 libwayland-dev:arm64 libxkbcommon-dev:arm64 \
     && rm -rf /var/lib/apt/lists/*
 
 # windows arm64 cross-compiler (llvm-mingw)
@@ -26,5 +36,4 @@ RUN curl -fSL -o /tmp/llvm-mingw.tar.xz \
 WORKDIR /build
 COPY . .
 
-# build all raylib variants + app
 CMD ["./scripts/crossbuild-all.sh"]

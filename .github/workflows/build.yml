@@ -38,6 +38,44 @@ jobs:
           path: dist/TLEscope-Linux-Portable/
           retention-days: 14
 
+  build-linux-arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup ARM64 Cross-Compile
+        uses: cyberjunk/gha-ubuntu-cross@v5
+        with:
+          arch: arm64
+
+      - name: Install ARM64 Build Dependencies
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y -o Dpkg::Options::="--force-overwrite" \
+            libcurl4-openssl-dev:arm64 libgl-dev:arm64 libx11-dev:arm64 \
+            libxrandr-dev:arm64 libxi-dev:arm64 libxcursor-dev:arm64 \
+            libxinerama-dev:arm64 libwayland-dev:arm64 libxkbcommon-dev:arm64
+
+      - name: Build raylib for ARM64
+        run: ./scripts/build-raylib.sh linux-arm64
+
+      - name: Compile and Bundle Linux ARM64
+        run: |
+          make linux \
+            CC_LINUX=aarch64-linux-gnu-gcc \
+            LIB_LIN_PATH="-Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib" \
+            LDFLAGS_LIN="-Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11" \
+            DIST_LINUX=dist/TLEscope-Linux-arm64-Portable
+
+      - name: Upload Linux ARM64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLEscope-Linux-arm64-Portable
+          path: dist/TLEscope-Linux-arm64-Portable/
+          retention-days: 14
+
   build-windows:
     name: Build Windows
     runs-on: windows-latest
@@ -121,7 +159,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [build-linux, build-windows, build-windows-arm64]
+    needs: [build-linux, build-linux-arm64, build-windows, build-windows-arm64]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
@@ -141,8 +179,10 @@ jobs:
           cd artifacts
           # The Makefile bundles into subdirectories, so we zip those folders
           chmod +x TLEscope-Linux-Portable/TLEscope
-          
+          chmod +x TLEscope-Linux-arm64-Portable/TLEscope
+
           zip -r ../TLEscope-Linux-Portable.zip TLEscope-Linux-Portable/
+          zip -r ../TLEscope-Linux-arm64-Portable.zip TLEscope-Linux-arm64-Portable/
           zip -r ../TLEscope-Win-Portable.zip TLEscope-Win-Portable/
           zip -r ../TLEscope-Win-arm64-Portable.zip TLEscope-Win-arm64-Portable/
           
@@ -179,6 +219,7 @@ jobs:
           prerelease: true
           files: |
             TLEscope-Linux-Portable.zip
+            TLEscope-Linux-arm64-Portable.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
@@ -190,6 +231,7 @@ jobs:
           generate_release_notes: true
           files: |
             TLEscope-Linux-Portable.zip
+            TLEscope-Linux-arm64-Portable.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
