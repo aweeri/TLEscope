@@ -3224,15 +3224,29 @@ case WND_SCOPE:
                 BeginScissorMode(viewRec.x, viewRec.y, viewRec.width, viewRec.height);
                 float cur_x = viewRec.x + 4 * cfg->ui_scale + si_scroll.x;
                 float cur_y = viewRec.y + 4 * cfg->ui_scale + si_scroll.y;
+                bool show_copy_icon = false;
+                static double sat_info_copied_time = 0.0;
 
                 #define DRAW_HEADER(title) \
                     DrawUIText(customFont, title, cur_x, cur_y, 18 * cfg->ui_scale, cfg->ui_accent); \
                     cur_y += 26 * cfg->ui_scale
 
                 #define DRAW_ROW(key, val) \
-                    DrawUIText(customFont, key, cur_x + 5 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_main); \
-                    DrawUIText(customFont, val, cur_x + 140 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_secondary); \
-                    cur_y += 22 * cfg->ui_scale
+                    { \
+                        const char* vstr = (val); \
+                        DrawUIText(customFont, key, cur_x + 5 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_main); \
+                        DrawUIText(customFont, vstr, cur_x + 140 * cfg->ui_scale, cur_y, 16 * cfg->ui_scale, cfg->text_secondary); \
+                        Vector2 v_sz = MeasureTextEx(customFont, vstr, 16 * cfg->ui_scale, 1.0f); \
+                        Rectangle v_rec = {cur_x + 140 * cfg->ui_scale, cur_y, v_sz.x, 16 * cfg->ui_scale}; \
+                        if (is_topmost && CheckCollisionPointRec(GetMousePosition(), v_rec) && CheckCollisionPointRec(GetMousePosition(), viewRec)) { \
+                            show_copy_icon = true; \
+                            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { \
+                                SetClipboardText(vstr); \
+                                sat_info_copied_time = GetTime(); \
+                            } \
+                        } \
+                        cur_y += 22 * cfg->ui_scale; \
+                    }
 
                 DRAW_HEADER("Identification");
                 DRAW_ROW("NORAD ID:", TextFormat("%.6s", sat->norad_id));
@@ -3267,6 +3281,15 @@ case WND_SCOPE:
                 #undef DRAW_ROW
 
                 EndScissorMode();
+
+                if (show_copy_icon) {
+                    Vector2 m = GetMousePosition();
+                    const char *icon = (GetTime() - sat_info_copied_time < 1.0) ? "#112#" : "#16#";
+                    int oldLbl = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
+                    GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, ColorToInt((GetTime() - sat_info_copied_time < 1.0) ? cfg->ui_accent : cfg->text_main));
+                    GuiLabel((Rectangle){m.x + 12 * cfg->ui_scale, m.y, 24 * cfg->ui_scale, 24 * cfg->ui_scale}, icon);
+                    GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, oldLbl);
+                }
             }
             break;
         }
