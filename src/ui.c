@@ -1651,7 +1651,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 tm_y = GetMousePosition().y - drag_tle_mgr_off.y;
                 SnapWindow(&tm_x, &tm_y, tmMgrWindow.width, tmMgrWindow.height, cfg);
             }
-            if (DrawMaterialWindow(tmMgrWindow, "#1# TLE Manager", cfg, customFont, true))
+            tmMgrWindow.x = tm_x; tmMgrWindow.y = tm_y;
+            if (DrawMaterialWindow(tmMgrWindow, "#1# TLE Manager", cfg, customFont))
                 show_tle_mgr_dialog = false;
 
             char age_str[64] = "TLE Age: Unknown";
@@ -1884,7 +1885,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sm_y = GetMousePosition().y - drag_sat_mgr_off.y;
                 SnapWindow(&sm_x, &sm_y, smWindow.width, smWindow.height, cfg);
             }
-            if (DrawMaterialWindow(smWindow, "#43# Satellite Manager", cfg, customFont, true))
+            smWindow.x = sm_x; smWindow.y = sm_y;
+            if (DrawMaterialWindow(smWindow, "#43# Satellite Manager", cfg, customFont))
                 show_sat_mgr_dialog = false;
 
             AdvancedTextBox((Rectangle){sm_x + 10 * cfg->ui_scale, sm_y + 35 * cfg->ui_scale, smWindow.width - 90 * cfg->ui_scale, 24 * cfg->ui_scale}, sat_search_text, 64, &edit_sat_search, false);
@@ -2014,7 +2016,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 hw_y = GetMousePosition().y - drag_help_off.y;
                 SnapWindow(&hw_x, &hw_y, helpWindow.width, helpWindow.height, cfg);
             }
-            if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont, true))
+            helpWindow.x = hw_x; helpWindow.y = hw_y;
+            if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont))
                 show_help = false;
 
             Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 620 * cfg->ui_scale};
@@ -2131,7 +2134,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 sw_y = GetMousePosition().y - drag_settings_off.y;
                 SnapWindow(&sw_x, &sw_y, settingsWindow.width, settingsWindow.height, cfg);
             }
-            if (DrawMaterialWindow(settingsWindow, "#142# Settings", cfg, customFont, true))
+            settingsWindow.x = sw_x; settingsWindow.y = sw_y;
+            if (DrawMaterialWindow(settingsWindow, "#142# Settings", cfg, customFont))
                 show_settings = false;
 
             float sy = sw_y + 40 * cfg->ui_scale;
@@ -2253,7 +2257,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 td_y = GetMousePosition().y - drag_time_off.y;
                 SnapWindow(&td_x, &td_y, timeWindow.width, timeWindow.height, cfg);
             }
-            if (DrawMaterialWindow(timeWindow, "#139# Set Date & Time (UTC)", cfg, customFont, true))
+            timeWindow.x = td_x; timeWindow.y = td_y;
+            if (DrawMaterialWindow(timeWindow, "#139# Set Date & Time (UTC)", cfg, customFont))
                 show_time_dialog = false;
 
             float cur_y = td_y + 35 * cfg->ui_scale;
@@ -2319,7 +2324,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pd_y = GetMousePosition().y - drag_passes_off.y;
                 SnapWindow(&pd_x, &pd_y, passesWindow.width, passesWindow.height, cfg);
             }
-            if (DrawMaterialWindow(passesWindow, "#208# Upcoming Passes", cfg, customFont, true))
+            passesWindow.x = pd_x; passesWindow.y = pd_y;
+            if (DrawMaterialWindow(passesWindow, "#208# Upcoming Passes", cfg, customFont))
                 show_passes_dialog = false;
 
             if (GuiButton(
@@ -2451,7 +2457,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 pl_y = GetMousePosition().y - drag_polar_off.y;
                 SnapWindow(&pl_x, &pl_y, polarWindow.width, polarWindow.height, cfg);
             }
-            if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont, true))
+            polarWindow.x = pl_x; polarWindow.y = pl_y;
+            if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont))
                 show_polar_dialog = false;
 
             if (GuiButton((Rectangle){pl_x + 10 * cfg->ui_scale, pl_y + 30 * cfg->ui_scale, polarWindow.width - 20 * cfg->ui_scale, 24 * cfg->ui_scale}, polar_lunar_mode ? "Mode: Lunar Tracking" : "Mode: Satellite Pass")) {
@@ -2641,7 +2648,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 dop_y = GetMousePosition().y - drag_doppler_off.y;
                 SnapWindow(&dop_x, &dop_y, dopplerWindow.width, dopplerWindow.height, cfg);
             }
-            if (DrawMaterialWindow(dopplerWindow, "#125# Doppler Shift Analysis", cfg, customFont, true))
+            dopplerWindow.x = dop_x; dopplerWindow.y = dop_y;
+            if (DrawMaterialWindow(dopplerWindow, "#125# Doppler Shift Analysis", cfg, customFont))
                 show_doppler_dialog = false;
 
             if (selected_pass_idx >= 0 && selected_pass_idx < num_passes)
@@ -2792,7 +2800,8 @@ case WND_SCOPE:
                 sc_y = GetMousePosition().y - drag_scope_off.y;
                 SnapWindow(&sc_x, &sc_y, scopeWindow.width, scopeWindow.height, cfg);
             }
-            if (DrawMaterialWindow(scopeWindow, "#103# Satellite Scope", cfg, customFont, true))
+            scopeWindow.x = sc_x; scopeWindow.y = sc_y;
+            if (DrawMaterialWindow(scopeWindow, "#103# Satellite Scope", cfg, customFont))
                 show_scope_dialog = false;
 
             /* auto-aim scope if locked to a satellite */
@@ -3130,7 +3139,8 @@ case WND_SCOPE:
                 si_y = GetMousePosition().y - drag_sat_info_off.y;
                 SnapWindow(&si_x, &si_y, satInfoWindow.width, satInfoWindow.height, cfg);
             }
-            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont, true))
+            satInfoWindow.x = si_x; satInfoWindow.y = si_y;
+            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont))
             {
                 show_sat_info_dialog = false;
                 *ctx->selected_sat = NULL;
