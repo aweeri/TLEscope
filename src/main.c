@@ -444,13 +444,8 @@ int main(void)
     LoadAppConfig("settings.json", &cfg);
 
     /* window setup and msaa */
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
-
-    /* adjust ui scale based on monitor dpi */
-    Vector2 dpi_scale = GetWindowScaleDPI();
-    float max_dpi = fmaxf(dpi_scale.x, dpi_scale.y);
-    if (max_dpi > 0.0f) cfg.ui_scale *= max_dpi;
 
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
