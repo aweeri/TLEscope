@@ -913,6 +913,17 @@ int main(void)
                 }
             }
 
+            if (!is_typing)
+            {
+                float pan_speed = 800.0f * GetFrameTime() / target_camera2d_zoom;
+                bool moved = false;
+                if (IsKeyDown(KEY_RIGHT)) { target_camera2d_target.x += pan_speed; moved = true; }
+                if (IsKeyDown(KEY_LEFT)) { target_camera2d_target.x -= pan_speed; moved = true; }
+                if (IsKeyDown(KEY_DOWN)) { target_camera2d_target.y += pan_speed; moved = true; }
+                if (IsKeyDown(KEY_UP)) { target_camera2d_target.y -= pan_speed; moved = true; }
+                if (moved) active_lock = LOCK_NONE;
+            }
+
             if (!over_ui)
             {
                 Vector2 mousePos = GetMousePosition();
@@ -985,6 +996,32 @@ int main(void)
                                 target_camDistance = draw_earth_radius + 1.0f;
                         }
                     }
+                }
+            }
+
+            if (!is_typing)
+            {
+                float rot_speed = 1.5f * GetFrameTime();
+                bool moved = false;
+                
+                if (is_pov_mode && selected_sat && selected_sat->is_active)
+                {
+                    if (IsKeyDown(KEY_RIGHT)) { target_camAngleX -= rot_speed; moved = true; }
+                    if (IsKeyDown(KEY_LEFT)) { target_camAngleX += rot_speed; moved = true; }
+                }
+                else
+                {
+                    if (IsKeyDown(KEY_RIGHT)) { target_camAngleX += rot_speed; moved = true; }
+                    if (IsKeyDown(KEY_LEFT)) { target_camAngleX -= rot_speed; moved = true; }
+                }
+
+                if (IsKeyDown(KEY_UP)) { target_camAngleY += rot_speed; moved = true; }
+                if (IsKeyDown(KEY_DOWN)) { target_camAngleY -= rot_speed; moved = true; }
+                if (moved)
+                {
+                    if (target_camAngleY > 1.57f) target_camAngleY = 1.57f;
+                    if (target_camAngleY < -1.57f) target_camAngleY = -1.57f;
+                    active_lock = LOCK_NONE;
                 }
             }
 
