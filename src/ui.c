@@ -983,7 +983,7 @@ static void AdvancedTextBox(Rectangle bounds, char *text, int bufSize, bool *edi
     }
 }
 
-static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *cfg, Font font)
+static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *cfg, Font font, bool closable)
 {
     float scale = cfg->ui_scale;
     float header_h = 24 * scale;
@@ -1009,19 +1009,21 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 
     DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->window_border);
 
+    if (!closable) return false;
+
     float btn_size = header_h - 8 * scale;
     Rectangle closeBtn = {bounds.x + bounds.width - btn_size - 6 * scale, bounds.y + 4 * scale, btn_size, btn_size};
-    
+
     bool hover = CheckCollisionPointRec(GetMousePosition(), closeBtn);
     bool clicked = false;
-    
+
     if (hover) {
         DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(RED, 0.8f));
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) clicked = true;
     } else {
         DrawRectangleRounded(closeBtn, 0.3f, 8, ApplyAlpha(cfg->window_border, 0.3f));
     }
-    
+
     float pad = closeBtn.width * 0.3f;
     DrawLineEx((Vector2){closeBtn.x + pad, closeBtn.y + pad}, (Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
     DrawLineEx((Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + pad}, (Vector2){closeBtn.x + pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
@@ -3278,7 +3280,7 @@ case WND_SCOPE:
     if (show_tle_warning)
     {
         Rectangle tleWarnWindow = {(GetScreenWidth() - 480 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 160 * cfg->ui_scale) / 2.0f, 480 * cfg->ui_scale, 160 * cfg->ui_scale};
-        if (DrawMaterialWindow(tleWarnWindow, "#193# TLEs Outdated", cfg, customFont))
+        if (DrawMaterialWindow(tleWarnWindow, "#193# TLEs Outdated", cfg, customFont, true))
             show_tle_warning = false;
         
         long days_old = data_tle_epoch > 0 ? (time(NULL) - data_tle_epoch) / 86400 : 999;
@@ -3320,8 +3322,8 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), cfg->overlay_dim);
         Rectangle frRec = {(GetScreenWidth() - 520 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 240 * cfg->ui_scale) / 2.0f, 520 * cfg->ui_scale, 240 * cfg->ui_scale};
-        DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont);
-        
+        DrawMaterialWindow(frRec, "#198# Welcome to TLEscope!", cfg, customFont, false);
+
         const char* msg1 = "Please select a graphics profile for your first run:";
         Vector2 msg1Size = MeasureTextEx(customFont, msg1, 16 * cfg->ui_scale, 1.0f);
         DrawUIText(customFont, msg1, frRec.x + (frRec.width - msg1Size.x) / 2.0f, frRec.y + 45 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
@@ -3497,7 +3499,7 @@ case WND_SCOPE:
     {
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), ApplyAlpha(cfg->overlay_dim, 150.0f / 180.0f));
         Rectangle exitRec = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 140 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 140 * cfg->ui_scale};
-        if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont))
+        if (DrawMaterialWindow(exitRec, "#159# Exit Application", cfg, customFont, true))
             show_exit_dialog = false;
         DrawUIText(customFont, "Are you sure you want to exit?", exitRec.x + 25 * cfg->ui_scale, exitRec.y + 45 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_main);
         if (GuiButton((Rectangle){exitRec.x + 20 * cfg->ui_scale, exitRec.y + 85 * cfg->ui_scale, 120 * cfg->ui_scale, 30 * cfg->ui_scale}, "Yes"))
