@@ -28,6 +28,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
 
+      - name: Build raylib
+        run: make raylib
+
       - name: Compile and Bundle Linux
         run: make linux
 
@@ -93,6 +96,7 @@ jobs:
           update: true
           install: >-
             make
+            git
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-ngtcp2
@@ -103,6 +107,9 @@ jobs:
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-imagemagick
+
+      - name: Build raylib
+        run: make raylib
 
       - name: Compile and Bundle Windows
         run: make win-installer MINGW_PREFIX=/mingw64 PKG_CONFIG_WIN=pkg-config
@@ -137,6 +144,8 @@ jobs:
           msystem: CLANGARM64
           update: true
           install: >-
+            make
+            git
             mingw-w64-clang-aarch64-make
             mingw-w64-clang-aarch64-clang
             mingw-w64-clang-aarch64-curl
@@ -146,6 +155,9 @@ jobs:
             mingw-w64-clang-aarch64-libssh2
             mingw-w64-clang-aarch64-openssl
             mingw-w64-clang-aarch64-pkgconf
+
+      - name: Build raylib
+        run: make raylib
 
       - name: Compile and Bundle Windows ARM64
         run: mingw32-make windows-arm64

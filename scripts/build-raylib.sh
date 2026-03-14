@@ -20,10 +20,10 @@ detect_platform() {
             esac ;;
         Darwin) echo "macos" ;;
         MINGW*|MSYS*|CYGWIN*)
-            case "$arch" in
-                x86_64)  echo "windows-x86_64" ;;
-                aarch64) echo "windows-arm64" ;;
-                *)       echo "windows-$arch" ;;
+            # MSYS2: use $MSYSTEM to detect arch (uname -m lies on ARM64)
+            case "$MSYSTEM" in
+                CLANGARM64)  echo "windows-arm64" ;;
+                *)           echo "windows-x86_64" ;;
             esac ;;
         *) echo "unknown"; exit 1 ;;
     esac
@@ -67,13 +67,21 @@ case "$PLATFORM" in
         DEST="$PROJECT_ROOT/lib/raylib_lin_arm64"
         ;;
     windows-x86_64)
-        make PLATFORM=PLATFORM_DESKTOP CC=x86_64-w64-mingw32-gcc AR=x86_64-w64-mingw32-ar \
-            OS=Windows_NT -j"$NPROC"
+        if [ -n "$MSYSTEM" ]; then
+            make PLATFORM=PLATFORM_DESKTOP -j"$NPROC"
+        else
+            make PLATFORM=PLATFORM_DESKTOP CC=x86_64-w64-mingw32-gcc AR=x86_64-w64-mingw32-ar \
+                OS=Windows_NT -j"$NPROC"
+        fi
         DEST="$PROJECT_ROOT/lib/raylib_win"
         ;;
     windows-arm64)
-        make PLATFORM=PLATFORM_DESKTOP CC=aarch64-w64-mingw32-gcc AR=aarch64-w64-mingw32-ar \
-            OS=Windows_NT -j"$NPROC"
+        if [ -n "$MSYSTEM" ]; then
+            make PLATFORM=PLATFORM_DESKTOP CC=cc AR=ar -j"$NPROC"
+        else
+            make PLATFORM=PLATFORM_DESKTOP CC=aarch64-w64-mingw32-gcc AR=aarch64-w64-mingw32-ar \
+                OS=Windows_NT -j"$NPROC"
+        fi
         DEST="$PROJECT_ROOT/lib/raylib_win_arm64"
         ;;
     macos*)
