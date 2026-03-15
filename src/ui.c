@@ -25,8 +25,10 @@ typedef struct tagMSG *LPMSG;
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <process.h>
+#include <windows.h>
 #else
 #include <pthread.h>
+#include <dirent.h>
 #endif
 
 #define RAYGUI_IMPLEMENTATION
@@ -234,6 +236,57 @@ static float tt_hover[18] = {0};
 static bool ui_initialized = false;
 static char text_fps[8] = "";
 static bool edit_fps = false;
+
+static char theme_names[1024] = "";
+static int active_theme_idx = 0;
+static bool theme_dropdown_edit = false;
+
+static void LoadThemeList(AppConfig* cfg) {
+    theme_names[0] = '\0';
+    int count = 0;
+    active_theme_idx = 0;
+    char temp_names[32][64];
+
+#if defined(_WIN32) || defined(_WIN64)
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA("themes\\*", &findData);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
+                    char checkPath[256];
+                    snprintf(checkPath, sizeof(checkPath), "themes/%s/theme.json", findData.cFileName);
+                    if (FileExists(checkPath) && count < 32) {
+                        strncpy(temp_names[count++], findData.cFileName, 63);
+                    }
+                }
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+#else
+    DIR *dir = opendir("themes");
+    if (dir) {
+        struct dirent *ent;
+        while ((ent = readdir(dir)) != NULL && count < 32) {
+            if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+                char checkPath[256];
+                snprintf(checkPath, sizeof(checkPath), "themes/%s/theme.json", ent->d_name);
+                if (FileExists(checkPath)) {
+                    strncpy(temp_names[count++], ent->d_name, 63);
+                }
+            }
+        }
+        closedir(dir);
+    }
+#endif
+
+    for(int i = 0; i < count; i++) {
+        strcat(theme_names, temp_names[i]);
+        if (i < count - 1) strcat(theme_names, ";");
+        if (strcmp(temp_names[i], cfg->theme) == 0) active_theme_idx = i;
+    }
+}
 
 /* satellite scope variables */
 static bool show_scope_dialog = false;
@@ -741,6 +794,7 @@ bool IsMouseOverUI(AppConfig *cfg)
         pd_x = GetScreenWidth() - 400.0f;
         pd_y = GetScreenHeight() - 400.0f;
         LoadTLEState(cfg);
+        LoadThemeList(cfg);
 
         if (!cfg->show_first_run_dialog && data_tle_epoch > 0)
         {
@@ -2140,6 +2194,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 show_settings = false;
 
             float sy = sw_y + 40 * cfg->ui_scale;
+            GuiLabel((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 80 * cfg->ui_scale, 24 * cfg->ui_scale}, "Theme:");
+            Rectangle themeDropBounds = {sw_x + 90 * cfg->ui_scale, sy, 140 * cfg->ui_scale, 24 * cfg->ui_scale};
+            sy += 35 * cfg->ui_scale;
+
+            if (theme_dropdown_edit) GuiLock();
+
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Show Statistics", &cfg->show_statistics);
             sy += 25 * cfg->ui_scale;
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Show Clouds", &cfg->show_clouds);
@@ -2204,6 +2264,35 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         CalculatePasses(*ctx->selected_sat, *ctx->current_epoch);
                 }
             }
+
+            if (theme_dropdown_edit) GuiUnlock();
+
+            int old_drop_base_p = GuiGetStyle(DROPDOWNBOX, BASE_COLOR_PRESSED);
+            int old_drop_base_f = GuiGetStyle(DROPDOWNBOX, BASE_COLOR_FOCUSED);
+            GuiSetStyle(DROPDOWNBOX, BASE_COLOR_PRESSED, GuiGetStyle(DEFAULT, BASE_COLOR_NORMAL));
+            GuiSetStyle(DROPDOWNBOX, BASE_COLOR_FOCUSED, GuiGetStyle(DEFAULT, BASE_COLOR_NORMAL));
+
+            if (GuiDropdownBox(themeDropBounds, theme_names, &active_theme_idx, theme_dropdown_edit)) {
+                theme_dropdown_edit = !theme_dropdown_edit;
+                if (!theme_dropdown_edit) {
+                    char *start = theme_names;
+                    for(int i = 0; i < active_theme_idx; i++) {
+                        char *next = strchr(start, ';');
+                        if(next) start = next + 1;
+                    }
+                    char *end = strchr(start, ';');
+                    int len = end ? (int)(end - start) : strlen(start);
+                    if (len > 0 && len < 64) {
+                        strncpy(cfg->theme, start, len);
+                        cfg->theme[len] = '\0';
+                        cfg->reload_theme = true;
+                        SaveAppConfig("settings.json", cfg);
+                    }
+                }
+            }
+
+            GuiSetStyle(DROPDOWNBOX, BASE_COLOR_PRESSED, old_drop_base_p);
+            GuiSetStyle(DROPDOWNBOX, BASE_COLOR_FOCUSED, old_drop_base_f);
             break;
         }
 

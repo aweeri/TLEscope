@@ -4,9 +4,18 @@
 #include <raymath.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "astro.h"
 #include "config.h"
+
+static const char* GetAssetPath(const char* theme, const char* filename) {
+    static char path[256];
+    snprintf(path, sizeof(path), "themes/%s/%s", theme, filename);
+    if (FileExists(path)) return path;
+    snprintf(path, sizeof(path), "themes/default/%s", filename);
+    return path;
+}
 #include "types.h"
 #include "ui.h"
 
@@ -485,9 +494,10 @@ int main(void)
     /* font loading with specific glyph range */
     int glyphsCount = 0;
     int *glyphs = LoadCodepoints(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", &glyphsCount);
-    customFont = LoadFontEx(TextFormat("themes/%s/font.ttf", cfg.theme), 64, glyphs, glyphsCount);
+    customFont = LoadFontEx(GetAssetPath(cfg.theme, "font.ttf"), 64, glyphs, glyphsCount);
     GenTextureMipmaps(&customFont.texture);
     SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
+    UnloadCodepoints(glyphs);
 
     /* resource loading phase */
     DrawLoadingScreen(0.1f, "Fetching TLE Data...", logoLTex);
@@ -496,8 +506,8 @@ int main(void)
     LoadSatSelection(); // restore active satellites
 
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
-    earthTexture = LoadTexture(TextFormat("themes/%s/earth.png", cfg.theme));
-    earthNightTexture = LoadTexture(TextFormat("themes/%s/earth_night.png", cfg.theme));
+    earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
+    earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
 
     /* make textures not blocky when zoomed in on*/
     SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
@@ -539,7 +549,7 @@ int main(void)
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
     cloudModel = LoadModelFromMesh(cloudMesh);
-    cloudTexture = LoadTexture(TextFormat("themes/%s/clouds.png", cfg.theme));
+    cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
@@ -553,7 +563,7 @@ int main(void)
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32);
     moonModel = LoadModelFromMesh(moonMesh);
-    moonTexture = LoadTexture(TextFormat("themes/%s/moon.png", cfg.theme));
+    moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
     SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
     moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
     moonModel.materials[0].shader = shaderMoon;
@@ -572,10 +582,10 @@ int main(void)
     SetShaderValue(shaderCloud, GetShaderLocation(shaderCloud, "moonRadius"), &draw_moon_radius, SHADER_UNIFORM_FLOAT);
 
     DrawLoadingScreen(0.95f, "Finalizing UI...", logoTex);
-    satIcon = LoadTexture(TextFormat("themes/%s/sat_icon.png", cfg.theme));
-    markerIcon = LoadTexture(TextFormat("themes/%s/marker_icon.png", cfg.theme));
-    periMark = LoadTexture(TextFormat("themes/%s/smallmark.png", cfg.theme));
-    apoMark = LoadTexture(TextFormat("themes/%s/smallmark.png", cfg.theme));
+    satIcon = LoadTexture(GetAssetPath(cfg.theme, "sat_icon.png"));
+    markerIcon = LoadTexture(GetAssetPath(cfg.theme, "marker_icon.png"));
+    periMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
+    apoMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
 
     SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
@@ -642,6 +652,55 @@ int main(void)
     /* main loop */
     while (!WindowShouldClose() && !exit_app)
     {
+        if (cfg.reload_theme)
+        {
+            cfg.reload_theme = false;
+            
+            UnloadTexture(earthTexture);
+            UnloadTexture(earthNightTexture);
+            UnloadTexture(cloudTexture);
+            UnloadTexture(moonTexture);
+            UnloadTexture(satIcon);
+            UnloadTexture(markerIcon);
+            UnloadTexture(periMark);
+            UnloadTexture(apoMark);
+            UnloadFont(customFont);
+            
+            LoadAppConfig("settings.json", &cfg);
+            
+            int glyphsCount = 0;
+            int *glyphs = LoadCodepoints(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", &glyphsCount);
+            customFont = LoadFontEx(GetAssetPath(cfg.theme, "font.ttf"), 64, glyphs, glyphsCount);
+            GenTextureMipmaps(&customFont.texture);
+            SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
+            UnloadCodepoints(glyphs);
+
+            earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
+            earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
+            SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+            earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
+            earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
+
+            cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
+            SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
+            cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+
+            moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
+            SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
+            moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
+
+            satIcon = LoadTexture(GetAssetPath(cfg.theme, "sat_icon.png"));
+            markerIcon = LoadTexture(GetAssetPath(cfg.theme, "marker_icon.png"));
+            periMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
+            apoMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
+
+            SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(periMark, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
+        }
+
         bool is_typing = IsUITyping();
         bool over_ui = IsMouseOverUI(&cfg);
 
