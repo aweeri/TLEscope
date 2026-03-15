@@ -29,10 +29,15 @@ const char *fs3D = "#version 330\n"
                    "out vec4 finalColor;\n"
                    "uniform sampler2D texture0;\n"
                    "uniform sampler2D texture1;\n"
+                   "uniform sampler2D texture2;\n"
                    "uniform vec3 sunDir;\n"
                    "uniform vec3 moonPos;\n"
                    "uniform float moonRadius;\n"
                    "uniform float earthRadius;\n"
+                   "uniform vec3 viewPos;\n"
+                   "uniform float cloudUVOffset;\n"
+                   "uniform int advancedScatter;\n"
+                   "uniform int showClouds;\n"
                    "void main() {\n"
                    "    vec4 day = texture(texture0, fragTexCoord);\n"
                    "    vec4 night = texture(texture1, fragTexCoord);\n"
@@ -43,6 +48,29 @@ const char *fs3D = "#version 330\n"
                    "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
                    "    vec3 fragPos = normal * earthRadius;\n"
                    "    vec3 scatteredDay = day.rgb;\n"
+                   "    \n"
+                   "    if (advancedScatter == 1) {\n"
+                   "        vec3 viewDir = normalize(viewPos - fragPos);\n"
+                   "        vec3 halfDir = normalize(sunDir + viewDir);\n"
+                   "        float NdotV = max(dot(normal, viewDir), 0.0);\n"
+                   "        float fresnel = pow(1.0 - NdotV, 4.0);\n"
+                   "        float specPower = mix(48.0, 12.0, fresnel);\n"
+                   "        float spec = pow(max(dot(normal, halfDir), 0.0), specPower);\n"
+                   "        float water = clamp((day.b - day.r) * 2.5, 0.0, 1.0);\n"
+                   "        float glareBoost = mix(0.6, 4.0, fresnel);\n"
+                   "        vec3 specular = vec3(1.0, 0.9, 0.8) * spec * water * glareBoost * max(intensity, 0.0);\n"
+                   "        \n"
+                   "        float cShadow = 1.0;\n"
+                   "        if (showClouds == 1) {\n"
+                   "            vec2 cUV = fragTexCoord + vec2(sunDir.x, -sunDir.y) * 0.005;\n"
+                   "            cUV.x = fract(cUV.x + cloudUVOffset);\n"
+                   "            float cAlpha = texture(texture2, cUV).a;\n"
+                   "            cShadow = mix(1.0, 0.4, cAlpha * smoothstep(-0.1, 0.2, intensity));\n"
+                   "        }\n"
+                   "        \n"
+                   "        scatteredDay = (scatteredDay * cShadow) + specular;\n"
+                   "    }\n"
+                   "    \n"
                    "    vec3 toMoon = moonPos - fragPos;\n"
                    "    float distSunward = dot(toMoon, sunDir);\n"
                    "    float shadow = 1.0;\n"
@@ -51,7 +79,7 @@ const char *fs3D = "#version 330\n"
                    "        float distSq = dot(proj - moonPos, proj - moonPos);\n"
                    "        float rSq = moonRadius * moonRadius;\n"
                    "        if (distSq < rSq * 4.0) {\n"
-                   "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
+                       "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
                    "        }\n"
                    "    }\n"
                    "    vec4 dayColor = mix(night, vec4(scatteredDay, day.a), shadow);\n"
@@ -524,6 +552,11 @@ int main(void)
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
     shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
+    shader3D.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(shader3D, "texture2");
+    int viewPosLoc3D = GetShaderLocation(shader3D, "viewPos");
+    int cloudUVOffsetLoc3D = GetShaderLocation(shader3D, "cloudUVOffset");
+    int advScatLoc3D = GetShaderLocation(shader3D, "advancedScatter");
+    int showCloudsLoc3D = GetShaderLocation(shader3D, "showClouds");
 
     Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
@@ -563,6 +596,7 @@ int main(void)
     cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+    earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
 
     float draw_atmosphere_radius = (EARTH_RADIUS_KM + 80.0f) / DRAW_SCALE;
@@ -697,6 +731,7 @@ int main(void)
             cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
             SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
             cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+            earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
 
             skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
             SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
@@ -1652,11 +1687,24 @@ int main(void)
         
         earthModel.transform = MatrixRotateY(earth_rot_rad);
 
+        double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
+        float cloud_rot_rad = (float)(continuous_cloud_angle * DEG2RAD);
+
         if (cfg.show_night_lights)
         {
             earthModel.materials[0].shader = shader3D;
             SetShaderValue(shader3D, sunDirLoc3D, &sunEcef, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader3D, moonPosLoc3D, &moonEcef, SHADER_UNIFORM_VEC3);
+            
+            int doAdvScat = cfg.show_scattering ? 1 : 0;
+            SetShaderValue(shader3D, advScatLoc3D, &doAdvScat, SHADER_UNIFORM_INT);
+            SetShaderValue(shader3D, viewPosLoc3D, &viewEcef, SHADER_UNIFORM_VEC3);
+            
+            float uv_offset = (earth_rot_rad - cloud_rot_rad) / (2.0f * PI);
+            SetShaderValue(shader3D, cloudUVOffsetLoc3D, &uv_offset, SHADER_UNIFORM_FLOAT);
+
+            int doShowClouds = cfg.show_clouds ? 1 : 0;
+            SetShaderValue(shader3D, showCloudsLoc3D, &doShowClouds, SHADER_UNIFORM_INT);
         }
         else
         {
@@ -1668,8 +1716,6 @@ int main(void)
         /* atmosphere/cloud layer */
         if (cfg.show_clouds)
         {
-            double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
-            float cloud_rot_rad = (float)(continuous_cloud_angle * DEG2RAD);
             cloudModel.transform = MatrixRotateY(cloud_rot_rad);
 
             if (cfg.show_night_lights)
