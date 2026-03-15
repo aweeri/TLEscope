@@ -1386,6 +1386,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     GuiSetStyle(CHECKBOX, TEXT_PADDING, 8 * cfg->ui_scale);
 
+    GuiSetStyle(LISTVIEW, SCROLLBAR_WIDTH, 12 * cfg->ui_scale);
+    GuiSetStyle(LISTVIEW, LIST_ITEMS_HEIGHT, 28 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, SCROLL_SLIDER_SIZE, 16 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, ARROWS_SIZE, 6 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, SCROLL_SPEED, 12 * cfg->ui_scale);
+
     GuiSetStyle(TEXTBOX, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
     GuiSetStyle(TEXTBOX, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_FOCUSED, ColorToInt(cfg->text_main));

@@ -1809,8 +1809,9 @@ int GuiScrollPanel(Rectangle bounds, const char *text, Rectangle content, Vector
     int horizontalScrollBarWidth = hasHorizontalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
     int verticalScrollBarWidth =  hasVerticalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
 
-    float padCorner = 6.0f; // padding to prevent scrollbars and text from clipping over rounded corners
-    float padEdge = 2.0f;
+    float guiScale = (float)GuiGetStyle(DEFAULT, TEXT_SIZE) / 10.0f; // derive scale from text size (default 10)
+    float padCorner = 6.0f * guiScale;
+    float padEdge = 2.0f * guiScale;
 
     Rectangle horizontalScrollBar = { 
         (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + verticalScrollBarWidth : (float)bounds.x) + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, 
@@ -1920,11 +1921,13 @@ int GuiScrollPanel(Rectangle bounds, const char *text, Rectangle content, Vector
     else scrollPos.y = 0.0f;
 
     // Draw detail corner rectangle if both scroll bars are visible
-    if (hasHorizontalScrollBar && hasVerticalScrollBar)
-    {
-        Rectangle corner = { (GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH) + 2) : (horizontalScrollBar.x + horizontalScrollBar.width + 2), verticalScrollBar.y + verticalScrollBar.height + 2, (float)horizontalScrollBarWidth - 4, (float)verticalScrollBarWidth - 4 };
-        GuiDrawRectangle(corner, 0, BLANK, GetColor(GuiGetStyle(LISTVIEW, TEXT + (state*3))));
-    }
+    // NOTE: disabled — panel background already covers this area, and the original color
+    // (TEXT) didn't match the scrollbar track, causing a visible artifact
+    //if (hasHorizontalScrollBar && hasVerticalScrollBar)
+    //{
+    //    Rectangle corner = { (GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (bounds.x + GuiGetStyle(DEFAULT, BORDER_WIDTH) + 2) : (horizontalScrollBar.x + horizontalScrollBar.width + 2), verticalScrollBar.y + verticalScrollBar.height + 2, (float)horizontalScrollBarWidth - 4, (float)verticalScrollBarWidth - 4 };
+    //    GuiDrawRectangle(corner, 0, BLANK, GetColor(GuiGetStyle(LISTVIEW, TEXT + (state*3))));
+    //}
 
     // Draw scrollbar lines depending on current state
     GuiDrawRectangle(bounds, GuiGetStyle(DEFAULT, BORDER_WIDTH), GetColor(GuiGetStyle(LISTVIEW, BORDER + (state*3))), BLANK);
