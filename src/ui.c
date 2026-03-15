@@ -237,6 +237,70 @@ static bool ui_initialized = false;
 static char text_fps[8] = "";
 static bool edit_fps = false;
 
+#ifndef TLESCOPE_VERSION
+#define TLESCOPE_VERSION "vUnknown"
+#endif
+
+static char latest_version_str[64] = "";
+static bool update_available = false;
+
+static size_t update_header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
+{
+    size_t numbytes = size * nitems;
+    if (strncmp(buffer, "Location: ", 10) == 0 || strncmp(buffer, "location: ", 10) == 0)
+    {
+        char *tag = strstr(buffer, "/tag/");
+        if (tag)
+        {
+            tag += 5;
+            strncpy((char *)userdata, tag, 63);
+            for (int i = 0; ((char *)userdata)[i]; i++)
+            {
+                if (((char *)userdata)[i] == '\r' || ((char *)userdata)[i] == '\n')
+                {
+                    ((char *)userdata)[i] = '\0';
+                    break;
+                }
+            }
+        }
+    }
+    return numbytes;
+}
+
+static void *UpdateCheckThread(void *arg)
+{
+    (void)arg;
+    CURL *curl = curl_easy_init();
+    if (curl)
+    {
+        char user_agent[256];
+        snprintf(user_agent, sizeof(user_agent), "Mozilla 5.0 (compatible; TLEscope/%s; +https://github.com/aweeri/TLEscope)", TLESCOPE_VERSION);
+        
+        curl_easy_setopt(curl, CURLOPT_URL, "https://github.com/aweeri/TLEscope/releases/latest");
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, update_header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, latest_version_str);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
+#if defined(_WIN32) || defined(_WIN64)
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+#endif
+        curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (strlen(latest_version_str) > 0 && strcmp(latest_version_str, TLESCOPE_VERSION) != 0)
+        {
+            if (strcmp(TLESCOPE_VERSION, "vUnknown") != 0 && strstr(TLESCOPE_VERSION, "-dirty") == NULL)
+                update_available = true;
+        }
+    }
+    return NULL;
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+static void UpdateCheckThreadWin(void *arg) { UpdateCheckThread(arg); }
+#endif
+
 static char theme_names[1024] = "";
 static int active_theme_idx = 0;
 static bool theme_dropdown_edit = false;
@@ -394,7 +458,10 @@ static bool DownloadTLESource(CURL *curl, const char *url, FILE *out)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, ""); /* handle compression */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla 5.0 (compatible; TLEscope/3.X; +https://github.com/aweeri/TLEscope)"); //TODO: add version whenever aval internally
+    
+    char user_agent[256];
+    snprintf(user_agent, sizeof(user_agent), "Mozilla 5.0 (compatible; TLEscope/%s; +https://github.com/aweeri/TLEscope)", TLESCOPE_VERSION);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
 
 #if defined(_WIN32) || defined(_WIN64)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -802,6 +869,15 @@ bool IsMouseOverUI(AppConfig *cfg)
             if (diff > 2 * 86400)
                 show_tle_warning = true;
         }
+
+#if defined(_WIN32) || defined(_WIN64)
+        _beginthread(UpdateCheckThreadWin, 0, NULL);
+#else
+        pthread_t update_thread;
+        if (pthread_create(&update_thread, NULL, UpdateCheckThread, NULL) == 0)
+            pthread_detach(update_thread);
+#endif
+
         ui_initialized = true;
     }
 
@@ -3521,6 +3597,29 @@ case WND_SCOPE:
         customFont, TextFormat("Speed: %.10gx %s", *ctx->time_multiplier, (*ctx->time_multiplier == 0.0) ? "[PAUSED]" : ""), btn_start_x + buttons_w + 20 * cfg->ui_scale,
         GetScreenHeight() - 35 * cfg->ui_scale, 20 * cfg->ui_scale, cfg->text_main
     );
+
+    if (update_available) {
+        static double update_popup_start = 0.0;
+        if (update_popup_start == 0.0) update_popup_start = GetTime();
+        
+        if (GetTime() - update_popup_start < 10.0) {
+            const char *upd_text = "Update Available!";
+            float upd_w = MeasureTextEx(customFont, upd_text, 16 * cfg->ui_scale, 1.0f).x;
+            float upd_x = GetScreenWidth() - upd_w - 20 * cfg->ui_scale;
+            float upd_y = GetScreenHeight() - 32 * cfg->ui_scale;
+            
+            Rectangle upd_rec = {upd_x, upd_y, upd_w, 16 * cfg->ui_scale};
+            bool hover_upd = CheckCollisionPointRec(GetMousePosition(), upd_rec) && top_hovered_wnd == -1;
+            
+            if (hover_upd) {
+                DrawRectangleRec((Rectangle){upd_rec.x, upd_rec.y + upd_rec.height, upd_rec.width, 1.0f}, cfg->ui_accent);
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    OpenURL("https://github.com/aweeri/TLEscope/releases/latest");
+                }
+            }
+            DrawUIText(customFont, upd_text, upd_rec.x, upd_rec.y, 16 * cfg->ui_scale, hover_upd ? cfg->ui_accent : cfg->text_secondary);
+        }
+    }
 
     const char *tt_texts[18] = {
         "Settings",

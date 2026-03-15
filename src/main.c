@@ -487,7 +487,19 @@ int main(void)
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+
+#ifndef TLESCOPE_VERSION
+#define TLESCOPE_VERSION "vUnknown"
+#endif
+
+    char short_version[64] = {0};
+    strncpy(short_version, TLESCOPE_VERSION, sizeof(short_version) - 1);
+    char *dash = strchr(short_version, '-');
+    if (dash) *dash = '\0';
+
+    char window_title[128];
+    snprintf(window_title, sizeof(window_title), "TLEscope %s", short_version);
+    InitWindow(cfg.window_width, cfg.window_height, window_title);
 
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
