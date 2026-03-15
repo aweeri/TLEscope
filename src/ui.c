@@ -1044,11 +1044,7 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 
     DrawRectangleRounded(bounds, 0.05f, 4, cfg->ui_primary);
 
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
-#else
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
-#endif
+    DrawRectangleRoundedLinesEx(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
 
     const char *titleText = title;
     if (titleText[0] == '#') {
@@ -2858,11 +2854,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
                         Rectangle ttRec = {tt_x, mouseY, textSize.x + 10 * cfg->ui_scale, textSize.y + 10 * cfg->ui_scale};
                         DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.9f));
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-                        DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
-#else
-                        DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
-#endif
+                        DrawRectangleRoundedLinesEx(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
                         DrawUIText(customFont, tooltip, tt_x + 5 * cfg->ui_scale, mouseY + 5 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
                     }
                 }
@@ -3148,11 +3140,7 @@ case WND_SCOPE:
                 
                 Rectangle ttRec = {t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 8 * cfg->ui_scale};
                 DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.9f));
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-                DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
-#else
-                DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
-#endif
+                DrawRectangleRoundedLinesEx(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
                 DrawUIText(customFont, tt, t_x + 4 * cfg->ui_scale, t_y + 4 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
             }
 
@@ -3554,11 +3542,7 @@ case WND_SCOPE:
                     tt_y = m.y - 25 * cfg->ui_scale;
                 Rectangle ttRec = {tt_x, tt_y, tw, 24 * cfg->ui_scale};
                 DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.8f));
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-                DrawRectangleRoundedLines(ttRec, 0.1f, 8, 1.0f * cfg->ui_scale, cfg->ui_secondary);
-#else
-                DrawRectangleRoundedLines(ttRec, 0.1f, 8, cfg->ui_secondary);
-#endif
+                DrawRectangleRoundedLinesEx(ttRec, 0.1f, 8, 1.0f * cfg->ui_scale, cfg->ui_secondary);
                 DrawUIText(customFont, tt_texts[i], tt_x + 6 * cfg->ui_scale, tt_y + 4 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
             }
         }
