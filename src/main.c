@@ -30,7 +30,6 @@ const char *fs3D = "#version 330\n"
                    "uniform sampler2D texture0;\n"
                    "uniform sampler2D texture1;\n"
                    "uniform vec3 sunDir;\n"
-                   "uniform vec3 viewPos;\n"
                    "uniform vec3 moonPos;\n"
                    "uniform float moonRadius;\n"
                    "uniform float earthRadius;\n"
@@ -43,14 +42,7 @@ const char *fs3D = "#version 330\n"
                    "    float intensity = dot(normal, sunDir);\n"
                    "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
                    "    vec3 fragPos = normal * earthRadius;\n"
-                   "    vec3 viewDir = normalize(viewPos - fragPos);\n"
-                   "    float NdotV = max(dot(normal, viewDir), 0.0);\n"
-                   "    float scatterMult = smoothstep(-0.2, 0.2, intensity) * smoothstep(0.2, -0.2, intensity);\n"
-                   "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2);\n"
-                   "    vec3 scatteredDay = mix(day.rgb, day.rgb * sunsetColor * 2.0, scatterMult * (1.0 - NdotV));\n"
-                   "    vec3 hazeColor = mix(vec3(0.15, 0.35, 0.75), sunsetColor, scatterMult);\n"
-                   "    float surfaceHaze = pow(1.0 - NdotV, 2.5) * smoothstep(-0.1, 0.2, intensity) * 0.55;\n"
-                   "    scatteredDay = mix(scatteredDay, hazeColor, surfaceHaze);\n"
+                   "    vec3 scatteredDay = day.rgb;\n"
                    "    vec3 toMoon = moonPos - fragPos;\n"
                    "    float distSunward = dot(toMoon, sunDir);\n"
                    "    float shadow = 1.0;\n"
@@ -62,8 +54,8 @@ const char *fs3D = "#version 330\n"
                    "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
                    "        }\n"
                    "    }\n"
-                   "    vec4 shadowedDay = vec4(scatteredDay * shadow, day.a);\n"
-                   "    finalColor = mix(night, shadowedDay, blend) * fragColor;\n"
+                   "    vec4 dayColor = mix(night, vec4(scatteredDay, day.a), shadow);\n"
+                   "    finalColor = mix(night, dayColor, blend) * fragColor;\n"
                    "}\n";
 
 const char *fs2D = "#version 330\n"
@@ -117,6 +109,12 @@ const char *fsCloud3D = "#version 330\n"
                         "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
                         "    float intensity = dot(normal, sunDir);\n"
                         "    float alpha = smoothstep(-0.15, 0.05, intensity);\n"
+                        "    float scatterMult = min(smoothstep(-0.3, 0.15, intensity) * smoothstep(0.15, -0.15, intensity) * 4.0, 1.0);\n"
+                        "    vec3 sunsetDeep = vec3(0.75, 0.08, 0.10);\n"
+                        "    vec3 sunsetWarm = vec3(1.0, 0.82, 0.75);\n"
+                        "    float gradPos = smoothstep(-0.1, 0.0, intensity);\n"
+                        "    vec3 sunsetColor = mix(sunsetDeep, sunsetWarm, gradPos);\n"
+                        "    vec3 cloudColor = mix(texel.rgb, sunsetColor, scatterMult * 0.7);\n"
                         "    vec3 fragPos = normal * earthRadius;\n"
                         "    vec3 toMoon = moonPos - fragPos;\n"
                         "    float distSunward = dot(toMoon, sunDir);\n"
@@ -129,7 +127,7 @@ const char *fsCloud3D = "#version 330\n"
                         "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
                         "        }\n"
                         "    }\n"
-                        "    finalColor = vec4(texel.rgb * shadow, texel.a * alpha) * fragColor;\n"
+                        "    finalColor = vec4(cloudColor * shadow, texel.a * alpha) * fragColor;\n"
                         "}\n";
 
 /* shader to handle moon self-shadowing and earth's eclipse projection */
@@ -188,29 +186,36 @@ const char *fsAtmosphere3D = "#version 330\n"
                        "    float NdotV = max(dot(normal, viewDir), 0.001);\n"
                        "    float NdotL = dot(normal, sunDir);\n"
                        "    \n"
-                       "    vec3 dayColor = vec3(0.3, 0.6, 1.0);\n"
+                       "    vec3 dayColor = vec3(0.25, 0.58, 1.0);\n"
                        "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // Realistic gold-orange\n"
                        "    \n"
-                       "    // shift to sunset colors near the terminator\n"
-                       "    float sunsetBlend = smoothstep(0.6, -0.15, NdotL);\n"
+                       "    // fresnel for soft edge glow\n"
+                       "    float fresnel = pow(1.0 - NdotV, 2.5);\n"
+                       "    \n"
+                       "    // sun brightness: 15% on night side, 100% on day side\n"
+                       "    float sunBlend = smoothstep(-0.3, 0.3, NdotL);\n"
+                       "    float brightness = mix(0.05, 1.0, sunBlend);\n"
+                       "    \n"
+                       "    // atmosphere base color with sunset shift near terminator\n"
+                       "    float sunsetBlend = smoothstep(0.35, -0.15, NdotL);\n"
                        "    vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);\n"
                        "    \n"
-                       "    // fresnel for soft edge glow\n"
-                       "    float fresnel = pow(1.0 - NdotV, 3.5);\n"
-                       "    \n"
                        "    // shiten the atmosphere where it is thickest\n"
-                       "    atmosColor = mix(atmosColor, vec3(0.85, 0.9, 1.0), fresnel * 0.6);\n"
+                       "    atmosColor = mix(atmosColor, vec3(0.7, 0.85, 1.0), pow(fresnel, 1.5) * 0.7);\n"
+                       "    \n"
+                       "    // forward-scatter glow: brighter when looking toward sun through the limb\n"
+                       "    float VdotL = dot(viewDir, sunDir);\n"
+                       "    float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.15;\n"
+                       "    atmosColor += vec3(1.0, 0.6, 0.3) * forwardGlow * sunBlend;\n"
                        "    \n"
                        "    // smooth fadeout into the vacuum at the absolute edge\n"
-                       "    float vacuumFade = smoothstep(0.0, 0.25, NdotV);\n"
-                       "    \n"
-                       "    // mask out the night side\n"
-                       "    float dayMask = smoothstep(-0.15, 0.1, NdotL);\n"
+                       "    float vacuumFade = smoothstep(0.0, 0.35, NdotV);\n"
                        "    \n"
                        "    // combine for a smoof transparent atmospheric ring\n"
-                       "    float alpha = fresnel * vacuumFade * dayMask * 2.5;\n"
+                       "    vec3 color = atmosColor * brightness;\n"
+                       "    float alpha = fresnel * vacuumFade * brightness * 2.0;\n"
                        "    \n"
-                       "    finalColor = vec4(atmosColor, clamp(alpha, 0.0, 1.0)) * fragColor;\n"
+                       "    finalColor = vec4(color, clamp(alpha, 0.0, 1.0)) * fragColor;\n"
                        "}\n";
 
 /* application state and resources */
@@ -518,7 +523,6 @@ int main(void)
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
-    int viewPosLoc3D = GetShaderLocation(shader3D, "viewPos");
     shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
 
     Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
@@ -561,7 +565,7 @@ int main(void)
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
 
-    float draw_atmosphere_radius = (EARTH_RADIUS_KM + 60.0f) / DRAW_SCALE;
+    float draw_atmosphere_radius = (EARTH_RADIUS_KM + 80.0f) / DRAW_SCALE;
     Mesh atmosphereMesh = GenEarthMesh(draw_atmosphere_radius, 64, 64);
     atmosphereModel = LoadModelFromMesh(atmosphereMesh);
     atmosphereModel.materials[0].shader = shaderAtmosphere;
@@ -1653,7 +1657,6 @@ int main(void)
             earthModel.materials[0].shader = shader3D;
             SetShaderValue(shader3D, sunDirLoc3D, &sunEcef, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader3D, moonPosLoc3D, &moonEcef, SHADER_UNIFORM_VEC3);
-            SetShaderValue(shader3D, viewPosLoc3D, &viewEcef, SHADER_UNIFORM_VEC3);
         }
         else
         {
