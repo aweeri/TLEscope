@@ -241,9 +241,9 @@ static AppConfig cfg = {
 };
 
 static Font customFont;
-static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture;
+static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture, skyboxTexture;
 static Texture2D periMark, apoMark;
-static Model earthModel, moonModel, cloudModel, atmosphereModel;
+static Model earthModel, moonModel, cloudModel, atmosphereModel, skyboxModel;
 
 /* manual mesh generation for the planetary spheres */
 static Mesh GenEarthMesh(float radius, int slices, int rings)
@@ -508,10 +508,12 @@ int main(void)
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
     earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
     earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
+    skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
 
     /* make textures not blocky when zoomed in on*/
     SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
@@ -546,6 +548,11 @@ int main(void)
     Shader defaultEarthShader = earthModel.materials[0].shader;
 
     DrawLoadingScreen(0.8f, "Loading Celestial Bodies...", logoTex);
+
+    Mesh skyboxMesh = GenEarthMesh(-500.0f, 32, 32); /* negative radius flips normals inward */
+    skyboxModel = LoadModelFromMesh(skyboxMesh);
+    skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
+
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
     cloudModel = LoadModelFromMesh(cloudMesh);
@@ -660,6 +667,7 @@ int main(void)
             UnloadTexture(earthNightTexture);
             UnloadTexture(cloudTexture);
             UnloadTexture(moonTexture);
+            UnloadTexture(skyboxTexture);
             UnloadTexture(satIcon);
             UnloadTexture(markerIcon);
             UnloadTexture(periMark);
@@ -685,6 +693,10 @@ int main(void)
             cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
             SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
             cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+
+            skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
+            SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
+            skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
 
             moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
             SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
@@ -1623,6 +1635,11 @@ int main(void)
             /* 3d globe rendering */
         BeginMode3D(Camera3DParams);
         
+        if (cfg.show_skybox)
+        {
+            DrawModel(skyboxModel, Camera3DParams.position, 1.0f, WHITE);
+        }
+
         float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
         Vector3 sunEci = calculate_sun_position(current_epoch);
         Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
@@ -1990,6 +2007,8 @@ int main(void)
     UnloadTexture(apoMark);
     UnloadTexture(earthTexture);
     UnloadTexture(earthNightTexture);
+    UnloadTexture(skyboxTexture);
+    UnloadModel(skyboxModel);
     UnloadModel(earthModel);
     UnloadShader(shader3D);
     UnloadShader(shader2D);

@@ -724,7 +724,7 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
     if (show_help)
         active[count++] = (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
     if (show_settings)
-        active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale};
+        active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     if (show_time_dialog)
         active[count++] = (Rectangle){td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     if (show_passes_dialog)
@@ -810,7 +810,7 @@ bool IsMouseOverUI(AppConfig *cfg)
 
     if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale}))
         over_window = true;
-    if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale}))
+    if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale}))
         over_window = true;
     if (show_time_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale}))
         over_window = true;
@@ -1156,7 +1156,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* calculate interactive window rects */
     Rectangle helpWindow = {hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
-    Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 495 * cfg->ui_scale};
+    Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     Rectangle timeWindow = {td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     Rectangle tleWindow = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 130 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 130 * cfg->ui_scale};
     Rectangle passesWindow = {pd_x, pd_y, 357 * cfg->ui_scale, 380 * cfg->ui_scale};
@@ -1495,7 +1495,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_settings)
         {
-            FindSmartWindowPosition(250 * cfg->ui_scale, 495 * cfg->ui_scale, cfg, &sw_x, &sw_y);
+            FindSmartWindowPosition(250 * cfg->ui_scale, 520 * cfg->ui_scale, cfg, &sw_x, &sw_y);
             sprintf(text_fps, "%d", cfg->target_fps);
         }
         show_settings = !show_settings;
@@ -2209,6 +2209,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Show Markers", &cfg->show_markers);
             sy += 25 * cfg->ui_scale;
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Scattering", &cfg->show_scattering);
+            sy += 25 * cfg->ui_scale;
+            GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Skybox", &cfg->show_skybox);
             sy += 25 * cfg->ui_scale;
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "VSync", &cfg->hint_vsync);            
             sy += 30 * cfg->ui_scale;

@@ -1,0 +1,13 @@
+{
+    "text_main": "#FFFFFFFF",
+    "text_secondary": "#D3D3D3B3",
+    "ui_bg": "#00000080",
+    "ui_primary": "#1A1A1A99",
+    "ui_secondary": "#33333366",
+    "ui_accent": "#66FF66FF",
+    "window_border": "#4A4A4A80",
+    "window_border_focus": "#66FF66CC",
+    "scope_bg": "#0A0F1999",
+    "scope_horizon": "#2D1E1466",
+    "overlay_dim": "#000000FF"
+}
