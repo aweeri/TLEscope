@@ -406,7 +406,7 @@ static void DrawLoadingScreen(float progress, const char *message, Texture2D log
     float barW = 400 * cfg.ui_scale;
     float barH = 16 * cfg.ui_scale;
 
-    float startY = screenH / 2.0f;
+    float startY = (screenH / 2.0f) + (55.0f * cfg.ui_scale);
 
     if (logoTex.id != 0)
     {
