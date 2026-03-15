@@ -1809,8 +1809,9 @@ int GuiScrollPanel(Rectangle bounds, const char *text, Rectangle content, Vector
     int horizontalScrollBarWidth = hasHorizontalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
     int verticalScrollBarWidth =  hasVerticalScrollBar? GuiGetStyle(LISTVIEW, SCROLLBAR_WIDTH) : 0;
 
-    float padCorner = 6.0f; // padding to prevent scrollbars and text from clipping over rounded corners
-    float padEdge = 2.0f;
+    float guiScale = (float)GuiGetStyle(DEFAULT, TEXT_SIZE) / 10.0f; // derive scale from text size (default 10)
+    float padCorner = 6.0f * guiScale;
+    float padEdge = 2.0f * guiScale;
 
     Rectangle horizontalScrollBar = { 
         (float)((GuiGetStyle(LISTVIEW, SCROLLBAR_SIDE) == SCROLLBAR_LEFT_SIDE)? (float)bounds.x + verticalScrollBarWidth : (float)bounds.x) + GuiGetStyle(DEFAULT, BORDER_WIDTH) + padCorner, 
