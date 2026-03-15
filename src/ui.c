@@ -1042,12 +1042,12 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
     float scale = cfg->ui_scale;
     float header_h = 24 * scale;
 
-    DrawRectangleRounded(bounds, 0.05f, 16, cfg->ui_primary);
+    DrawRectangleRounded(bounds, 0.05f, 4, cfg->ui_primary);
 
 #if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(bounds, 0.05f, 16, 1.5f * scale, cfg->window_border);
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
 #else
-    DrawRectangleRoundedLines(bounds, 0.05f, 16, cfg->window_border);
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
 #endif
 
     const char *titleText = title;
