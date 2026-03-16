@@ -2199,6 +2199,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
             cur_y += 10 * cfg->ui_scale;
             DRAW_HEADER("Camera & Visuals");
+            DRAW_ROW("F11", "Toggle Fullscreen");
             DRAW_ROW("RMB / Drag", "Orbit camera / Pan 2D map");
             DRAW_ROW("Shift + RMB", "Pan camera in 3D");
             DRAW_ROW("Home", "Reset camera position");

@@ -873,6 +873,8 @@ int main(void)
                 cfg.ui_scale += 0.1f;
             if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))
                 cfg.ui_scale -= 0.1f;
+            if (IsKeyPressed(KEY_F11))
+                ToggleFullscreen();
         }
 
         if (cfg.ui_scale < 0.5f)
