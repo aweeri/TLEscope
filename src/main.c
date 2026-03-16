@@ -66,12 +66,17 @@ const char *fs3D = "#version 330\n"
                    "            float b = 2.0 * dot(fragPos, sunDir);\n"
                    "            float c = earthRadius * earthRadius - cloudR * cloudR;\n"
                    "            float t = (-b + sqrt(b * b - 4.0 * c)) * 0.5;\n"
+                   "            float cloudH = max(cloudR - earthRadius, 1e-5);\n"
+                   "            float minSunSin = 0.14;\n"
+                   "            float maxShadowLen = cloudH / minSunSin;\n"
+                   "            t = min(t, maxShadowLen);\n"
                    "            vec3 cn = normalize(fragPos + t * sunDir);\n"
                    "            vec2 cUV = vec2(atan(-cn.z, cn.x) / 6.28318530718 + 0.5, cn.y);\n"
                    "            cUV.y = acos(clamp(cUV.y, -1.0, 1.0)) / 3.14159265359;\n"
                    "            cUV.x = fract(cUV.x + cloudUVOffset);\n"
                    "            float cAlpha = texture(texture2, cUV).a;\n"
-                   "            cShadow = mix(1.0, 0.1, cAlpha * smoothstep(-0.1, 0.2, intensity));\n"
+                   "            float termFade = smoothstep(0.00, 0.25, intensity);\n"
+                   "            cShadow = mix(1.0, 0.1, cAlpha * termFade);\n"
                    "        }\n"
                    "        \n"
                    "        scatteredDay = (scatteredDay * cShadow) + specular;\n"
@@ -599,7 +604,7 @@ int main(void)
 
     DrawLoadingScreen(0.6f, "Generating Meshes...", logoTex);
     float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
-    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 64, 64);
+    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 80, 80);
     earthModel = LoadModelFromMesh(sphereMesh);
     earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
     earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
@@ -607,12 +612,12 @@ int main(void)
 
     DrawLoadingScreen(0.8f, "Loading Celestial Bodies...", logoTex);
 
-    Mesh skyboxMesh = GenEarthMesh(-500.0f, 32, 32); /* negative radius flips normals inward */
+    Mesh skyboxMesh = GenEarthMesh(-500.0f, 40, 40); /* negative radius flips normals inward */
     skyboxModel = LoadModelFromMesh(skyboxMesh);
     skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
 
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
-    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
+    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 80, 80);
     cloudModel = LoadModelFromMesh(cloudMesh);
     cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
@@ -621,13 +626,13 @@ int main(void)
     Shader defaultCloudShader = cloudModel.materials[0].shader;
 
     float draw_atmosphere_radius = (EARTH_RADIUS_KM + 80.0f) / DRAW_SCALE;
-    Mesh atmosphereMesh = GenEarthMesh(draw_atmosphere_radius, 64, 64);
+    Mesh atmosphereMesh = GenEarthMesh(draw_atmosphere_radius, 80, 80);
     atmosphereModel = LoadModelFromMesh(atmosphereMesh);
     atmosphereModel.materials[0].shader = shaderAtmosphere;
     SetShaderValue(shaderAtmosphere, GetShaderLocation(shaderAtmosphere, "atmRadius"), &draw_atmosphere_radius, SHADER_UNIFORM_FLOAT);
 
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
-    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32);
+    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 48, 48);
     moonModel = LoadModelFromMesh(moonMesh);
     moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
     SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);

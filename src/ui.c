@@ -97,6 +97,8 @@ static TLESource_t RETLECTOR_SOURCES[] = {
     {"25", "CubeSats", "https://retlector.eu/tle/cubesat"}
 };
 #define NUM_RETLECTOR_SOURCES 25
+#define HELP_WINDOW_W 420.0f
+#define HELP_WINDOW_H 500.0f
 
 /* window z-ordering management */
 typedef enum
@@ -789,7 +791,7 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
     Rectangle active[10];
     int count = 0;
     if (show_help)
-        active[count++] = (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
+        active[count++] = (Rectangle){hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale};
     if (show_settings)
         active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     if (show_time_dialog)
@@ -884,7 +886,7 @@ bool IsMouseOverUI(AppConfig *cfg)
     bool over_window = false;
     float pass_w = 357 * cfg->ui_scale, pass_h = 380 * cfg->ui_scale;
 
-    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale}))
+    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale}))
         over_window = true;
     if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale}))
         over_window = true;
@@ -1231,7 +1233,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     /* calculate interactive window rects */
-    Rectangle helpWindow = {hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
+    Rectangle helpWindow = {hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale};
     Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     Rectangle timeWindow = {td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     Rectangle tleWindow = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 130 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 130 * cfg->ui_scale};
@@ -1554,11 +1556,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle btnClock = {btn_start_x + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
 
     /* main toolbar rendering */
-    if (top_hovered_wnd != -1)
+    bool toolbar_blocked_by_window = (top_hovered_wnd != -1);
+    int old_toolbar_disabled_text = GuiGetStyle(DEFAULT, TEXT_COLOR_DISABLED);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, GuiGetStyle(DEFAULT, TEXT_COLOR_NORMAL));
+    if (toolbar_blocked_by_window)
         GuiDisable();
 
     int normal_text = ColorToInt(cfg->text_main);
-    int disabled_text = ColorToInt(cfg->text_secondary);
+    int disabled_text = toolbar_blocked_by_window ? normal_text : ColorToInt(cfg->text_secondary);
 
 #define HIGHLIGHT_START(cond)                                                                                                                                                                          \
     if (cond)                                                                                                                                                                                          \
@@ -1590,7 +1595,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_help)
         {
-            FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+            FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
         }
         show_help = !show_help;
         BringToFront(WND_HELP);
@@ -1763,16 +1768,23 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 #undef HIGHLIGHT_START
 #undef HIGHLIGHT_END
 
-    GuiEnable();
+    if (toolbar_blocked_by_window)
+        GuiEnable();
+    GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, old_toolbar_disabled_text);
 
     /* Render dialogs respecting Z-Order to enforce click consumption logically */
     for (int win_idx = 0; win_idx < WND_MAX; win_idx++)
     {
         WindowID current_id = z_order[win_idx];
         bool is_topmost = (top_hovered_wnd == -1) || (top_hovered_wnd == current_id);
-
-        if (!is_topmost)
+        bool window_blocked = !is_topmost;
+        int old_window_disabled_text = 0;
+        if (window_blocked)
+        {
+            old_window_disabled_text = GuiGetStyle(DEFAULT, TEXT_COLOR_DISABLED);
+            GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, GuiGetStyle(DEFAULT, TEXT_COLOR_NORMAL));
             GuiDisable();
+        }
 
         switch (current_id)
         {
@@ -2157,7 +2169,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont, true))
                 show_help = false;
 
-            Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 620 * cfg->ui_scale};
+            Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 660 * cfg->ui_scale};
             Rectangle viewRec = {0};
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -3472,8 +3484,11 @@ case WND_SCOPE:
             break;
         }
 
-        if (!is_topmost)
+        if (window_blocked)
+        {
             GuiEnable();
+            GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, old_window_disabled_text);
+        }
     }
 
     if (show_tle_warning)
@@ -3550,7 +3565,7 @@ case WND_SCOPE:
             else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
             if (!show_help) {
-                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
                 show_help = true;
                 BringToFront(WND_HELP);
             }
@@ -3575,7 +3590,7 @@ case WND_SCOPE:
             else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
             if (!show_help) {
-                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
                 show_help = true;
                 BringToFront(WND_HELP);
             }
