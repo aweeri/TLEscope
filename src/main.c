@@ -18,6 +18,7 @@ static const char* GetAssetPath(const char* theme, const char* filename) {
 }
 #include "types.h"
 #include "ui.h"
+#include "rotator.h"
 
 /* * shaders for day/night transition
  * uses dot product between surface normal and sun direction
@@ -2100,6 +2101,7 @@ int main(void)
     UnloadFont(customFont);
 
     SaveSatSelection();
+    RotatorShutdown();
 
     CloseWindow();
     return 0;

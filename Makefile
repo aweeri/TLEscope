@@ -21,7 +21,7 @@ endif
 
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 
-SRC       = src/main.c src/astro.c src/config.c src/ui.c
+SRC       = src/main.c src/astro.c src/config.c src/ui.c src/rotator.c
 OBJ       = $(SRC:src/%.c=build/%.o)
 
 LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
