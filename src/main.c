@@ -512,16 +512,17 @@ int main(void)
     int max_h = GetMonitorHeight(monitor);
     int current_w = GetScreenWidth();
     int current_h = GetScreenHeight();
+    Vector2 monitorPos = GetMonitorPosition(monitor);
 
     if (current_w >= max_w || current_h >= max_h)
     {
-        /* shrink the window a teeny bit before maximizing to make Windows not treat it as a borderless window */
+        /* shrink and center the window slightly before maximizing so the restored state has a valid position */
         SetWindowSize(max_w - 100, max_h - 100);
+        SetWindowPosition((int)monitorPos.x + 50, (int)monitorPos.y + 50);
         SetWindowState(FLAG_WINDOW_MAXIMIZED);
     }
     else
     {
-        Vector2 monitorPos = GetMonitorPosition(monitor);
         SetWindowPosition((int)monitorPos.x + (max_w - current_w) / 2, (int)monitorPos.y + (max_h - current_h) / 2);
     }
 
