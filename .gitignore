@@ -15,3 +15,6 @@ dist/
 
 # csv exports
 *.csv
+
+# ignore CLANGD cache
+.cache
