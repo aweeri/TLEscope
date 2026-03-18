@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+
 Marker home_location;
 
 // turn hex strings into real colors
@@ -29,7 +31,7 @@ Color ParseHexColor(const char *hexStr, Color fallback)
 }
 
 // read the json file and grab our settings
-void LoadAppConfig(const char *filename, AppConfig *config)
+void LoadAppConfig(const char *resource, AppConfig *config)
 {
     // default theme configuration
     strcpy(config->theme, "default");
@@ -42,6 +44,22 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
     config->custom_tle_source_count = 0;
+    
+    
+    char filename[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with /settings.json at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/%s", homeDir,resource);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(filename,sizeof(filename),fullPath);
+    #else 
+    snprintf(filename, sizeof(filename),resource);
+    #endif
 
     if (FileExists(filename))
     {
@@ -435,8 +453,11 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
     // load colors from the selected theme file
     char theme_path[256];
+    #if defined (BUILD_FOR_DIST)
+    snprintf(theme_path, sizeof(theme_path), "/usr/share/TLEscope/themes/%s/theme.json", config->theme);
+    #else
     snprintf(theme_path, sizeof(theme_path), "themes/%s/theme.json", config->theme);
-
+    #endif
     if (FileExists(theme_path))
     {
         char *theme_text = LoadFileText(theme_path);
@@ -487,15 +508,33 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
             UnloadFileText(theme_text);
         }
+    }else {
+        printf("ERROR: Theme files not found!");
     }
 }
 
-void SaveAppConfig(const char *filename, AppConfig *config)
+void SaveAppConfig(const char *resource, AppConfig *config)
 {
-    FILE *file = fopen(filename, "w");
-    if (!file)
-        return;
+    char filename[1024];
 
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with /settings.json at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/%s", homeDir,resource);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(filename,sizeof(filename),fullPath);
+    #else 
+    snprintf(filename, sizeof(filename),resource);
+    #endif
+    
+    printf("THERE IS THE PATH WE SAVIN AT %s",filename);
+    FILE *file = fopen(filename, "w");
+    if (!file){
+        printf("SOMEHOW THE PATH IS WRONG SHITHEAD %s",filename);
+        return;
+    }
     fprintf(file, "{\n");
     fprintf(file, "    \"theme\": \"%s\",\n", config->theme);
     fprintf(file, "    \"window_width\": %d,\n", config->window_width);
@@ -513,7 +552,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
     fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
-    fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
+    
 
     if (config->custom_tle_source_count > 0)
     {

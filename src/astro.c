@@ -217,9 +217,24 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
 }
 
 /* bulk loading of celestial junk from flat files */
-void load_tle_data(const char *filename)
+void load_tle_data(const char *tlefile)
 {
-    FILE *file = fopen(filename, "r");
+    char filename[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with /<the tle file> at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/%s", homeDir,tlefile);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(filename,sizeof(filename),fullPath);
+    #else 
+    snprintf(filename, sizeof(filename),tlefile);
+    #endif
+
+    FILE *file = fopen(filename, "r"); 
     if (!file)
     {
         printf("Failed to open %s\n", filename);

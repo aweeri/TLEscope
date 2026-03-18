@@ -407,10 +407,29 @@ static bool si_rolled_up = false;
 static Satellite *last_selected_sat = NULL;
 static Vector2 si_scroll = {0};
 
+
+
 static void LoadTLEState(AppConfig *cfg)
 {
     if (data_tle_epoch != -1) return;
-    FILE *f = fopen("data.tle", "r");
+
+    char tlefile[] = "data.tle";
+    char filename[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with / at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/%s", homeDir,tlefile);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(filename,sizeof(filename),fullPath);
+    #else 
+    snprintf(filename, sizeof(filename),tlefile);
+    #endif
+
+    FILE *f = fopen(filename, "r");
     if (f)
     {
         char line[256];
@@ -528,7 +547,23 @@ static void *PullTLEThread(void *arg)
     (void)arg;
     AppConfig *cfg = pull_cfg;
 
-    FILE *out = fopen("data.tle", "wb");
+    char tlefile[] = "data.tle";
+    char filename[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with / at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/%s", homeDir,tlefile);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(filename,sizeof(filename),fullPath);
+    #else 
+    snprintf(filename, sizeof(filename),tlefile);
+    #endif
+
+    FILE *out = fopen(filename, "wb");
     if (!out)
     {
         pull_state = PULL_ERROR;
@@ -970,7 +1005,22 @@ bool IsMouseOverUI(AppConfig *cfg)
 
 void SaveSatSelection(void)
 {
-    FILE *f = fopen("persistence.bin", "wb");
+    char persistenceFile[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with /settings.json at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/persistence.bin", homeDir);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(persistenceFile,sizeof(persistenceFile),fullPath);
+    #else 
+    snprintf(persistenceFile, sizeof(persistenceFile),resource);
+    #endif
+
+    FILE *f = fopen(persistenceFile, "wb");
     if (!f)
         return;
     int count = 0;
@@ -992,7 +1042,22 @@ void SaveSatSelection(void)
 
 void LoadSatSelection(void)
 {
-    FILE *f = fopen("persistence.bin", "rb");
+    char persistenceFile[1024];
+
+    #if defined (BUILD_FOR_DIST)
+    //The full path, with /settings.json at the end
+    char fullPath[1024];
+    const char *homeDir = getenv("XDG_CONFIG_HOME");
+    if (!homeDir) homeDir = getenv("HOME");
+    snprintf(fullPath,sizeof(fullPath),"%s/.config/TLEscope/persistence.bin", homeDir);
+    
+    printf("DEBUG: %s\n", fullPath);
+    snprintf(persistenceFile,sizeof(persistenceFile),fullPath);
+    #else 
+    snprintf(persistenceFile, sizeof(persistenceFile),resource);
+    #endif
+
+    FILE *f = fopen(persistenceFile, "rb");
     if (!f)
         return;
     int count;
