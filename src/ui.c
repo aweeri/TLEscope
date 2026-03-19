@@ -2,7 +2,6 @@
 #define _GNU_SOURCE
 #include "ui.h"
 #include "astro.h"
-#include "rotator.h"
 #include <ctype.h>
 #include <math.h>
 #include <raymath.h>
@@ -34,6 +33,8 @@ typedef struct tagMSG *LPMSG;
 
 #define RAYGUI_IMPLEMENTATION
 #include "../lib/raygui.h"
+
+#include "rotator.h"
 
 typedef struct
 {
