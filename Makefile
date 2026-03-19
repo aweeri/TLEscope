@@ -90,7 +90,7 @@ windows-arm64: bin/TLEscope.exe
 
 win-installer: windows
 	@echo "Building Windows installer..."
-	magick logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || convert logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico
+	magick logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || convert logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || cp logo.ico $(DIST_WIN)/
 	makensis installer.nsi
 	@echo "Installer built at dist/TLEscope-Installer.exe"
 
