@@ -5,16 +5,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "astro.h"
 #include "config.h"
+
+const char* get_resource_path(const char* resource) {  
+    static char fullPath[512];
+    #if defined (BUILD_FOR_DIST)
+    snprintf(fullPath, sizeof(fullPath), "/usr/share/TLEscope/%s", resource);
+    if (FileExists(fullPath)) {
+        return fullPath;
+    } else {
+        printf("ERROR: resource file was not found at %s, trying fallabck path\n",fullPath);
+        return resource;
+    }
+    #else
+    return resource;
+    #endif
+}
 
 static const char* GetAssetPath(const char* theme, const char* filename) {
     static char path[256];
     snprintf(path, sizeof(path), "themes/%s/%s", theme, filename);
     if (FileExists(path)) return path;
     snprintf(path, sizeof(path), "themes/default/%s", filename);
-    return path;
+    return get_resource_path(path);
 }
 #include "types.h"
 #include "ui.h"
@@ -493,10 +509,36 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
     }
 }
 
+
+
 int main(void)
 {
-    LoadAppConfig("settings.json", &cfg);
+    
+    #if defined(BUILD_FOR_DIST)
+    //The path to the user's .config/TLEscope. Can we expect a path longer than this?? I sure hope not :omba:
+    char configPath[1024];
 
+    const char *homeDir = getenv("HOME");
+    if (!homeDir) {
+        printf("The $HOME env variable is not set. Exiting\n");
+        return 1; 
+    }
+    snprintf(configPath,sizeof(configPath),"%s/.config/TLEscope", homeDir);
+
+    if (!DirectoryExists(configPath)) {
+        //if the config directory is missing in the user's home directory, create it.
+        printf("creating config directory, as it didn't exist before at %s \n",configPath);
+        int status = mkdir(configPath,S_IRWXU);
+        if ( status !=0 ) {
+            // Maybe print the meaning of the error code, not just th code itself?
+            printf("The config directory couldn't be created, with error code %i. Exiting\n",status);
+            return 1;
+        }
+    }
+
+    #endif
+    LoadAppConfig("settings.json", &cfg);
+    
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
 
@@ -535,7 +577,7 @@ int main(void)
     SetExitKey(0);
 
     /* logo and icon loading */
-    Image logoImg = LoadImage("logo.png");
+    Image logoImg = LoadImage(get_resource_path("logo.png")); //DONE
     Texture2D logoTex = {0};
     if (logoImg.data != NULL)
     {
@@ -543,7 +585,7 @@ int main(void)
         logoTex = LoadTextureFromImage(logoImg);
         UnloadImage(logoImg);
     }
-    Image logoLImg = LoadImage("logo.png");
+    Image logoLImg = LoadImage(get_resource_path("logo_l.png")); //DONE
     Texture2D logoLTex = {0};
     if (logoLImg.data != NULL)
     {

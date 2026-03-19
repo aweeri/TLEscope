@@ -19,6 +19,10 @@ else
 	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 endif
 
+ifdef BUILD_FOR_DIST
+	CFLAGS += -DBUILD_FOR_DIST
+endif
+
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 
 SRC       = src/main.c src/astro.c src/config.c src/ui.c src/rotator.c
@@ -47,6 +51,9 @@ DIST_MACOS = dist/TLEscope-macOS-Portable
 all: linux
 
 linux: bin/TLEscope
+ifeq ($(BUILD_FOR_DIST),yes)
+	@echo "Skipping bundling for distribution build (BUILD_FOR_DIST=yes) the binary can be found in bin."
+else
 	@mkdir -p $(DIST_LINUX)
 	cp bin/TLEscope $(DIST_LINUX)/
 	cp -r themes/ $(DIST_LINUX)/
@@ -55,6 +62,7 @@ linux: bin/TLEscope
 	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
 	@echo "Linux build bundled in $(DIST_LINUX)/, do not run bin/*"
 	@echo "Here's your subshell command to run it! (cd $(DIST_LINUX)/ && ./TLEscope)"
+endif
 
 macos: bin/TLEscope-macos
 	@mkdir -p $(DIST_MACOS)

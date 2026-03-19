@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#include "rotator.h"
 #include "astro.h"
 #include <math.h>
 #include <stdio.h>
@@ -17,6 +16,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #endif
+
+#include "rotator.h"
 
 typedef struct
 {
