@@ -1017,7 +1017,7 @@ void SaveSatSelection(void)
     printf("DEBUG: %s\n", fullPath);
     snprintf(persistenceFile,sizeof(persistenceFile),fullPath);
     #else 
-    snprintf(persistenceFile, sizeof(persistenceFile),resource);
+    snprintf(persistenceFile, sizeof(persistenceFile),"persistence.bin");
     #endif
 
     FILE *f = fopen(persistenceFile, "wb");
@@ -1054,7 +1054,7 @@ void LoadSatSelection(void)
     printf("DEBUG: %s\n", fullPath);
     snprintf(persistenceFile,sizeof(persistenceFile),fullPath);
     #else 
-    snprintf(persistenceFile, sizeof(persistenceFile),resource);
+    snprintf(persistenceFile, sizeof(persistenceFile),"persistence.bin");
     #endif
 
     FILE *f = fopen(persistenceFile, "rb");

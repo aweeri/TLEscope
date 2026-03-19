@@ -10,12 +10,27 @@
 #include "astro.h"
 #include "config.h"
 
+const char* get_resource_path(const char* resource) {  
+    static char fullPath[512];
+    #if defined (BUILD_FOR_DIST)
+    snprintf(fullPath, sizeof(fullPath), "/usr/share/TLEscope/%s", resource);
+    if (FileExists(fullPath)) {
+        return fullPath;
+    } else {
+        printf("ERROR: resource file was not found at %s, trying fallabck path\n",fullPath);
+        return resource;
+    }
+    #else
+    return resource;
+    #endif
+}
+
 static const char* GetAssetPath(const char* theme, const char* filename) {
     static char path[256];
     snprintf(path, sizeof(path), "themes/%s/%s", theme, filename);
     if (FileExists(path)) return path;
     snprintf(path, sizeof(path), "themes/default/%s", filename);
-    return path;
+    return get_resource_path(path);
 }
 #include "types.h"
 #include "ui.h"
@@ -494,22 +509,7 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
     }
 }
 
-const char* get_resource_path(const char* resource) {  
-    static char fullPath[512];
-    #if defined (BUILD_FOR_DIST)
-    snprintf(fullPath, sizeof(fullPath), "/usr/share/TLEscope/%s", resource);
-    if (FileExists(fullPath)) {
-        return fullPath;
-    } else {
-        printf("ERROR: resource file was not found at %s, trying fallabck path\n",fullPath);
-        return resource;
-    }
-    #else
-    return resource;
-    #endif
 
-
-}
 
 int main(void)
 {

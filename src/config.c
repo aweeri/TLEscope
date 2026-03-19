@@ -509,7 +509,7 @@ void LoadAppConfig(const char *resource, AppConfig *config)
             UnloadFileText(theme_text);
         }
     }else {
-        printf("ERROR: Theme files not found!");
+        printf("ERROR: Theme files could not be found!\n");
     }
 }
 
@@ -529,10 +529,10 @@ void SaveAppConfig(const char *resource, AppConfig *config)
     snprintf(filename, sizeof(filename),resource);
     #endif
     
-    printf("THERE IS THE PATH WE SAVIN AT %s",filename);
+    printf("Saving config to %s \n",filename);
     FILE *file = fopen(filename, "w");
     if (!file){
-        printf("SOMEHOW THE PATH IS WRONG SHITHEAD %s",filename);
+        printf("ERROR couldn't open path: %s \n",filename);
         return;
     }
     fprintf(file, "{\n");

@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-//THIS SHOULD BE CHANGED!!!
-#define BUILD_FOR_DIST
+//This is toggled by make options. Only here for convinience.
+//#define BUILD_FOR_DIST
 
 // basic limits and math constants
 #define MAX_SATELLITES 15000
