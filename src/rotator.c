@@ -133,11 +133,11 @@ static bool ConnectTcp(const char *host, const char *port)
     }
 
 #if defined(_WIN32) || defined(_WIN64)
-    DWORD timeout_ms = 150;
+    DWORD timeout_ms = 1000;
     setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
     setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
 #else
-    struct timeval tv = {.tv_sec = 0, .tv_usec = 150000};
+    struct timeval tv = {.tv_sec = 1, .tv_usec = 0};
     setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 #endif
