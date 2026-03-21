@@ -38,6 +38,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->highlight_sunlit = false; // default
     config->show_slant_range = false; // default
     config->show_scattering = false;  // default
+    config->show_skybox = true;       // default
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
     config->custom_tle_source_count = 0;
@@ -174,6 +175,22 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 if (true_ptr && (!comma || true_ptr < comma))
                 {
                     config->show_slant_range = true;
+                }
+            }
+
+            // parse skybox toggle
+            char *ssky_ptr = strstr(text, "\"show_skybox\"");
+            if (ssky_ptr)
+            {
+                char *comma = strchr(ssky_ptr, ',');
+                char *false_ptr = strstr(ssky_ptr, "false");
+                if (false_ptr && (!comma || false_ptr < comma))
+                {
+                    config->show_skybox = false;
+                }
+                else
+                {
+                    config->show_skybox = true;
                 }
             }
 
@@ -397,6 +414,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->highlight_sunlit = false;
         config->show_slant_range = false;
         config->show_scattering = false;
+        config->show_skybox = true;
         config->hint_vsync = true;
         sscanf("Home", "%63[^\"]", home_location.name);
         home_location.lat = 0.00;
@@ -493,6 +511,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"highlight_sunlit\": %s,\n", config->highlight_sunlit ? "true" : "false");
     fprintf(file, "    \"show_slant_range\": %s,\n", config->show_slant_range ? "true" : "false");
     fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
+    fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
 

@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #include "ui.h"
 #include "astro.h"
+#include "rotator.h"
 #include <ctype.h>
 #include <math.h>
 #include <raymath.h>
@@ -97,6 +98,10 @@ static TLESource_t RETLECTOR_SOURCES[] = {
     {"25", "CubeSats", "https://retlector.eu/tle/cubesat"}
 };
 #define NUM_RETLECTOR_SOURCES 25
+#define HELP_WINDOW_W 420.0f
+#define HELP_WINDOW_H 500.0f
+#define ROT_WINDOW_W 430.0f
+#define ROT_WINDOW_H 430.0f
 
 /* window z-ordering management */
 typedef enum
@@ -109,12 +114,13 @@ typedef enum
     WND_DOPPLER,
     WND_SAT_MGR,
     WND_TLE_MGR,
-        WND_SCOPE,
-        WND_SAT_INFO,
-        WND_MAX
-    } WindowID;
+    WND_SCOPE,
+    WND_SAT_INFO,
+    WND_ROTATOR,
+    WND_MAX
+} WindowID;
 
-    static WindowID z_order[WND_MAX] = {WND_HELP, WND_SETTINGS, WND_TIME, WND_PASSES, WND_POLAR, WND_DOPPLER, WND_SAT_MGR, WND_TLE_MGR, WND_SCOPE, WND_SAT_INFO};
+static WindowID z_order[WND_MAX] = {WND_HELP, WND_SETTINGS, WND_TIME, WND_PASSES, WND_POLAR, WND_DOPPLER, WND_SAT_MGR, WND_TLE_MGR, WND_SCOPE, WND_SAT_INFO, WND_ROTATOR};
 
 static void BringToFront(WindowID id)
 {
@@ -232,10 +238,86 @@ static Vector2 lunar_path_pts[100];
 static int lunar_num_pts = 0;
 static double last_lunar_calc_time = 0.0;
 
-static float tt_hover[18] = {0};
+static float tt_hover[19] = {0};
+static bool rot_show_window = false;
+static bool rot_dragging = false;
+static Vector2 rot_drag_off = {0};
+static float rot_x = 320.0f, rot_y = 120.0f;
+static bool rot_edit_host = false;
+static bool rot_edit_port = false;
+static bool rot_edit_get_fmt = false;
+static bool rot_edit_set_fmt = false;
+static bool rot_edit_custom_cmd = false;
+static bool rot_edit_park_az = false;
+static bool rot_edit_park_el = false;
+static bool rot_edit_lead_time = false;
 static bool ui_initialized = false;
 static char text_fps[8] = "";
 static bool edit_fps = false;
+
+#ifndef TLESCOPE_VERSION
+#define TLESCOPE_VERSION "vUnknown"
+#endif
+
+static char latest_version_str[64] = "";
+static bool update_available = false;
+
+static size_t update_header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
+{
+    size_t numbytes = size * nitems;
+    if (strncmp(buffer, "Location: ", 10) == 0 || strncmp(buffer, "location: ", 10) == 0)
+    {
+        char *tag = strstr(buffer, "/tag/");
+        if (tag)
+        {
+            tag += 5;
+            strncpy((char *)userdata, tag, 63);
+            for (int i = 0; ((char *)userdata)[i]; i++)
+            {
+                if (((char *)userdata)[i] == '\r' || ((char *)userdata)[i] == '\n')
+                {
+                    ((char *)userdata)[i] = '\0';
+                    break;
+                }
+            }
+        }
+    }
+    return numbytes;
+}
+
+static void *UpdateCheckThread(void *arg)
+{
+    (void)arg;
+    CURL *curl = curl_easy_init();
+    if (curl)
+    {
+        char user_agent[256];
+        snprintf(user_agent, sizeof(user_agent), "Mozilla 5.0 (compatible; TLEscope/%s; +https://github.com/aweeri/TLEscope)", TLESCOPE_VERSION);
+        
+        curl_easy_setopt(curl, CURLOPT_URL, "https://github.com/aweeri/TLEscope/releases/latest");
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, update_header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, latest_version_str);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
+#if defined(_WIN32) || defined(_WIN64)
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+#endif
+        curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (strlen(latest_version_str) > 0 && strcmp(latest_version_str, TLESCOPE_VERSION) != 0)
+        {
+            if (strcmp(TLESCOPE_VERSION, "vUnknown") != 0 && strstr(TLESCOPE_VERSION, "-dirty") == NULL)
+                update_available = true;
+        }
+    }
+    return NULL;
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+static void UpdateCheckThreadWin(void *arg) { UpdateCheckThread(arg); }
+#endif
 
 static char theme_names[1024] = "";
 static int active_theme_idx = 0;
@@ -394,7 +476,10 @@ static bool DownloadTLESource(CURL *curl, const char *url, FILE *out)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, ""); /* handle compression */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla 5.0 (compatible; TLEscope/3.X; +https://github.com/aweeri/TLEscope)"); //TODO: add version whenever aval internally
+    
+    char user_agent[256];
+    snprintf(user_agent, sizeof(user_agent), "Mozilla 5.0 (compatible; TLEscope/%s; +https://github.com/aweeri/TLEscope)", TLESCOPE_VERSION);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
 
 #if defined(_WIN32) || defined(_WIN64)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -719,12 +804,12 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
 
-    Rectangle active[10];
+    Rectangle active[12];
     int count = 0;
     if (show_help)
-        active[count++] = (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
+        active[count++] = (Rectangle){hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale};
     if (show_settings)
-        active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale};
+        active[count++] = (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     if (show_time_dialog)
         active[count++] = (Rectangle){td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     if (show_passes_dialog)
@@ -741,6 +826,8 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
         active[count++] = (Rectangle){sc_x, sc_y, 360 * cfg->ui_scale, 560 * cfg->ui_scale};
     if (show_sat_info_dialog)
         active[count++] = (Rectangle){si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale};
+    if (RotatorIsWindowVisible())
+        active[count++] = RotatorGetWindowRect(cfg);
 
     float candidates_x[] = {margin, sw - w - margin};
     float step_y = 20.0f * cfg->ui_scale;
@@ -780,7 +867,8 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
 bool IsUITyping(void)
 {
     return edit_year || edit_month || edit_day || edit_hour || edit_min || edit_sec || edit_unix || edit_doppler_freq || edit_doppler_res || edit_doppler_file || edit_sat_search || edit_min_el ||
-           edit_hl_name || edit_hl_lat || edit_hl_lon || edit_hl_alt || edit_fps || edit_new_tle || edit_scope_az || edit_scope_el || edit_scope_beam;
+           edit_hl_name || edit_hl_lat || edit_hl_lon || edit_hl_alt || edit_fps || edit_new_tle || edit_scope_az || edit_scope_el || edit_scope_beam ||
+           rot_edit_host || rot_edit_port || rot_edit_get_fmt || rot_edit_set_fmt || rot_edit_custom_cmd || rot_edit_park_az || rot_edit_park_el || rot_edit_lead_time;
 }
 
 void ToggleTLEWarning(void) { show_tle_warning = !show_tle_warning; }
@@ -802,15 +890,24 @@ bool IsMouseOverUI(AppConfig *cfg)
             if (diff > 2 * 86400)
                 show_tle_warning = true;
         }
+
+#if defined(_WIN32) || defined(_WIN64)
+        _beginthread(UpdateCheckThreadWin, 0, NULL);
+#else
+        pthread_t update_thread;
+        if (pthread_create(&update_thread, NULL, UpdateCheckThread, NULL) == 0)
+            pthread_detach(update_thread);
+#endif
+
         ui_initialized = true;
     }
 
     bool over_window = false;
     float pass_w = 357 * cfg->ui_scale, pass_h = 380 * cfg->ui_scale;
 
-    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale}))
+    if (show_help && CheckCollisionPointRec(GetMousePosition(), (Rectangle){hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale}))
         over_window = true;
-    if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 465 * cfg->ui_scale}))
+    if (show_settings && CheckCollisionPointRec(GetMousePosition(), (Rectangle){sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale}))
         over_window = true;
     if (show_time_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale}))
         over_window = true;
@@ -828,6 +925,8 @@ bool IsMouseOverUI(AppConfig *cfg)
         over_window = true;
     if (show_sat_info_dialog && CheckCollisionPointRec(GetMousePosition(), (Rectangle){si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale}))
         over_window = true;
+    if (RotatorIsPointInWindow(GetMousePosition(), cfg))
+        over_window = true;
     if (show_tle_warning &&
         CheckCollisionPointRec(
             GetMousePosition(), (Rectangle){(GetScreenWidth() - 480 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 160 * cfg->ui_scale) / 2.0f, 480 * cfg->ui_scale, 160 * cfg->ui_scale}
@@ -837,7 +936,7 @@ bool IsMouseOverUI(AppConfig *cfg)
     if (over_window)
         return true;
 
-    float center_x_bottom = (GetScreenWidth() - (5 * 35 - 5) * cfg->ui_scale) / 2.0f;
+    float center_x_bottom = (GetScreenWidth() - (6 * 35 - 5) * cfg->ui_scale) / 2.0f;
     float center_x_top = (GetScreenWidth() - (13 * 35 - 5) * cfg->ui_scale) / 2.0f;
 
         Rectangle btnRecs[] = {
@@ -858,9 +957,10 @@ bool IsMouseOverUI(AppConfig *cfg)
             {center_x_bottom + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
             {center_x_bottom + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
             {center_x_bottom + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale}
+            {center_x_bottom + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
+            {center_x_bottom + 175 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale}
         };
-        for (int i = 0; i < 18; i++)
+        for (int i = 0; i < 19; i++)
     {
         if (CheckCollisionPointRec(GetMousePosition(), btnRecs[i]))
             return true;
@@ -1044,18 +1144,44 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
 
     DrawRectangleRounded(bounds, 0.05f, 4, cfg->ui_primary);
 
-    DrawRectangleRoundedLinesEx(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
+    // Subtle content-card fill to unify window interiors with sectioned dialogs.
+    Rectangle content = {bounds.x + 4 * scale, bounds.y + header_h + 3 * scale, bounds.width - 8 * scale, bounds.height - header_h - 7 * scale};
+    if (content.width > 0 && content.height > 0)
+        DrawRectangleRounded(content, 0.04f, 6, ApplyAlpha(cfg->ui_bg, 0.10f));
+
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
+#else
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
+#endif
 
     const char *titleText = title;
-    if (titleText[0] == '#') {
+    int titleIcon = -1;
+    if (titleText[0] == '#')
+    {
         const char *end = strchr(titleText + 1, '#');
-        if (end) {
+        if (end)
+        {
+            char iconBuf[8] = {0};
+            int iconLen = (int)(end - (titleText + 1));
+            if (iconLen > 0 && iconLen < (int)sizeof(iconBuf))
+            {
+                memcpy(iconBuf, titleText + 1, (size_t)iconLen);
+                titleIcon = atoi(iconBuf);
+            }
             titleText = end + 1;
-            if (titleText[0] == ' ') titleText++;
+            if (titleText[0] == ' ')
+                titleText++;
         }
     }
 
-    DrawUIText(font, titleText, bounds.x + 12 * scale, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
+    float title_x = bounds.x + 12 * scale;
+    if (titleIcon >= 0)
+    {
+        GuiLabel((Rectangle){bounds.x + 8 * scale, bounds.y + 3 * scale, 18 * scale, 18 * scale}, TextFormat("#%d#", titleIcon));
+        title_x = bounds.x + 30 * scale;
+    }
+    DrawUIText(font, titleText, title_x, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
 
     DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->window_border);
 
@@ -1079,6 +1205,299 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
     DrawLineEx((Vector2){closeBtn.x + closeBtn.width - pad, closeBtn.y + pad}, (Vector2){closeBtn.x + pad, closeBtn.y + closeBtn.height - pad}, 2.0f, cfg->text_main);
 
     return clicked;
+}
+
+bool RotatorIsWindowVisible(void) { return rot_show_window; }
+
+Rectangle RotatorGetWindowRect(AppConfig *cfg) { return (Rectangle){rot_x, rot_y, ROT_WINDOW_W * cfg->ui_scale, ROT_WINDOW_H * cfg->ui_scale}; }
+
+bool RotatorIsPointInWindow(Vector2 point, AppConfig *cfg) { return rot_show_window && CheckCollisionPointRec(point, RotatorGetWindowRect(cfg)); }
+
+void RotatorToggleWindow(AppConfig *cfg)
+{
+    if (!rot_show_window)
+    {
+        Rectangle r = RotatorGetWindowRect(cfg);
+        rot_x = (GetScreenWidth() - r.width) / 2.0f;
+        rot_y = (GetScreenHeight() - r.height) / 2.0f;
+        SnapWindow(&rot_x, &rot_y, r.width, r.height, cfg);
+    }
+    rot_show_window = !rot_show_window;
+}
+
+bool RotatorBeginDrag(Vector2 point, AppConfig *cfg)
+{
+    Rectangle r = RotatorGetWindowRect(cfg);
+    Rectangle title = (Rectangle){r.x, r.y, r.width - 30 * cfg->ui_scale, 24 * cfg->ui_scale};
+    if (!rot_show_window || !CheckCollisionPointRec(point, title))
+        return false;
+    rot_dragging = true;
+    rot_drag_off = (Vector2){point.x - rot_x, point.y - rot_y};
+    return true;
+}
+
+void RotatorUpdateDrag(AppConfig *cfg)
+{
+    if (!rot_dragging || !rot_show_window)
+        return;
+    Rectangle r = RotatorGetWindowRect(cfg);
+    rot_x = GetMousePosition().x - rot_drag_off.x;
+    rot_y = GetMousePosition().y - rot_drag_off.y;
+    SnapWindow(&rot_x, &rot_y, r.width, r.height, cfg);
+}
+
+void RotatorEndDrag(void) { rot_dragging = false; }
+
+static bool DrawRotatorFrame(Rectangle bounds, AppConfig *cfg, Font customFont)
+{
+    float scale = cfg->ui_scale;
+    float header_h = 24 * scale;
+
+    DrawRectangleRounded(bounds, 0.05f, 4, cfg->ui_primary);
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
+#else
+    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
+#endif
+
+    GuiLabel((Rectangle){bounds.x + 8 * scale, bounds.y + 3 * scale, 18 * scale, 18 * scale}, "#65#");
+    DrawUIText(customFont, "Rotator Control", bounds.x + 30 * scale, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
+    DrawLineEx((Vector2){bounds.x + 2 * scale, bounds.y + header_h}, (Vector2){bounds.x + bounds.width - 2 * scale, bounds.y + header_h}, 1.0f, cfg->window_border);
+
+    float btn_size = header_h - 8 * scale;
+    Rectangle close_btn = {bounds.x + bounds.width - btn_size - 6 * scale, bounds.y + 4 * scale, btn_size, btn_size};
+    bool hover = CheckCollisionPointRec(GetMousePosition(), close_btn);
+    bool clicked = false;
+    DrawRectangleRounded(close_btn, 0.3f, 8, hover ? ApplyAlpha(RED, 0.8f) : ApplyAlpha(cfg->window_border, 0.3f));
+    if (hover && IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+        clicked = true;
+
+    float pad = close_btn.width * 0.3f;
+    DrawLineEx((Vector2){close_btn.x + pad, close_btn.y + pad}, (Vector2){close_btn.x + close_btn.width - pad, close_btn.y + close_btn.height - pad}, 2.0f, cfg->text_main);
+    DrawLineEx((Vector2){close_btn.x + close_btn.width - pad, close_btn.y + pad}, (Vector2){close_btn.x + pad, close_btn.y + close_btn.height - pad}, 2.0f, cfg->text_main);
+    return clicked;
+}
+
+static void DrawRotatorSection(Rectangle sec, const char *title, AppConfig *cfg, Font customFont)
+{
+    float scale = cfg->ui_scale;
+    DrawRectangleRounded(sec, 0.06f, 6, ApplyAlpha(cfg->ui_bg, 0.14f));
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
+    DrawRectangleRoundedLines(sec, 0.06f, 6, 1.0f * scale, ApplyAlpha(cfg->window_border, 0.85f));
+#else
+    DrawRectangleRoundedLines(sec, 0.06f, 6, ApplyAlpha(cfg->window_border, 0.85f));
+#endif
+    DrawUIText(customFont, title, sec.x + 8 * scale, sec.y + 5 * scale, 15 * scale, cfg->ui_accent);
+    DrawLineEx((Vector2){sec.x + 8 * scale, sec.y + 22 * scale}, (Vector2){sec.x + sec.width - 8 * scale, sec.y + 22 * scale}, 1.0f, ApplyAlpha(cfg->window_border, 0.7f));
+}
+
+void RotatorDrawWindow(AppConfig *cfg, Font customFont, bool interactive)
+{
+    if (!rot_show_window)
+        return;
+
+    Rectangle r = RotatorGetWindowRect(cfg);
+    if (interactive && DrawRotatorFrame(r, cfg, customFont))
+    {
+        rot_show_window = false;
+        return;
+    }
+    if (!interactive)
+        DrawRotatorFrame(r, cfg, customFont);
+
+    float scale = cfg->ui_scale;
+    float pad = 10 * scale;
+    float section_gap = 8 * scale;
+    float content_x = r.x + pad;
+    float content_w = r.width - 2 * pad;
+    float y = r.y + 32 * scale;
+
+    char *host = RotatorGetHostBuffer();
+    char *port = RotatorGetPortBuffer();
+    char *get_fmt = RotatorGetGetFmtBuffer();
+    char *set_fmt = RotatorGetSetFmtBuffer();
+    char *custom_cmd = RotatorGetCustomCmdBuffer();
+    char *park_az = RotatorGetParkAzBuffer();
+    char *park_el = RotatorGetParkElBuffer();
+
+    Rectangle sec_conn = {content_x, y, content_w, 102 * scale};
+    DrawRotatorSection(sec_conn, "Connection", cfg, customFont);
+
+    float ry = sec_conn.y + 28 * scale;
+    float inner_x = sec_conn.x + 8 * scale;
+    float inner_w = sec_conn.width - 16 * scale;
+    float host_label_w = 38 * scale;
+    float port_label_w = 34 * scale;
+    float port_w = 55 * scale;
+    float conn_w = 78 * scale;
+    float gap = 5 * scale;
+    float host_w = inner_w - host_label_w - port_label_w - port_w - conn_w - gap * 4;
+    if (host_w < 110 * scale)
+        host_w = 110 * scale;
+
+    GuiLabel((Rectangle){inner_x, ry, host_label_w, 24 * scale}, "Host:");
+    bool host_toggled = GuiTextBox((Rectangle){inner_x + host_label_w + gap, ry, host_w, 24 * scale}, host, RotatorGetHostBufferSize(), interactive && rot_edit_host);
+    if (interactive && host_toggled)
+        rot_edit_host = !rot_edit_host;
+    float port_x = inner_x + host_label_w + gap + host_w + gap;
+    GuiLabel((Rectangle){port_x, ry, port_label_w, 24 * scale}, "Port:");
+    bool port_toggled = GuiTextBox((Rectangle){port_x + port_label_w + gap, ry, port_w, 24 * scale}, port, RotatorGetPortBufferSize(), interactive && rot_edit_port);
+    if (interactive && port_toggled)
+        rot_edit_port = !rot_edit_port;
+    bool connect_pressed = GuiButton((Rectangle){inner_x + inner_w - conn_w, ry, conn_w, 24 * scale}, RotatorIsConnected() ? "Disconn" : "Connect");
+    if (interactive && connect_pressed)
+    {
+        if (!RotatorIsConnected())
+            RotatorConnect();
+        else
+            RotatorDisconnect();
+    }
+
+    ry += 30 * scale;
+    DrawUIText(customFont, TextFormat("Link: %s", RotatorIsConnected() ? "CONNECTED" : "DISCONNECTED"), inner_x, ry, 14 * scale, RotatorIsConnected() ? cfg->ui_accent : cfg->text_secondary);
+    if (RotatorHasPosition())
+        DrawUIText(customFont, TextFormat("Current: AZ %.1f  EL %.1f", RotatorGetAz(), RotatorGetEl()), inner_x, ry + 16 * scale, 14 * scale, cfg->text_main);
+
+    bool poll_pressed = GuiButton((Rectangle){inner_x + inner_w - 82 * scale, ry, 82 * scale, 24 * scale}, "Poll");
+    if (interactive && poll_pressed)
+        RotatorPollNow();
+
+    y = sec_conn.y + sec_conn.height + section_gap;
+    Rectangle sec_proto = {content_x, y, content_w, 86 * scale};
+    DrawRotatorSection(sec_proto, "Protocol", cfg, customFont);
+
+    ry = sec_proto.y + 28 * scale;
+    GuiLabel((Rectangle){sec_proto.x + 8 * scale, ry, 56 * scale, 24 * scale}, "Get:");
+    bool get_toggled = GuiTextBox((Rectangle){sec_proto.x + 64 * scale, ry, sec_proto.width - 72 * scale, 24 * scale}, get_fmt, RotatorGetGetFmtBufferSize(), interactive && rot_edit_get_fmt);
+    if (interactive && get_toggled)
+        rot_edit_get_fmt = !rot_edit_get_fmt;
+    ry += 28 * scale;
+    GuiLabel((Rectangle){sec_proto.x + 8 * scale, ry, 56 * scale, 24 * scale}, "Set:");
+    bool set_toggled = GuiTextBox((Rectangle){sec_proto.x + 64 * scale, ry, sec_proto.width - 72 * scale, 24 * scale}, set_fmt, RotatorGetSetFmtBufferSize(), interactive && rot_edit_set_fmt);
+    if (interactive && set_toggled)
+        rot_edit_set_fmt = !rot_edit_set_fmt;
+
+    y = sec_proto.y + sec_proto.height + section_gap;
+    Rectangle sec_steer = {content_x, y, content_w, 92 * scale};
+    DrawRotatorSection(sec_steer, "Steering", cfg, customFont);
+
+    ry = sec_steer.y + 28 * scale;
+    bool auto_steer = RotatorGetAutoSteer();
+    GuiCheckBox((Rectangle){sec_steer.x + 8 * scale, ry + 2 * scale, 20 * scale, 20 * scale}, "Auto steer", &auto_steer);
+    if (interactive)
+        RotatorSetAutoSteer(auto_steer);
+
+    int old_border = GuiGetStyle(BUTTON, BORDER_COLOR_NORMAL);
+    float polar_btn_w = 64 * scale;
+    float scope_btn_w = 64 * scale;
+    float btn_gap = 6 * scale;
+    float polar_x = sec_steer.x + 128 * scale;
+    float scope_x = polar_x + polar_btn_w + btn_gap;
+    if (RotatorGetSteerMode() == ROTATOR_STEER_POLAR)
+        GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToInt(cfg->ui_accent));
+    bool polar_mode_pressed = GuiButton((Rectangle){polar_x, ry, polar_btn_w, 24 * scale}, "Polar");
+    GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, old_border);
+    if (interactive && polar_mode_pressed)
+        RotatorSetSteerMode(ROTATOR_STEER_POLAR);
+
+    if (RotatorGetSteerMode() == ROTATOR_STEER_SCOPE)
+        GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToInt(cfg->ui_accent));
+    bool scope_mode_pressed = GuiButton((Rectangle){scope_x, ry, scope_btn_w, 24 * scale}, "Scope");
+    GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, old_border);
+    if (interactive && scope_mode_pressed)
+        RotatorSetSteerMode(ROTATOR_STEER_SCOPE);
+
+    ry += 32 * scale;
+    char *lead_time = RotatorGetLeadTimeBuffer();
+    float lead_label_w = 64 * scale;
+    float lead_input_w = 52 * scale;
+    GuiLabel((Rectangle){sec_steer.x + 8 * scale, ry, lead_label_w, 24 * scale}, "Lead (s):");
+    AdvancedTextBox((Rectangle){sec_steer.x + 8 * scale + lead_label_w + 4 * scale, ry, lead_input_w, 24 * scale}, lead_time, RotatorGetLeadTimeBufferSize(), &rot_edit_lead_time, true);
+    float park_label_x = sec_steer.x + 8 * scale + lead_label_w + 4 * scale + lead_input_w + 16 * scale;
+    GuiLabel((Rectangle){park_label_x, ry, 40 * scale, 24 * scale}, "Park:");
+    float park_az_x = park_label_x + 44 * scale;
+    float park_el_x = park_az_x + 60 * scale;
+    AdvancedTextBox((Rectangle){park_az_x, ry, 56 * scale, 24 * scale}, park_az, RotatorGetParkAzBufferSize(), &rot_edit_park_az, true);
+    AdvancedTextBox((Rectangle){park_el_x, ry, 56 * scale, 24 * scale}, park_el, RotatorGetParkElBufferSize(), &rot_edit_park_el, true);
+    bool set_pressed = GuiButton((Rectangle){sec_steer.x + sec_steer.width - 62 * scale - 8 * scale, ry, 62 * scale, 24 * scale}, "Set");
+    if (interactive && set_pressed)
+        RotatorSetParkNow((float)atof(park_az), (float)atof(park_el));
+
+    y = sec_steer.y + sec_steer.height + section_gap;
+    Rectangle sec_custom = {content_x, y, content_w, 66 * scale};
+    DrawRotatorSection(sec_custom, "Command", cfg, customFont);
+
+    ry = sec_custom.y + 28 * scale;
+    GuiLabel((Rectangle){sec_custom.x + 8 * scale, ry, 56 * scale, 24 * scale}, "Raw:");
+    bool custom_toggled = GuiTextBox((Rectangle){sec_custom.x + 56 * scale, ry, sec_custom.width - 130 * scale, 24 * scale}, custom_cmd, RotatorGetCustomCmdBufferSize(), interactive && rot_edit_custom_cmd);
+    if (interactive && custom_toggled)
+        rot_edit_custom_cmd = !rot_edit_custom_cmd;
+    bool send_pressed = GuiButton((Rectangle){sec_custom.x + sec_custom.width - 66 * scale - 8 * scale, ry, 66 * scale, 24 * scale}, "Send");
+    if (interactive && send_pressed)
+        RotatorSendCustomNow();
+
+    DrawUIText(customFont, RotatorGetStatus(), r.x + 12 * scale, r.y + r.height - 18 * scale, 13 * scale, cfg->text_secondary);
+}
+
+float RotatorConnectedItemWidth(AppConfig *cfg, Font customFont)
+{
+    float rot_text_w = MeasureTextEx(customFont, "ROTATOR CONNECTED", 16 * cfg->ui_scale, 1.0f).x;
+    return 10 * cfg->ui_scale + rot_text_w;
+}
+
+void RotatorDrawConnectedItem(AppConfig *cfg, Font customFont, float x, float y)
+{
+    Color rot_col = (Color){90, 240, 170, 255};
+    float blink = (sinf(GetTime() * 6.0f) * 0.5f + 0.5f);
+    DrawCircleV((Vector2){x, y + 6 * cfg->ui_scale}, 4.0f * cfg->ui_scale, ApplyAlpha(rot_col, 0.35f + 0.65f * blink));
+    DrawUIText(customFont, "ROTATOR CONNECTED", x + 10 * cfg->ui_scale, y, 16 * cfg->ui_scale, rot_col);
+}
+
+void RotatorDrawPolarOverlay(AppConfig *cfg, Font customFont, float cx, float cy, float r_max, float pl_x, float pl_y)
+{
+    if (!RotatorHasPosition())
+        return;
+    float r_rot = r_max * (90.0f - RotatorGetEl()) / 90.0f;
+    if (r_rot < 0.0f)
+        r_rot = 0.0f;
+    if (r_rot > r_max)
+        r_rot = r_max;
+    Vector2 pt_rot = {cx + r_rot * sinf(RotatorGetAz() * DEG2RAD), cy - r_rot * cosf(RotatorGetAz() * DEG2RAD)};
+    DrawCircleV(pt_rot, 4.0f * cfg->ui_scale, (Color){90, 240, 170, 255});
+    DrawCircleLines(pt_rot.x, pt_rot.y, 6.0f * cfg->ui_scale, WHITE);
+}
+
+void RotatorDrawScopeOverlay(
+    AppConfig *cfg, Font customFont, float center_x, float center_y, float scope_radius, float scope_az, float scope_el, float scope_beam, float sc_x, float ctrl_y
+)
+{
+    if (!RotatorHasPosition())
+        return;
+
+    float c_az_rad = scope_az * DEG2RAD;
+    float c_el_rad = scope_el * DEG2RAD;
+    float r_az_rad = RotatorGetAz() * DEG2RAD;
+    float r_el_rad = RotatorGetEl() * DEG2RAD;
+    float rad_beam_half = (scope_beam / 2.0f) * DEG2RAD;
+
+    float r_cos_theta = sinf(c_el_rad) * sinf(r_el_rad) + cosf(c_el_rad) * cosf(r_el_rad) * cosf(r_az_rad - c_az_rad);
+    if (r_cos_theta < -1.0f)
+        r_cos_theta = -1.0f;
+    if (r_cos_theta > 1.0f)
+        r_cos_theta = 1.0f;
+    float r_theta = acosf(r_cos_theta);
+    if (r_theta <= rad_beam_half)
+    {
+        float r_dx = cosf(r_el_rad) * sinf(r_az_rad - c_az_rad);
+        float r_dy = cosf(c_el_rad) * sinf(r_el_rad) - sinf(c_el_rad) * cosf(r_el_rad) * cosf(r_az_rad - c_az_rad);
+        float r_dist = (r_theta / rad_beam_half) * scope_radius;
+        float r_angle = atan2f(-r_dy, r_dx);
+        Vector2 rot_pt = {center_x + r_dist * cosf(r_angle), center_y + r_dist * sinf(r_angle)};
+        DrawCircleLines(rot_pt.x, rot_pt.y, 8.0f * cfg->ui_scale, (Color){90, 240, 170, 255});
+        DrawCircleV(rot_pt, 2.5f * cfg->ui_scale, (Color){90, 240, 170, 255});
+    }
+
+    DrawUIText(customFont, TextFormat("Rotator: %.1f / %.1f", RotatorGetAz(), RotatorGetEl()), sc_x + 15 * cfg->ui_scale, ctrl_y + 24 * cfg->ui_scale, 14 * cfg->ui_scale, (Color){90, 240, 170, 255});
 }
 
 /* main ui rendering loop */
@@ -1151,8 +1570,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     /* calculate interactive window rects */
-    Rectangle helpWindow = {hw_x, hw_y, 420 * cfg->ui_scale, 480 * cfg->ui_scale};
-    Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 495 * cfg->ui_scale};
+    Rectangle helpWindow = {hw_x, hw_y, HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale};
+    Rectangle settingsWindow = {sw_x, sw_y, 250 * cfg->ui_scale, 520 * cfg->ui_scale};
     Rectangle timeWindow = {td_x, td_y, 252 * cfg->ui_scale, 320 * cfg->ui_scale};
     Rectangle tleWindow = {(GetScreenWidth() - 300 * cfg->ui_scale) / 2.0f, (GetScreenHeight() - 130 * cfg->ui_scale) / 2.0f, 300 * cfg->ui_scale, 130 * cfg->ui_scale};
     Rectangle passesWindow = {pd_x, pd_y, 357 * cfg->ui_scale, 380 * cfg->ui_scale};
@@ -1162,6 +1581,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle tmMgrWindow = {tm_x, tm_y, 400 * cfg->ui_scale, 500 * cfg->ui_scale};
     Rectangle scopeWindow = {sc_x, sc_y, 360 * cfg->ui_scale, 560 * cfg->ui_scale};
     Rectangle satInfoWindow = {si_x, si_y, 320 * cfg->ui_scale, si_rolled_up ? 24 * cfg->ui_scale : 480 * cfg->ui_scale};
+    Rectangle rotWindow = RotatorGetWindowRect(cfg);
 
     /* process Z-Order mouse events safely by evaluating from top to bottom */
     int top_hovered_wnd = -1;
@@ -1219,6 +1639,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             top_hovered_wnd = id;
             break;
         }
+        if (id == WND_ROTATOR && RotatorIsWindowVisible() && CheckCollisionPointRec(m, rotWindow))
+        {
+            top_hovered_wnd = id;
+            break;
+        }
     }
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
@@ -1239,7 +1664,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 drag_polar = true;
                 drag_polar_off = Vector2Subtract(m, (Vector2){pl_x, pl_y});
             }
-            else if (top == WND_PASSES && CheckCollisionPointRec(m, (Rectangle){pd_x, pd_y, passesWindow.width - 30 * cfg->ui_scale, 30 * cfg->ui_scale}))
+            else if (top == WND_PASSES && CheckCollisionPointRec(m, (Rectangle){pd_x, pd_y, passesWindow.width - 30 * cfg->ui_scale, 24 * cfg->ui_scale}))
             {
                 drag_passes = true;
                 drag_passes_off = Vector2Subtract(m, (Vector2){pd_x, pd_y});
@@ -1279,12 +1704,15 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 drag_sat_info = true;
                 drag_sat_info_off = Vector2Subtract(m, (Vector2){si_x, si_y});
             }
+            else if (top == WND_ROTATOR)
+                RotatorBeginDrag(m, cfg);
         }
     }
 
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
     {
         drag_help = drag_settings = drag_time_dialog = drag_passes = drag_polar = drag_doppler = drag_sat_mgr = drag_tle_mgr = drag_scope = drag_sat_info = false;
+        RotatorEndDrag();
     }
 
     if (show_passes_dialog)
@@ -1382,6 +1810,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     GuiSetStyle(CHECKBOX, TEXT_PADDING, 8 * cfg->ui_scale);
 
+    GuiSetStyle(LISTVIEW, SCROLLBAR_WIDTH, 12 * cfg->ui_scale);
+    GuiSetStyle(LISTVIEW, LIST_ITEMS_HEIGHT, 28 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, SCROLL_SLIDER_SIZE, 16 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, ARROWS_SIZE, 6 * cfg->ui_scale);
+    GuiSetStyle(SCROLLBAR, SCROLL_SPEED, 12 * cfg->ui_scale);
+
     GuiSetStyle(TEXTBOX, BORDER_COLOR_FOCUSED, ColorToInt(cfg->window_border_focus));
     GuiSetStyle(TEXTBOX, BORDER_COLOR_PRESSED, ColorToInt(cfg->window_border_focus));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_FOCUSED, ColorToInt(cfg->text_main));
@@ -1442,7 +1876,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     int normal_border = ColorToInt(cfg->window_border);
     int accent_border = ColorToInt(cfg->window_border_focus);
 
-    float buttons_w = (5 * 35 - 5) * cfg->ui_scale;
+    float buttons_w = (6 * 35 - 5) * cfg->ui_scale;
     float center_x_bottom = (GetScreenWidth() - buttons_w) / 2.0f;
     float btn_start_x = center_x_bottom;
     float center_x_top = (GetScreenWidth() - (13 * 35 - 5) * cfg->ui_scale) / 2.0f;
@@ -1466,13 +1900,17 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle btnFastForward = {btn_start_x + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnNow = {btn_start_x + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnClock = {btn_start_x + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
+    Rectangle btnRotator = {btn_start_x + 175 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
 
     /* main toolbar rendering */
-    if (top_hovered_wnd != -1)
+    bool toolbar_blocked_by_window = (top_hovered_wnd != -1);
+    int old_toolbar_disabled_text = GuiGetStyle(DEFAULT, TEXT_COLOR_DISABLED);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, GuiGetStyle(DEFAULT, TEXT_COLOR_NORMAL));
+    if (toolbar_blocked_by_window)
         GuiDisable();
 
     int normal_text = ColorToInt(cfg->text_main);
-    int disabled_text = ColorToInt(cfg->text_secondary);
+    int disabled_text = toolbar_blocked_by_window ? normal_text : ColorToInt(cfg->text_secondary);
 
 #define HIGHLIGHT_START(cond)                                                                                                                                                                          \
     if (cond)                                                                                                                                                                                          \
@@ -1491,7 +1929,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_settings)
         {
-            FindSmartWindowPosition(250 * cfg->ui_scale, 495 * cfg->ui_scale, cfg, &sw_x, &sw_y);
+            FindSmartWindowPosition(250 * cfg->ui_scale, 520 * cfg->ui_scale, cfg, &sw_x, &sw_y);
             sprintf(text_fps, "%d", cfg->target_fps);
         }
         show_settings = !show_settings;
@@ -1504,7 +1942,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     {
         if (!show_help)
         {
-            FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+            FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
         }
         show_help = !show_help;
         BringToFront(WND_HELP);
@@ -1628,6 +2066,13 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
         *ctx->time_multiplier = 1.0;
         *ctx->saved_multiplier = 1.0;
     }
+    HIGHLIGHT_START(RotatorIsWindowVisible())
+    if (GuiButton(btnRotator, "#65#") || (!IsUITyping() && IsKeyPressed(KEY_R)))
+    {
+        RotatorToggleWindow(cfg);
+        BringToFront(WND_ROTATOR);
+    }
+    HIGHLIGHT_END()
 
     HIGHLIGHT_START(show_time_dialog)
     if (GuiButton(btnClock, "#139#") || (!IsUITyping() && IsKeyPressed(KEY_GRAVE)))
@@ -1677,16 +2122,118 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 #undef HIGHLIGHT_START
 #undef HIGHLIGHT_END
 
-    GuiEnable();
+    RotatorUpdateControl(ctx, show_scope_dialog, show_polar_dialog, polar_lunar_mode, selected_pass_idx);
+
+    if (toolbar_blocked_by_window)
+        GuiEnable();
+    GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, old_toolbar_disabled_text);
 
     /* Render dialogs respecting Z-Order to enforce click consumption logically */
     for (int win_idx = 0; win_idx < WND_MAX; win_idx++)
     {
         WindowID current_id = z_order[win_idx];
         bool is_topmost = (top_hovered_wnd == -1) || (top_hovered_wnd == current_id);
+        bool window_blocked = !is_topmost;
+        Vector2 mouse_pos = GetMousePosition();
+        bool mouse_over_current_window = false;
+        switch (current_id)
+        {
+        case WND_HELP:
+            mouse_over_current_window = show_help && CheckCollisionPointRec(mouse_pos, helpWindow);
+            break;
+        case WND_SETTINGS:
+            mouse_over_current_window = show_settings && CheckCollisionPointRec(mouse_pos, settingsWindow);
+            break;
+        case WND_TIME:
+            mouse_over_current_window = show_time_dialog && CheckCollisionPointRec(mouse_pos, timeWindow);
+            break;
+        case WND_PASSES:
+            mouse_over_current_window = show_passes_dialog && CheckCollisionPointRec(mouse_pos, passesWindow);
+            break;
+        case WND_POLAR:
+            mouse_over_current_window = show_polar_dialog && CheckCollisionPointRec(mouse_pos, polarWindow);
+            break;
+        case WND_DOPPLER:
+            mouse_over_current_window = show_doppler_dialog && CheckCollisionPointRec(mouse_pos, dopplerWindow);
+            break;
+        case WND_SAT_MGR:
+            mouse_over_current_window = show_sat_mgr_dialog && CheckCollisionPointRec(mouse_pos, smWindow);
+            break;
+        case WND_TLE_MGR:
+            mouse_over_current_window = show_tle_mgr_dialog && CheckCollisionPointRec(mouse_pos, tmMgrWindow);
+            break;
+        case WND_SCOPE:
+            mouse_over_current_window = show_scope_dialog && CheckCollisionPointRec(mouse_pos, scopeWindow);
+            break;
+        case WND_SAT_INFO:
+            mouse_over_current_window = show_sat_info_dialog && CheckCollisionPointRec(mouse_pos, satInfoWindow);
+            break;
+        case WND_ROTATOR:
+            mouse_over_current_window = RotatorIsWindowVisible() && CheckCollisionPointRec(mouse_pos, rotWindow);
+            break;
+        default:
+            break;
+        }
+        bool use_gui_disable = window_blocked && mouse_over_current_window && (current_id != WND_ROTATOR);
+        int old_window_disabled_text = 0;
+        int old_window_disabled_base = 0;
+        int old_window_disabled_border = 0;
+        int old_textbox_disabled_text = 0;
+        int old_textbox_disabled_base = 0;
+        int old_textbox_disabled_border = 0;
+        int old_button_disabled_text = 0;
+        int old_button_disabled_base = 0;
+        int old_button_disabled_border = 0;
+        int old_toggle_disabled_text = 0;
+        int old_toggle_disabled_base = 0;
+        int old_toggle_disabled_border = 0;
+        int old_slider_disabled_text = 0;
+        int old_slider_disabled_base = 0;
+        int old_slider_disabled_border = 0;
+        int old_checkbox_disabled_text = 0;
+        int old_checkbox_disabled_base = 0;
+        int old_checkbox_disabled_border = 0;
+        if (use_gui_disable)
+        {
+            old_window_disabled_text = GuiGetStyle(DEFAULT, TEXT_COLOR_DISABLED);
+            old_window_disabled_base = GuiGetStyle(DEFAULT, BASE_COLOR_DISABLED);
+            old_window_disabled_border = GuiGetStyle(DEFAULT, BORDER_COLOR_DISABLED);
+            old_textbox_disabled_text = GuiGetStyle(TEXTBOX, TEXT_COLOR_DISABLED);
+            old_textbox_disabled_base = GuiGetStyle(TEXTBOX, BASE_COLOR_DISABLED);
+            old_textbox_disabled_border = GuiGetStyle(TEXTBOX, BORDER_COLOR_DISABLED);
+            old_button_disabled_text = GuiGetStyle(BUTTON, TEXT_COLOR_DISABLED);
+            old_button_disabled_base = GuiGetStyle(BUTTON, BASE_COLOR_DISABLED);
+            old_button_disabled_border = GuiGetStyle(BUTTON, BORDER_COLOR_DISABLED);
+            old_toggle_disabled_text = GuiGetStyle(TOGGLE, TEXT_COLOR_DISABLED);
+            old_toggle_disabled_base = GuiGetStyle(TOGGLE, BASE_COLOR_DISABLED);
+            old_toggle_disabled_border = GuiGetStyle(TOGGLE, BORDER_COLOR_DISABLED);
+            old_slider_disabled_text = GuiGetStyle(SLIDER, TEXT_COLOR_DISABLED);
+            old_slider_disabled_base = GuiGetStyle(SLIDER, BASE_COLOR_DISABLED);
+            old_slider_disabled_border = GuiGetStyle(SLIDER, BORDER_COLOR_DISABLED);
+            old_checkbox_disabled_text = GuiGetStyle(CHECKBOX, TEXT_COLOR_DISABLED);
+            old_checkbox_disabled_base = GuiGetStyle(CHECKBOX, BASE_COLOR_DISABLED);
+            old_checkbox_disabled_border = GuiGetStyle(CHECKBOX, BORDER_COLOR_DISABLED);
 
-        if (!is_topmost)
+            GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, GuiGetStyle(DEFAULT, TEXT_COLOR_NORMAL));
+            GuiSetStyle(DEFAULT, BASE_COLOR_DISABLED, GuiGetStyle(DEFAULT, BASE_COLOR_NORMAL));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_DISABLED, GuiGetStyle(DEFAULT, BORDER_COLOR_NORMAL));
+            GuiSetStyle(TEXTBOX, TEXT_COLOR_DISABLED, GuiGetStyle(TEXTBOX, TEXT_COLOR_NORMAL));
+            GuiSetStyle(TEXTBOX, BASE_COLOR_DISABLED, GuiGetStyle(TEXTBOX, BASE_COLOR_NORMAL));
+            GuiSetStyle(TEXTBOX, BORDER_COLOR_DISABLED, GuiGetStyle(TEXTBOX, BORDER_COLOR_NORMAL));
+            GuiSetStyle(BUTTON, TEXT_COLOR_DISABLED, GuiGetStyle(BUTTON, TEXT_COLOR_NORMAL));
+            GuiSetStyle(BUTTON, BASE_COLOR_DISABLED, GuiGetStyle(BUTTON, BASE_COLOR_NORMAL));
+            GuiSetStyle(BUTTON, BORDER_COLOR_DISABLED, GuiGetStyle(BUTTON, BORDER_COLOR_NORMAL));
+            GuiSetStyle(TOGGLE, TEXT_COLOR_DISABLED, GuiGetStyle(TOGGLE, TEXT_COLOR_NORMAL));
+            GuiSetStyle(TOGGLE, BASE_COLOR_DISABLED, GuiGetStyle(TOGGLE, BASE_COLOR_NORMAL));
+            GuiSetStyle(TOGGLE, BORDER_COLOR_DISABLED, GuiGetStyle(TOGGLE, BORDER_COLOR_NORMAL));
+            GuiSetStyle(SLIDER, TEXT_COLOR_DISABLED, GuiGetStyle(SLIDER, TEXT_COLOR_NORMAL));
+            GuiSetStyle(SLIDER, BASE_COLOR_DISABLED, GuiGetStyle(SLIDER, BASE_COLOR_NORMAL));
+            GuiSetStyle(SLIDER, BORDER_COLOR_DISABLED, GuiGetStyle(SLIDER, BORDER_COLOR_NORMAL));
+            GuiSetStyle(CHECKBOX, TEXT_COLOR_DISABLED, GuiGetStyle(CHECKBOX, TEXT_COLOR_NORMAL));
+            GuiSetStyle(CHECKBOX, BASE_COLOR_DISABLED, GuiGetStyle(CHECKBOX, BASE_COLOR_NORMAL));
+            GuiSetStyle(CHECKBOX, BORDER_COLOR_DISABLED, GuiGetStyle(CHECKBOX, BORDER_COLOR_NORMAL));
             GuiDisable();
+        }
 
         switch (current_id)
         {
@@ -2071,7 +2618,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             if (DrawMaterialWindow(helpWindow, "#193# Help & Controls", cfg, customFont, true))
                 show_help = false;
 
-            Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 620 * cfg->ui_scale};
+            Rectangle contentRec = {0, 0, helpWindow.width - 32 * cfg->ui_scale, 660 * cfg->ui_scale};
             Rectangle viewRec = {0};
 
             int oldFocusD = GuiGetStyle(DEFAULT, BORDER_COLOR_FOCUSED);
@@ -2113,6 +2660,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
             cur_y += 10 * cfg->ui_scale;
             DRAW_HEADER("Camera & Visuals");
+            DRAW_ROW("F11", "Toggle Fullscreen");
             DRAW_ROW("RMB / Drag", "Orbit camera / Pan 2D map");
             DRAW_ROW("Shift + RMB", "Pan camera in 3D");
             DRAW_ROW("Home", "Reset camera position");
@@ -2205,6 +2753,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Show Markers", &cfg->show_markers);
             sy += 25 * cfg->ui_scale;
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Scattering", &cfg->show_scattering);
+            sy += 25 * cfg->ui_scale;
+            GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Skybox", &cfg->show_skybox);
             sy += 25 * cfg->ui_scale;
             GuiCheckBox((Rectangle){sw_x + 10 * cfg->ui_scale, sy, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "VSync", &cfg->hint_vsync);            
             sy += 30 * cfg->ui_scale;
@@ -2384,7 +2934,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             }
 
             cur_y += 40 * cfg->ui_scale;
-            DrawLine(td_x + 15 * cfg->ui_scale, cur_y, td_x + 237 * cfg->ui_scale, cur_y, cfg->ui_secondary);
+            DrawLine(td_x + 15 * cfg->ui_scale, cur_y, td_x + timeWindow.width - 15 * cfg->ui_scale, cur_y, cfg->ui_secondary);
             cur_y += 10 * cfg->ui_scale;
             GuiLabel((Rectangle){td_x + 15 * cfg->ui_scale, cur_y, 150 * cfg->ui_scale, 24 * cfg->ui_scale}, "Unix Epoch:");
             cur_y += 25 * cfg->ui_scale;
@@ -2416,7 +2966,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 show_passes_dialog = false;
 
             if (GuiButton(
-                    (Rectangle){passesWindow.x + 10 * cfg->ui_scale, passesWindow.y + 30 * cfg->ui_scale, passesWindow.width - 150 * cfg->ui_scale, 24 * cfg->ui_scale},
+                    (Rectangle){passesWindow.x + 20 * cfg->ui_scale, passesWindow.y + 30 * cfg->ui_scale, passesWindow.width - 160 * cfg->ui_scale, 24 * cfg->ui_scale},
                     multi_pass_mode ? "Mode: All Passes" : "Mode: Targeted only"
                 ))
             {
@@ -2548,7 +3098,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             if (DrawMaterialWindow(polarWindow, "#64# Polar Tracking Plot", cfg, customFont, true))
                 show_polar_dialog = false;
 
-            if (GuiButton((Rectangle){pl_x + 10 * cfg->ui_scale, pl_y + 30 * cfg->ui_scale, polarWindow.width - 20 * cfg->ui_scale, 24 * cfg->ui_scale}, polar_lunar_mode ? "Mode: Lunar Tracking" : "Mode: Satellite Pass")) {
+            if (GuiButton((Rectangle){pl_x + 20 * cfg->ui_scale, pl_y + 30 * cfg->ui_scale, polarWindow.width - 40 * cfg->ui_scale, 24 * cfg->ui_scale}, polar_lunar_mode ? "Mode: Lunar Tracking" : "Mode: Satellite Pass")) {
                 polar_lunar_mode = !polar_lunar_mode;
             }
 
@@ -2676,6 +3226,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                 }
                 else
                     DrawUIText(customFont, polar_lunar_mode ? "Set Complete" : "Pass Complete", pl_x + 20 * cfg->ui_scale, pl_y + 310 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->text_secondary);
+
+                RotatorDrawPolarOverlay(cfg, customFont, cx, cy, r_max, pl_x, pl_y);
 
                 if (GuiButton((Rectangle){pl_x + 20 * cfg->ui_scale, pl_y + 360 * cfg->ui_scale, 260 * cfg->ui_scale, 30 * cfg->ui_scale}, TextFormat("#134# Jump to %s", polar_lunar_mode ? "Rise" : "AOS")))
                 {
@@ -3138,7 +3690,7 @@ case WND_SCOPE:
                 float t_y = hover_pos.y;
                 if (t_x + tt_size.x + 8 * cfg->ui_scale > sc_x + scopeWindow.width) t_x = hover_pos.x - tt_size.x - 10 * cfg->ui_scale;
                 
-                Rectangle ttRec = {t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 8 * cfg->ui_scale};
+                Rectangle ttRec = {t_x, t_y, tt_size.x + 8 * cfg->ui_scale, tt_size.y + 7 * cfg->ui_scale};
                 DrawRectangleRounded(ttRec, 0.1f, 8, ApplyAlpha(cfg->ui_bg, 0.9f));
                 DrawRectangleRoundedLinesEx(ttRec, 0.1f, 8, 1.5f * cfg->ui_scale, cfg->ui_secondary);
                 DrawUIText(customFont, tt, t_x + 4 * cfg->ui_scale, t_y + 4 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->text_main);
@@ -3146,7 +3698,7 @@ case WND_SCOPE:
 
             /* bottom control panel area */
             float ctrl_y = center.y + scope_radius + 15 * cfg->ui_scale;
-            
+
             // sep toggle button from standard button styles
             int old_toggle_base = GuiGetStyle(TOGGLE, BASE_COLOR_PRESSED);
             int old_toggle_bord = GuiGetStyle(TOGGLE, BORDER_COLOR_PRESSED);
@@ -3156,7 +3708,7 @@ case WND_SCOPE:
             GuiSetStyle(TOGGLE, BORDER_COLOR_PRESSED, ColorToInt(cfg->ui_accent));
             GuiSetStyle(TOGGLE, TEXT_COLOR_PRESSED, ColorToInt(cfg->ui_accent));
 
-            GuiToggle((Rectangle){sc_x + 15 * cfg->ui_scale, ctrl_y, scopeWindow.width - 60 * cfg->ui_scale, 24 * cfg->ui_scale}, "Lock Selected Satellite", &scope_lock);
+            GuiToggle((Rectangle){sc_x + 15 * cfg->ui_scale, ctrl_y, scopeWindow.width - 60 * cfg->ui_scale, 24 * cfg->ui_scale}, "Lock onto targeted", &scope_lock);
 
             GuiSetStyle(TOGGLE, BASE_COLOR_PRESSED, old_toggle_base);
             GuiSetStyle(TOGGLE, BORDER_COLOR_PRESSED, old_toggle_bord);
@@ -3204,7 +3756,8 @@ case WND_SCOPE:
             GuiCheckBox((Rectangle){sc_x + 90 * cfg->ui_scale, ctrl_y, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "HEO/MEO", &scope_show_heo);
             GuiCheckBox((Rectangle){sc_x + 200 * cfg->ui_scale, ctrl_y, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "GEO", &scope_show_geo);
             GuiCheckBox((Rectangle){sc_x + 275 * cfg->ui_scale, ctrl_y, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "Trails", &scope_show_trails);
-            
+            RotatorDrawScopeOverlay(cfg, customFont, center.x, center.y, scope_radius, scope_az, scope_el, scope_beam, sc_x, ctrl_y);
+
             break;
         }
 
@@ -3219,7 +3772,7 @@ case WND_SCOPE:
                 SnapWindow(&si_x, &si_y, satInfoWindow.width, satInfoWindow.height, cfg);
             }
             satInfoWindow.x = si_x; satInfoWindow.y = si_y;
-            if (DrawMaterialWindow(satInfoWindow, TextFormat("#11# %s", (*ctx->selected_sat)->name), cfg, customFont, true))
+            if (DrawMaterialWindow(satInfoWindow, TextFormat("#15# %s", (*ctx->selected_sat)->name), cfg, customFont, true))
             {
                 show_sat_info_dialog = false;
                 *ctx->selected_sat = NULL;
@@ -3371,12 +3924,41 @@ case WND_SCOPE:
             break;
         }
 
+        case WND_ROTATOR:
+        {
+            if (!RotatorIsWindowVisible())
+                break;
+            RotatorUpdateDrag(cfg);
+            RotatorDrawWindow(cfg, customFont, is_topmost);
+            break;
+        }
+
         default:
             break;
         }
 
-        if (!is_topmost)
+        if (use_gui_disable)
+        {
             GuiEnable();
+            GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, old_window_disabled_text);
+            GuiSetStyle(DEFAULT, BASE_COLOR_DISABLED, old_window_disabled_base);
+            GuiSetStyle(DEFAULT, BORDER_COLOR_DISABLED, old_window_disabled_border);
+            GuiSetStyle(TEXTBOX, TEXT_COLOR_DISABLED, old_textbox_disabled_text);
+            GuiSetStyle(TEXTBOX, BASE_COLOR_DISABLED, old_textbox_disabled_base);
+            GuiSetStyle(TEXTBOX, BORDER_COLOR_DISABLED, old_textbox_disabled_border);
+            GuiSetStyle(BUTTON, TEXT_COLOR_DISABLED, old_button_disabled_text);
+            GuiSetStyle(BUTTON, BASE_COLOR_DISABLED, old_button_disabled_base);
+            GuiSetStyle(BUTTON, BORDER_COLOR_DISABLED, old_button_disabled_border);
+            GuiSetStyle(TOGGLE, TEXT_COLOR_DISABLED, old_toggle_disabled_text);
+            GuiSetStyle(TOGGLE, BASE_COLOR_DISABLED, old_toggle_disabled_base);
+            GuiSetStyle(TOGGLE, BORDER_COLOR_DISABLED, old_toggle_disabled_border);
+            GuiSetStyle(SLIDER, TEXT_COLOR_DISABLED, old_slider_disabled_text);
+            GuiSetStyle(SLIDER, BASE_COLOR_DISABLED, old_slider_disabled_base);
+            GuiSetStyle(SLIDER, BORDER_COLOR_DISABLED, old_slider_disabled_border);
+            GuiSetStyle(CHECKBOX, TEXT_COLOR_DISABLED, old_checkbox_disabled_text);
+            GuiSetStyle(CHECKBOX, BASE_COLOR_DISABLED, old_checkbox_disabled_base);
+            GuiSetStyle(CHECKBOX, BORDER_COLOR_DISABLED, old_checkbox_disabled_border);
+        }
     }
 
     if (show_tle_warning)
@@ -3453,7 +4035,7 @@ case WND_SCOPE:
             else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
             if (!show_help) {
-                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
                 show_help = true;
                 BringToFront(WND_HELP);
             }
@@ -3478,7 +4060,7 @@ case WND_SCOPE:
             else SetTargetFPS(0);
             SaveAppConfig("settings.json", cfg);
             if (!show_help) {
-                FindSmartWindowPosition(420 * cfg->ui_scale, 480 * cfg->ui_scale, cfg, &hw_x, &hw_y);
+                FindSmartWindowPosition(HELP_WINDOW_W * cfg->ui_scale, HELP_WINDOW_H * cfg->ui_scale, cfg, &hw_x, &hw_y);
                 show_help = true;
                 BringToFront(WND_HELP);
             }
@@ -3502,7 +4084,30 @@ case WND_SCOPE:
         GetScreenHeight() - 35 * cfg->ui_scale, 20 * cfg->ui_scale, cfg->text_main
     );
 
-    const char *tt_texts[18] = {
+    if (update_available) {
+        static double update_popup_start = 0.0;
+        if (update_popup_start == 0.0) update_popup_start = GetTime();
+        
+        if (GetTime() - update_popup_start < 10.0) {
+            const char *upd_text = "Update Available!";
+            float upd_w = MeasureTextEx(customFont, upd_text, 16 * cfg->ui_scale, 1.0f).x;
+            float upd_x = GetScreenWidth() - upd_w - 20 * cfg->ui_scale;
+            float upd_y = GetScreenHeight() - 32 * cfg->ui_scale;
+            
+            Rectangle upd_rec = {upd_x, upd_y, upd_w, 16 * cfg->ui_scale};
+            bool hover_upd = CheckCollisionPointRec(GetMousePosition(), upd_rec) && top_hovered_wnd == -1;
+            
+            if (hover_upd) {
+                DrawRectangleRec((Rectangle){upd_rec.x, upd_rec.y + upd_rec.height, upd_rec.width, 1.0f}, cfg->ui_accent);
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    OpenURL("https://github.com/aweeri/TLEscope/releases/latest");
+                }
+            }
+            DrawUIText(customFont, upd_text, upd_rec.x, upd_rec.y, 16 * cfg->ui_scale, hover_upd ? cfg->ui_accent : cfg->text_secondary);
+        }
+    }
+
+    const char *tt_texts[19] = {
         "Settings",
         "TLE Manager",
         "Satellite Manager",
@@ -3520,14 +4125,15 @@ case WND_SCOPE:
         "Play / Pause",
         "Faster",
         "Real Time",
-        "Set Date & Time"
+        "Set Date & Time",
+        "Rotator Control"
     };
 
-    for (int i = 0; i < 18; i++)
+    for (int i = 0; i < 19; i++)
     {
         if (top_hovered_wnd == -1 && CheckCollisionPointRec(
                                          GetMousePosition(), (Rectangle[]){btnSet, btnTLEMgr, btnSatMgr, btnPasses, btnPolar, btnScope, btnHelp, btn2D3D, btnHideUnselected, btnSunlit, btnSlantRange, btnFrame, btnPOV, btnRewind,
-                                                                           btnPlayPause, btnFastForward, btnNow, btnClock}[i]
+                                                                          btnPlayPause, btnFastForward, btnNow, btnClock, btnRotator}[i]
                                      ))
         {
             tt_hover[i] += GetFrameTime();
@@ -3596,16 +4202,35 @@ case WND_SCOPE:
         DrawUIText(customFont, TextFormat("Sun ECI: %.3f, %.3f, %.3f", sun_pos.x, sun_pos.y, sun_pos.z), stats_x, 144 * cfg->ui_scale, 14 * cfg->ui_scale, cfg->ui_accent);
     }
 
-    if (*ctx->time_multiplier == 1.0 && fabs(*ctx->current_epoch - get_current_real_time_epoch()) < (5.0 / 86400.0) && !*ctx->is_auto_warping)
+    bool show_real_time = (*ctx->time_multiplier == 1.0 && fabs(*ctx->current_epoch - get_current_real_time_epoch()) < (5.0 / 86400.0) && !*ctx->is_auto_warping);
+    float y = GetScreenHeight() - 69 * cfg->ui_scale;
+    float pair_spacing = 20 * cfg->ui_scale;
+    bool rot_connected = RotatorIsConnected();
+
+    float rt_text_w = MeasureTextEx(customFont, "REAL TIME", 16 * cfg->ui_scale, 1.0f).x;
+    float rt_item_w = 10 * cfg->ui_scale + rt_text_w;
+    float rot_item_w = RotatorConnectedItemWidth(cfg, customFont);
+
+    int shown = (show_real_time ? 1 : 0) + (rot_connected ? 1 : 0);
+    float total_w = 0.0f;
+    if (shown == 1)
+        total_w = show_real_time ? rt_item_w : rot_item_w;
+    else if (shown == 2)
+        total_w = rt_item_w + pair_spacing + rot_item_w;
+
+    float cur_x = (GetScreenWidth() - total_w) / 2.0f;
+
+    if (show_real_time)
     {
-        float blink_alpha = (sinf(GetTime() * 4.0f) * 0.5f + 0.5f);
-        int oldStyle = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
-        GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, ColorToInt(ApplyAlpha(cfg->ui_accent, blink_alpha)));
-        float rt_x = (GetScreenWidth() - (25 * cfg->ui_scale + MeasureTextEx(customFont, "REAL TIME", 16 * cfg->ui_scale, 1.0f).x)) / 2.0f;
-        GuiLabel((Rectangle){rt_x, GetScreenHeight() - 67 * cfg->ui_scale, 20 * cfg->ui_scale, 20 * cfg->ui_scale}, "#212#");
-        GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, oldStyle);
-        DrawUIText(customFont, "REAL TIME", rt_x + 25 * cfg->ui_scale, GetScreenHeight() - 65 * cfg->ui_scale, 16 * cfg->ui_scale, cfg->ui_accent);
+        float blink = (sinf(GetTime() * 6.0f) * 0.5f + 0.5f);
+        Color rt_col = cfg->ui_accent;
+        DrawCircleV((Vector2){cur_x, y + 7 * cfg->ui_scale}, 4.0f * cfg->ui_scale, ApplyAlpha(rt_col, 0.35f + 0.65f * blink));
+        DrawUIText(customFont, "REAL TIME", cur_x + 10 * cfg->ui_scale, y, 16 * cfg->ui_scale, rt_col);
+        cur_x += rt_item_w + (rot_connected ? pair_spacing : 0.0f);
     }
+
+    if (rot_connected)
+        RotatorDrawConnectedItem(cfg, customFont, cur_x, y);
 
     if (show_exit_dialog)
     {

@@ -1,8 +1,10 @@
 MINGW_PREFIX   ?= /usr/x86_64-w64-mingw32
 CLANG64_PREFIX   ?= /clangarm64
 
+GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
+
 CC_LINUX = gcc
-CFLAGS     = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized
+CFLAGS     = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 CFLAGS_WIN = $(CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 # Sets _WIN variables for each possible architecture
@@ -24,7 +26,7 @@ else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 endif
 
-SRC       = src/main.c src/astro.c src/config.c src/ui.c
+SRC       = src/main.c src/astro.c src/config.c src/ui.c src/rotator.c
 OBJ       = $(SRC:src/%.c=build/%.o)
 
 LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
@@ -93,7 +95,7 @@ windows-arm64: bin/TLEscope.exe
 
 win-installer: windows
 	@echo "Building Windows installer..."
-	convert logo.png $(DIST_WIN)/logo.ico 2>/dev/null || echo "Warning: ImageMagick not installed, skipping .ico generation"
+	magick logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || convert logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || cp logo.ico $(DIST_WIN)/
 	makensis installer.nsi
 	@echo "Installer built at dist/TLEscope-Installer.exe"
 

@@ -18,6 +18,7 @@ static const char* GetAssetPath(const char* theme, const char* filename) {
 }
 #include "types.h"
 #include "ui.h"
+#include "rotator.h"
 
 /* * shaders for day/night transition
  * uses dot product between surface normal and sun direction
@@ -29,11 +30,15 @@ const char *fs3D = "#version 330\n"
                    "out vec4 finalColor;\n"
                    "uniform sampler2D texture0;\n"
                    "uniform sampler2D texture1;\n"
+                   "uniform sampler2D texture2;\n"
                    "uniform vec3 sunDir;\n"
-                   "uniform vec3 viewPos;\n"
                    "uniform vec3 moonPos;\n"
                    "uniform float moonRadius;\n"
                    "uniform float earthRadius;\n"
+                   "uniform vec3 viewPos;\n"
+                   "uniform float cloudUVOffset;\n"
+                   "uniform int advancedScatter;\n"
+                   "uniform int showClouds;\n"
                    "void main() {\n"
                    "    vec4 day = texture(texture0, fragTexCoord);\n"
                    "    vec4 night = texture(texture1, fragTexCoord);\n"
@@ -43,14 +48,41 @@ const char *fs3D = "#version 330\n"
                    "    float intensity = dot(normal, sunDir);\n"
                    "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
                    "    vec3 fragPos = normal * earthRadius;\n"
-                   "    vec3 viewDir = normalize(viewPos - fragPos);\n"
-                   "    float NdotV = max(dot(normal, viewDir), 0.0);\n"
-                   "    float scatterMult = smoothstep(-0.2, 0.2, intensity) * smoothstep(0.2, -0.2, intensity);\n"
-                   "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2);\n"
-                   "    vec3 scatteredDay = mix(day.rgb, day.rgb * sunsetColor * 2.0, scatterMult * (1.0 - NdotV));\n"
-                   "    vec3 hazeColor = mix(vec3(0.15, 0.35, 0.75), sunsetColor, scatterMult);\n"
-                   "    float surfaceHaze = pow(1.0 - NdotV, 2.5) * smoothstep(-0.1, 0.2, intensity) * 0.55;\n"
-                   "    scatteredDay = mix(scatteredDay, hazeColor, surfaceHaze);\n"
+                   "    vec3 scatteredDay = day.rgb;\n"
+                   "    \n"
+                   "    if (advancedScatter == 1) {\n"
+                   "        vec3 viewDir = normalize(viewPos - fragPos);\n"
+                   "        vec3 halfDir = normalize(sunDir + viewDir);\n"
+                   "        float NdotV = max(dot(normal, viewDir), 0.0);\n"
+                   "        float fresnel = pow(1.0 - NdotV, 4.0);\n"
+                   "        float specPower = mix(48.0, 12.0, fresnel);\n"
+                   "        float spec = pow(max(dot(normal, halfDir), 0.0), specPower);\n"
+                   "        float water = clamp((day.b - day.r) * 2.5, 0.0, 1.0);\n"
+                   "        float glareBoost = mix(0.6, 4.0, fresnel);\n"
+                   "        vec3 specular = vec3(1.0, 0.9, 0.8) * spec * water * glareBoost * max(intensity, 0.0);\n"
+                   "        \n"
+                   "        float cShadow = 1.0;\n"
+                   "        if (showClouds == 1) {\n"
+                   "            float cloudR = earthRadius * (1.0 + 25.0 / 6371.0);\n"
+                   "            float b = 2.0 * dot(fragPos, sunDir);\n"
+                   "            float c = earthRadius * earthRadius - cloudR * cloudR;\n"
+                   "            float t = (-b + sqrt(b * b - 4.0 * c)) * 0.5;\n"
+                   "            float cloudH = max(cloudR - earthRadius, 1e-5);\n"
+                   "            float minSunSin = 0.14;\n"
+                   "            float maxShadowLen = cloudH / minSunSin;\n"
+                   "            t = min(t, maxShadowLen);\n"
+                   "            vec3 cn = normalize(fragPos + t * sunDir);\n"
+                   "            vec2 cUV = vec2(atan(-cn.z, cn.x) / 6.28318530718 + 0.5, cn.y);\n"
+                   "            cUV.y = acos(clamp(cUV.y, -1.0, 1.0)) / 3.14159265359;\n"
+                   "            cUV.x = fract(cUV.x + cloudUVOffset);\n"
+                   "            float cAlpha = texture(texture2, cUV).a;\n"
+                   "            float termFade = smoothstep(0.00, 0.25, intensity);\n"
+                   "            cShadow = mix(1.0, 0.1, cAlpha * termFade);\n"
+                   "        }\n"
+                   "        \n"
+                   "        scatteredDay = (scatteredDay * cShadow) + specular;\n"
+                   "    }\n"
+                   "    \n"
                    "    vec3 toMoon = moonPos - fragPos;\n"
                    "    float distSunward = dot(toMoon, sunDir);\n"
                    "    float shadow = 1.0;\n"
@@ -59,11 +91,11 @@ const char *fs3D = "#version 330\n"
                    "        float distSq = dot(proj - moonPos, proj - moonPos);\n"
                    "        float rSq = moonRadius * moonRadius;\n"
                    "        if (distSq < rSq * 4.0) {\n"
-                   "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
+                       "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
                    "        }\n"
                    "    }\n"
-                   "    vec4 shadowedDay = vec4(scatteredDay * shadow, day.a);\n"
-                   "    finalColor = mix(night, shadowedDay, blend) * fragColor;\n"
+                   "    vec4 dayColor = mix(night, vec4(scatteredDay, day.a), shadow);\n"
+                   "    finalColor = mix(night, dayColor, blend) * fragColor;\n"
                    "}\n";
 
 const char *fs2D = "#version 330\n"
@@ -117,6 +149,12 @@ const char *fsCloud3D = "#version 330\n"
                         "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
                         "    float intensity = dot(normal, sunDir);\n"
                         "    float alpha = smoothstep(-0.15, 0.05, intensity);\n"
+                        "    float scatterMult = min(smoothstep(-0.3, 0.15, intensity) * smoothstep(0.15, -0.15, intensity) * 4.0, 1.0);\n"
+                        "    vec3 sunsetDeep = vec3(0.75, 0.08, 0.10);\n"
+                        "    vec3 sunsetWarm = vec3(1.0, 0.82, 0.75);\n"
+                        "    float gradPos = smoothstep(-0.1, 0.0, intensity);\n"
+                        "    vec3 sunsetColor = mix(sunsetDeep, sunsetWarm, gradPos);\n"
+                        "    vec3 cloudColor = mix(texel.rgb, sunsetColor, scatterMult * 0.7);\n"
                         "    vec3 fragPos = normal * earthRadius;\n"
                         "    vec3 toMoon = moonPos - fragPos;\n"
                         "    float distSunward = dot(toMoon, sunDir);\n"
@@ -129,7 +167,7 @@ const char *fsCloud3D = "#version 330\n"
                         "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
                         "        }\n"
                         "    }\n"
-                        "    finalColor = vec4(texel.rgb * shadow, texel.a * alpha) * fragColor;\n"
+                        "    finalColor = vec4(cloudColor * shadow, texel.a * alpha) * fragColor;\n"
                         "}\n";
 
 /* shader to handle moon self-shadowing and earth's eclipse projection */
@@ -188,29 +226,36 @@ const char *fsAtmosphere3D = "#version 330\n"
                        "    float NdotV = max(dot(normal, viewDir), 0.001);\n"
                        "    float NdotL = dot(normal, sunDir);\n"
                        "    \n"
-                       "    vec3 dayColor = vec3(0.3, 0.6, 1.0);\n"
+                       "    vec3 dayColor = vec3(0.25, 0.58, 1.0);\n"
                        "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // Realistic gold-orange\n"
                        "    \n"
-                       "    // shift to sunset colors near the terminator\n"
-                       "    float sunsetBlend = smoothstep(0.6, -0.15, NdotL);\n"
+                       "    // fresnel for soft edge glow\n"
+                       "    float fresnel = pow(1.0 - NdotV, 2.5);\n"
+                       "    \n"
+                       "    // sun brightness: 15% on night side, 100% on day side\n"
+                       "    float sunBlend = smoothstep(-0.3, 0.3, NdotL);\n"
+                       "    float brightness = mix(0.05, 1.0, sunBlend);\n"
+                       "    \n"
+                       "    // atmosphere base color with sunset shift near terminator\n"
+                       "    float sunsetBlend = smoothstep(0.35, -0.15, NdotL);\n"
                        "    vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);\n"
                        "    \n"
-                       "    // fresnel for soft edge glow\n"
-                       "    float fresnel = pow(1.0 - NdotV, 3.5);\n"
-                       "    \n"
                        "    // shiten the atmosphere where it is thickest\n"
-                       "    atmosColor = mix(atmosColor, vec3(0.85, 0.9, 1.0), fresnel * 0.6);\n"
+                       "    atmosColor = mix(atmosColor, vec3(0.7, 0.85, 1.0), pow(fresnel, 1.5) * 0.7);\n"
+                       "    \n"
+                       "    // forward-scatter glow: brighter when looking toward sun through the limb\n"
+                       "    float VdotL = dot(viewDir, sunDir);\n"
+                       "    float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.15;\n"
+                       "    atmosColor += vec3(1.0, 0.6, 0.3) * forwardGlow * sunBlend;\n"
                        "    \n"
                        "    // smooth fadeout into the vacuum at the absolute edge\n"
-                       "    float vacuumFade = smoothstep(0.0, 0.25, NdotV);\n"
-                       "    \n"
-                       "    // mask out the night side\n"
-                       "    float dayMask = smoothstep(-0.15, 0.1, NdotL);\n"
+                       "    float vacuumFade = smoothstep(0.0, 0.35, NdotV);\n"
                        "    \n"
                        "    // combine for a smoof transparent atmospheric ring\n"
-                       "    float alpha = fresnel * vacuumFade * dayMask * 2.5;\n"
+                       "    vec3 color = atmosColor * brightness;\n"
+                       "    float alpha = fresnel * vacuumFade * brightness * 2.0;\n"
                        "    \n"
-                       "    finalColor = vec4(atmosColor, clamp(alpha, 0.0, 1.0)) * fragColor;\n"
+                       "    finalColor = vec4(color, clamp(alpha, 0.0, 1.0)) * fragColor;\n"
                        "}\n";
 
 /* application state and resources */
@@ -241,9 +286,9 @@ static AppConfig cfg = {
 };
 
 static Font customFont;
-static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture;
+static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture, skyboxTexture;
 static Texture2D periMark, apoMark;
-static Model earthModel, moonModel, cloudModel, atmosphereModel;
+static Model earthModel, moonModel, cloudModel, atmosphereModel, skyboxModel;
 
 /* manual mesh generation for the planetary spheres */
 static Mesh GenEarthMesh(float radius, int slices, int rings)
@@ -373,7 +418,7 @@ static void DrawLoadingScreen(float progress, const char *message, Texture2D log
     float barW = 400 * cfg.ui_scale;
     float barH = 16 * cfg.ui_scale;
 
-    float startY = screenH / 2.0f;
+    float startY = (screenH / 2.0f) + (55.0f * cfg.ui_scale);
 
     if (logoTex.id != 0)
     {
@@ -450,21 +495,36 @@ int main(void)
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(cfg.window_width, cfg.window_height, "TLEscope");
+
+#ifndef TLESCOPE_VERSION
+#define TLESCOPE_VERSION "vUnknown"
+#endif
+
+    char short_version[64] = {0};
+    strncpy(short_version, TLESCOPE_VERSION, sizeof(short_version) - 1);
+    char *dash = strchr(short_version, '-');
+    if (dash) *dash = '\0';
+
+    char window_title[128];
+    snprintf(window_title, sizeof(window_title), "TLEscope %s", short_version);
+    InitWindow(cfg.window_width, cfg.window_height, window_title);
 
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
     int max_h = GetMonitorHeight(monitor);
     int current_w = GetScreenWidth();
     int current_h = GetScreenHeight();
+    Vector2 monitorPos = GetMonitorPosition(monitor);
 
     if (current_w >= max_w || current_h >= max_h)
     {
+        /* shrink and center the window slightly before maximizing so the restored state has a valid position */
+        SetWindowSize(max_w - 100, max_h - 100);
+        SetWindowPosition((int)monitorPos.x + 50, (int)monitorPos.y + 50);
         SetWindowState(FLAG_WINDOW_MAXIMIZED);
     }
     else
     {
-        Vector2 monitorPos = GetMonitorPosition(monitor);
         SetWindowPosition((int)monitorPos.x + (max_w - current_w) / 2, (int)monitorPos.y + (max_h - current_h) / 2);
     }
 
@@ -504,16 +564,22 @@ int main(void)
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
     earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
     earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
+    skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
 
     /* make textures not blocky when zoomed in on*/
     SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
-    int viewPosLoc3D = GetShaderLocation(shader3D, "viewPos");
     shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
+    shader3D.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(shader3D, "texture2");
+    int viewPosLoc3D = GetShaderLocation(shader3D, "viewPos");
+    int cloudUVOffsetLoc3D = GetShaderLocation(shader3D, "cloudUVOffset");
+    int advScatLoc3D = GetShaderLocation(shader3D, "advancedScatter");
+    int showCloudsLoc3D = GetShaderLocation(shader3D, "showClouds");
 
     Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
@@ -535,29 +601,35 @@ int main(void)
 
     DrawLoadingScreen(0.6f, "Generating Meshes...", logoTex);
     float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
-    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 64, 64);
+    Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 80, 80);
     earthModel = LoadModelFromMesh(sphereMesh);
     earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
     earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
     Shader defaultEarthShader = earthModel.materials[0].shader;
 
     DrawLoadingScreen(0.8f, "Loading Celestial Bodies...", logoTex);
+
+    Mesh skyboxMesh = GenEarthMesh(-500.0f, 40, 40); /* negative radius flips normals inward */
+    skyboxModel = LoadModelFromMesh(skyboxMesh);
+    skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
+
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
-    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 64, 64);
+    Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 80, 80);
     cloudModel = LoadModelFromMesh(cloudMesh);
     cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+    earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
     Shader defaultCloudShader = cloudModel.materials[0].shader;
 
-    float draw_atmosphere_radius = (EARTH_RADIUS_KM + 60.0f) / DRAW_SCALE;
-    Mesh atmosphereMesh = GenEarthMesh(draw_atmosphere_radius, 64, 64);
+    float draw_atmosphere_radius = (EARTH_RADIUS_KM + 80.0f) / DRAW_SCALE;
+    Mesh atmosphereMesh = GenEarthMesh(draw_atmosphere_radius, 80, 80);
     atmosphereModel = LoadModelFromMesh(atmosphereMesh);
     atmosphereModel.materials[0].shader = shaderAtmosphere;
     SetShaderValue(shaderAtmosphere, GetShaderLocation(shaderAtmosphere, "atmRadius"), &draw_atmosphere_radius, SHADER_UNIFORM_FLOAT);
 
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
-    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 32, 32);
+    Mesh moonMesh = GenEarthMesh(draw_moon_radius, 48, 48);
     moonModel = LoadModelFromMesh(moonMesh);
     moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
     SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
@@ -656,6 +728,7 @@ int main(void)
             UnloadTexture(earthNightTexture);
             UnloadTexture(cloudTexture);
             UnloadTexture(moonTexture);
+            UnloadTexture(skyboxTexture);
             UnloadTexture(satIcon);
             UnloadTexture(markerIcon);
             UnloadTexture(periMark);
@@ -681,6 +754,11 @@ int main(void)
             cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
             SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
             cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
+            earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
+
+            skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
+            SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
+            skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
 
             moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
             SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
@@ -806,6 +884,8 @@ int main(void)
                 cfg.ui_scale += 0.1f;
             if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))
                 cfg.ui_scale -= 0.1f;
+            if (IsKeyPressed(KEY_F11))
+                ToggleFullscreen();
         }
 
         if (cfg.ui_scale < 0.5f)
@@ -1619,6 +1699,11 @@ int main(void)
             /* 3d globe rendering */
         BeginMode3D(Camera3DParams);
         
+        if (cfg.show_skybox)
+        {
+            DrawModel(skyboxModel, Camera3DParams.position, 1.0f, WHITE);
+        }
+
         float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
         Vector3 sunEci = calculate_sun_position(current_epoch);
         Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
@@ -1627,12 +1712,24 @@ int main(void)
         
         earthModel.transform = MatrixRotateY(earth_rot_rad);
 
+        double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
+        float cloud_rot_rad = (float)(continuous_cloud_angle * DEG2RAD);
+
         if (cfg.show_night_lights)
         {
             earthModel.materials[0].shader = shader3D;
             SetShaderValue(shader3D, sunDirLoc3D, &sunEcef, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader3D, moonPosLoc3D, &moonEcef, SHADER_UNIFORM_VEC3);
+            
+            int doAdvScat = cfg.show_scattering ? 1 : 0;
+            SetShaderValue(shader3D, advScatLoc3D, &doAdvScat, SHADER_UNIFORM_INT);
             SetShaderValue(shader3D, viewPosLoc3D, &viewEcef, SHADER_UNIFORM_VEC3);
+            
+            float uv_offset = (earth_rot_rad - cloud_rot_rad) / (2.0f * PI);
+            SetShaderValue(shader3D, cloudUVOffsetLoc3D, &uv_offset, SHADER_UNIFORM_FLOAT);
+
+            int doShowClouds = cfg.show_clouds ? 1 : 0;
+            SetShaderValue(shader3D, showCloudsLoc3D, &doShowClouds, SHADER_UNIFORM_INT);
         }
         else
         {
@@ -1644,8 +1741,6 @@ int main(void)
         /* atmosphere/cloud layer */
         if (cfg.show_clouds)
         {
-            double continuous_cloud_angle = fmod(gmst_deg + cfg.earth_rotation_offset + (current_epoch * 360.0 * 0.04), 360.0);
-            float cloud_rot_rad = (float)(continuous_cloud_angle * DEG2RAD);
             cloudModel.transform = MatrixRotateY(cloud_rot_rad);
 
             if (cfg.show_night_lights)
@@ -1986,6 +2081,8 @@ int main(void)
     UnloadTexture(apoMark);
     UnloadTexture(earthTexture);
     UnloadTexture(earthNightTexture);
+    UnloadTexture(skyboxTexture);
+    UnloadModel(skyboxModel);
     UnloadModel(earthModel);
     UnloadShader(shader3D);
     UnloadShader(shader2D);
@@ -2000,6 +2097,7 @@ int main(void)
     UnloadFont(customFont);
 
     SaveSatSelection();
+    RotatorShutdown();
 
     CloseWindow();
     return 0;

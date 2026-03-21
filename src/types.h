@@ -84,6 +84,7 @@ typedef struct
     bool show_slant_range;
     bool show_scattering;
     bool hint_vsync;
+    bool show_skybox;
     bool show_first_run_dialog;
     bool reload_theme;
 
