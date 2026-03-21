@@ -33,7 +33,7 @@ TLEscope comes equipped with tools designed for RF engineers, satellite operator
 
 - **Minimal Footprint and High Performance**: Developed in pure C utilizing the Raylib framework, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
-- **​Native OS Support**: Built for Linux, macOS, and Windows.
+- **​Native OS Support**: Built for Linux (x86_64 and ARM64), macOS, and Windows.
 
 ### ​**Design Philosophy**
 ​Most existing orbital tracking software suffers from dated, unintuitive interfaces. TLEscope bridges this gap by prioritizing both visual clarity and ease of use.
