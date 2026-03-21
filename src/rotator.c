@@ -1,4 +1,10 @@
 #define _GNU_SOURCE
+#if defined(_WIN32) || defined(_WIN64)
+#define WIN32_LEAN_AND_MEAN
+#define NOGDI
+#define NOUSER
+typedef struct tagMSG *LPMSG;
+#endif
 #include "rotator.h"
 #include "astro.h"
 #include <math.h>
@@ -9,7 +15,6 @@
 #if defined(_WIN32) || defined(_WIN64)
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <windows.h>
 #else
 #include <arpa/inet.h>
 #include <netdb.h>
