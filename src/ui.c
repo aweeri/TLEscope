@@ -1149,11 +1149,7 @@ static bool DrawMaterialWindow(Rectangle bounds, const char *title, AppConfig *c
     if (content.width > 0 && content.height > 0)
         DrawRectangleRounded(content, 0.04f, 6, ApplyAlpha(cfg->ui_bg, 0.10f));
 
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
-#else
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
-#endif
+    DrawRectangleRoundedLinesEx(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
 
     const char *titleText = title;
     int titleIcon = -1;
@@ -1254,11 +1250,7 @@ static bool DrawRotatorFrame(Rectangle bounds, AppConfig *cfg, Font customFont)
     float header_h = 24 * scale;
 
     DrawRectangleRounded(bounds, 0.05f, 4, cfg->ui_primary);
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
-#else
-    DrawRectangleRoundedLines(bounds, 0.05f, 8, cfg->window_border);
-#endif
+    DrawRectangleRoundedLinesEx(bounds, 0.05f, 8, 1.5f * scale, cfg->window_border);
 
     GuiLabel((Rectangle){bounds.x + 8 * scale, bounds.y + 3 * scale, 18 * scale, 18 * scale}, "#65#");
     DrawUIText(customFont, "Rotator Control", bounds.x + 30 * scale, bounds.y + (header_h - 16 * scale) / 2.0f, 16 * scale, cfg->ui_accent);
@@ -1282,11 +1274,7 @@ static void DrawRotatorSection(Rectangle sec, const char *title, AppConfig *cfg,
 {
     float scale = cfg->ui_scale;
     DrawRectangleRounded(sec, 0.06f, 6, ApplyAlpha(cfg->ui_bg, 0.14f));
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_M_ARM64)
-    DrawRectangleRoundedLines(sec, 0.06f, 6, 1.0f * scale, ApplyAlpha(cfg->window_border, 0.85f));
-#else
-    DrawRectangleRoundedLines(sec, 0.06f, 6, ApplyAlpha(cfg->window_border, 0.85f));
-#endif
+    DrawRectangleRoundedLinesEx(sec, 0.06f, 6, 1.0f * scale, ApplyAlpha(cfg->window_border, 0.85f));
     DrawUIText(customFont, title, sec.x + 8 * scale, sec.y + 5 * scale, 15 * scale, cfg->ui_accent);
     DrawLineEx((Vector2){sec.x + 8 * scale, sec.y + 22 * scale}, (Vector2){sec.x + sec.width - 8 * scale, sec.y + 22 * scale}, 1.0f, ApplyAlpha(cfg->window_border, 0.7f));
 }
