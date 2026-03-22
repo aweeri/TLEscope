@@ -3528,6 +3528,13 @@ case WND_SCOPE:
             DrawCircleLines(center.x, center.y, scope_radius * 0.5f, ApplyAlpha(cfg->ui_secondary, 0.2f));
             DrawCircleLines(center.x, center.y, scope_radius, cfg->ui_secondary);
 
+            /* draw orbit path arch for currently targeted satellite */
+            if (*ctx->selected_sat && (*ctx->selected_sat)->is_active) {
+                draw_satellite_orbit_arch(*ctx->selected_sat, *ctx->current_epoch, ctx->gmst_deg, 
+                                        home_location, center, scope_radius, scope_az, scope_el, 
+                                        scope_beam, cfg->orbit_highlighted);
+            }
+
             Satellite* hover_sat_scope = NULL;
             float min_hover_dist = 9999.0f;
             Vector2 hover_pos = {0};

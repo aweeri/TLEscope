@@ -45,5 +45,8 @@ void update_orbit_cache(Satellite *sat, double current_epoch);
 
 double get_sat_range(Satellite *sat, double epoch, Marker obs);
 double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq);
+void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs, 
+                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el, 
+                               float scope_beam, Color orbit_color);
 
 #endif // ASTRO_H

@@ -762,4 +762,99 @@ double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double b
     return base_freq * (c / (c + range_rate));
 }
 
+/* draws the satellite's orbital path as an arch on the radar scope */
+void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs, 
+                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el, 
+                               float scope_beam, Color orbit_color)
+{
+    if (!sat || !sat->is_active) return;
+    
+    // calculate how long it takes this space junk to go around the planet
+    double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
+    int num_points = 360; // orbit res
+    double time_step = period_days / num_points;
+    
+    // setup the radar scope projection magic
+    float rad_beam_half = (scope_beam / 2.0f) * DEG2RAD;
+    float c_az_rad = scope_az * DEG2RAD;
+    float c_el_rad = scope_el * DEG2RAD;
+    
+    // get observer's position in ECI
+    double ecef_x, ecef_y, ecef_z;
+    geodetic_to_ecef(obs.lat, obs.lon + gmst_deg, obs.alt, &ecef_x, &ecef_y, &ecef_z);
+    Vector3 O_eci = { (float)ecef_x, (float)ecef_z, (float)-ecef_y };
+    
+    Vector2 prev_point = {0};
+    bool has_prev_point = false;
+    
+    // generate all the points that make up the orbit path
+    for (int i = 0; i <= num_points; i++) {
+        double t = current_epoch + (i * time_step);
+        double t_unix = get_unix_from_epoch(t);
+        Vector3 sat_pos = calculate_position(sat, t_unix);
+        
+        // convert to azimuth/elevation to know where to draw it
+        double s_az, s_el;
+        get_az_el(sat_pos, gmst_deg, obs.lat, obs.lon, obs.alt, &s_az, &s_el);
+        
+        // don't draw parts of the orbit that are below the horizon
+        if (s_el < 0) {
+            has_prev_point = false;
+            continue;
+        }
+        
+        // project the satellite position
+        float s_az_rad = s_az * DEG2RAD;
+        float s_el_rad = s_el * DEG2RAD;
+        
+        // calculate how far this point is from the center of scope view
+        float cos_theta = sinf(c_el_rad) * sinf(s_el_rad) + cosf(c_el_rad) * cosf(s_el_rad) * cosf(s_az_rad - c_az_rad);
+        if (cos_theta < -1.0f) cos_theta = -1.0f;
+        if (cos_theta > 1.0f) cos_theta = 1.0f;
+        
+        // cull out of scope
+        if (cos_theta >= cosf(rad_beam_half)) {
+            float theta = acosf(cos_theta);
+            float dx = cosf(s_el_rad) * sinf(s_az_rad - c_az_rad);
+            float dy = cosf(c_el_rad) * sinf(s_el_rad) - sinf(c_el_rad) * cosf(s_el_rad) * cosf(s_az_rad - c_az_rad);
+            
+            float r_dist = (theta / rad_beam_half) * scope_radius;
+            float angle = atan2f(-dy, dx);
+            
+            Vector2 current_point = { 
+                scope_center.x + r_dist * cosf(angle), 
+                scope_center.y + r_dist * sinf(angle) 
+            };
+            
+            // connect points
+            if (has_prev_point) {
+                float prev_dist = Vector2Distance(prev_point, scope_center);
+                float curr_dist = Vector2Distance(current_point, scope_center);
+                
+                if (prev_dist <= scope_radius && curr_dist <= scope_radius) {
+                    Color faded_color = orbit_color;
+                    faded_color.a = (unsigned char)(orbit_color.a * 0.3f);
+                    DrawLineEx(prev_point, current_point, 1.5f, faded_color);
+                } else if (prev_dist <= scope_radius || curr_dist <= scope_radius) {
+                    // clip the line to the edge of the radar scope
+                    Vector2 clipped_point = current_point;
+                    if (curr_dist > scope_radius) {
+                        float t = (scope_radius - prev_dist) / (curr_dist - prev_dist);
+                        clipped_point.x = prev_point.x + t * (current_point.x - prev_point.x);
+                        clipped_point.y = prev_point.y + t * (current_point.y - prev_point.y);
+                    }
+                    Color faded_color = orbit_color;
+                    faded_color.a = (unsigned char)(orbit_color.a * 0.3f);
+                    DrawLineEx(prev_point, clipped_point, 1.5f, faded_color);
+                }
+            }
+            
+            prev_point = current_point;
+            has_prev_point = true;
+        } else {
+            has_prev_point = false;
+        }
+    }
+}
+
 // herobrine
