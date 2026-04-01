@@ -54,9 +54,8 @@ all: linux
 linux: bin/TLEscope
 	@mkdir -p $(DIST_LINUX)
 	cp bin/TLEscope $(DIST_LINUX)/
-	cp -r themes/ $(DIST_LINUX)/
-	cp settings.json $(DIST_LINUX)/ 2>/dev/null || true 
-	cp data.tle $(DIST_LINUX)/ 2>/dev/null || true
+	cp -r themes $(DIST_LINUX)/
+	cp settings.json $(DIST_LINUX)/ 2>/dev/null || true
 	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
 	@echo "Linux build bundled in $(DIST_LINUX)/, do not run bin/*"
 	@echo "Here's your subshell command to run it! (cd $(DIST_LINUX)/ && ./TLEscope)"
@@ -64,9 +63,8 @@ linux: bin/TLEscope
 macos: bin/TLEscope-macos
 	@mkdir -p $(DIST_MACOS)
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
-	cp -r themes/ $(DIST_MACOS)/
+	cp -r themes $(DIST_MACOS)/
 	cp settings.json $(DIST_MACOS)/ 2>/dev/null || true
-	cp data.tle $(DIST_MACOS)/ 2>/dev/null || true
 	cp logo*.png $(DIST_MACOS)/ 2>/dev/null || true
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
@@ -75,9 +73,8 @@ windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
 	cp bin/TLEscope.exe $(DIST_WIN)/
 	cp $(MINGW_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
-	cp -r themes/ $(DIST_WIN)/
+	cp -r themes $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
-	cp data.tle $(DIST_WIN)/ 2>/dev/null || true
 	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
 	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
@@ -86,9 +83,8 @@ windows-arm64: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
 	cp bin/TLEscope.exe $(DIST_WIN)/
 	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
-	cp -r themes/ $(DIST_WIN)/
+	cp -r themes $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
-	cp data.tle $(DIST_WIN)/ 2>/dev/null || true
 	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
 	cp $(CLANG64_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows ARM64 build bundled in $(DIST_WIN)/, run it from there!"
