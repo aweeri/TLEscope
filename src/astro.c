@@ -369,17 +369,51 @@ void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix,
     *out_apo_unix = get_unix_from_epoch(t_apo);
 }
 
+/* Calculates cache resolution based on orbital eccentricity */
+int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count)
+{
+    (void)active_sat_count;  // unused
+    (void)total_sat_count;   // unused
+    
+    // Low eccentricity
+    if (eccentricity < 0.05)
+        return 180;
+    // Moderate eccentricity
+    if (eccentricity < 0.3)
+        return 270;
+    // High eccentricity
+    return 361;
+}
+
+/* Checks if cached orbit is still valid based on satellite drift */
+bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km)
+{
+    if (!sat->orbit_cached)
+        return false;
+    
+    float drift = Vector3Distance(sat->cached_orbit_base_pos, current_pos);
+    return drift < drift_threshold_km;
+}
+
 /* bakes the future orbital path into a vertex buffer so sgp4 isnt re-ran every frame */
 void update_orbit_cache(Satellite *sat, double current_epoch)
 {
+    sat->orbit_cache_resolution = calculate_orbit_cache_resolution(sat->eccentricity, 0, sat_count);
+    
     double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
-    double time_step = period_days / (ORBIT_CACHE_SIZE - 1);
-    for (int i = 0; i < ORBIT_CACHE_SIZE; i++)
+    double time_step = period_days / (sat->orbit_cache_resolution - 1);
+    
+    for (int i = 0; i < sat->orbit_cache_resolution; i++)
     {
         double t = current_epoch + (i * time_step);
         double t_unix = get_unix_from_epoch(t);
         sat->orbit_cache[i] = Vector3Scale(calculate_position(sat, t_unix), 1.0f / DRAW_SCALE);
     }
+    
+    // Track cache validity
+    double current_unix = get_unix_from_epoch(current_epoch);
+    sat->cached_orbit_base_pos = calculate_position(sat, current_unix);
+    sat->cached_orbit_epoch = current_epoch;
     sat->orbit_cached = true;
 }
 

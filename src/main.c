@@ -272,6 +272,7 @@ static AppConfig cfg = {
     .show_slant_range = false,
     .show_scattering = false,
     .hint_vsync = false,
+    .orbit_cache_drift_threshold_km = 50.0f,
     .bg_color = {0, 0, 0, 255},
     .text_main = {255, 255, 255, 255},
     .theme = "default",
@@ -393,16 +394,21 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
     {
         if (!sat->orbit_cached)
             return;
+        
         Vector3 prev_pos = sat->orbit_cache[0];
-        for (int i = step; i < ORBIT_CACHE_SIZE; i += step)
+        int cache_size = sat->orbit_cache_resolution;
+        
+        for (int i = step; i < cache_size; i += step)
         {
             Vector3 pos = sat->orbit_cache[i];
             DrawLine3D(prev_pos, pos, orbitColor);
             prev_pos = pos;
         }
-        if ((ORBIT_CACHE_SIZE - 1) % step != 0)
+        
+        // Draw final segment if needed
+        if ((cache_size - 1) % step != 0)
         {
-            DrawLine3D(prev_pos, sat->orbit_cache[ORBIT_CACHE_SIZE - 1], orbitColor);
+            DrawLine3D(prev_pos, sat->orbit_cache[cache_size - 1], orbitColor);
         }
     }
 }
@@ -933,15 +939,21 @@ int main(void)
         current_epoch += (GetFrameTime() * time_multiplier) / 86400.0;
         current_epoch = normalize_epoch(current_epoch);
 
-        /* asynchronous orbit path updates to keep fps high */
+        /* distance-based invalidation */
         if (sat_count > 0)
         {
-            int updates_per_frame = 50;
+            int updates_per_frame = 20;  // only caches that are invalid get updated
             for (int i = 0; i < updates_per_frame; i++)
             {
                 if (satellites[current_update_idx].is_active)
                 {
-                    update_orbit_cache(&satellites[current_update_idx], current_epoch);
+                    // Only update if satellite drifted
+                    if (!is_orbit_cache_valid(&satellites[current_update_idx], 
+                                              satellites[current_update_idx].current_pos,
+                                              cfg.orbit_cache_drift_threshold_km))
+                    {
+                        update_orbit_cache(&satellites[current_update_idx], current_epoch);
+                    }
                 }
                 current_update_idx = (current_update_idx + 1) % sat_count;
             }

@@ -38,6 +38,9 @@ typedef struct
     struct elsetrec satrec;
 
     Vector3 orbit_cache[ORBIT_CACHE_SIZE];
+    int orbit_cache_resolution;  // How many points r valid
+    Vector3 cached_orbit_base_pos;  // Position when cache was last calculated
+    double cached_orbit_epoch;  // Epoch when cache was last calculated
     bool orbit_cached;
     bool is_active;
 } Satellite;
@@ -76,6 +79,7 @@ typedef struct
     float ui_scale;
     float earth_rotation_offset;
     float orbits_to_draw;
+    float orbit_cache_drift_threshold_km;  // Recalculate cache if satellite drifts more than this (default 50 km)
     bool show_clouds;
     bool show_night_lights;
     bool show_markers;

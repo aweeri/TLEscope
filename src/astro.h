@@ -42,6 +42,8 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, f
 void CalculatePasses(Satellite *sat, double start_epoch);
 void epoch_to_time_str(double epoch, char *str);
 void update_orbit_cache(Satellite *sat, double current_epoch);
+bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
+int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count);
 
 double get_sat_range(Satellite *sat, double epoch, Marker obs);
 double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq);
