@@ -1823,8 +1823,7 @@ int main(void)
                 bool is_hl = (active_sat == &satellites[i]);
                 if (!(is_pov_mode && &satellites[i] == selected_sat))
                 {
-                    if (is_hl)
-                        draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha, global_orbit_step);
+                    draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha, global_orbit_step);
                 }
 
                 if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
