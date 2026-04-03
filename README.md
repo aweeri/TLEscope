@@ -55,15 +55,16 @@ You can choose between nightly and complete relases:
 TLEscope provides also packages on following systems/distributions:
 - Arch Linux:
   - AUR
-    * [`tlescope-bin`](https://aur.archlinux.org/packages/tlescope-bin): Downloads and install the latest stable version of TLEscope from [Releases](https://github.com/aweeri/TLEscope/releases).
-    * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-git): Clones the latest commit of this repository and installs on the system.
+    * [`tlescope-bin`](https://aur.archlinux.org/packages/tlescope-bin): Downloads and installs the latest stable version of TLEscope from [Releases](https://github.com/aweeri/TLEscope/releases) as AUR package.
+    * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-git): Git clones the latest commit of this repository and installs on the system as AUR package.
 
 ### **Building From Source**
 TLEscope uses gcc for Linux builds, clang with Homebrew's raylib for macOS, and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
 
 Install the required build tools and libraries, then clone the repository and execute the `make linux` command in the root directory of the project, after which run `./bin/TLEscope` (running from within `bin/` will NOT work). If you want to build a Windows executable, you will also need to install the `mingw-w64` package via your package manager of choice. Steps for typical system configurations can be found below:
 
-**Note**: The Makefile bundles the executable with its required assets (themes, settings, data) into the dist/ directory. For a functional installation, use the contents of dist/TLEscope-Linux or dist/TLEscope-Windows rather than running directly from bin/.
+> [!NOTE]
+> The Makefile bundles the executable with its required assets (themes, settings, data) into the dist/ directory. For a functional installation, use the contents of dist/TLEscope-Linux or dist/TLEscope-Windows rather than running directly from bin/.
 
 **Debian/Ubuntu-based systems**
 ```
@@ -78,8 +79,7 @@ make linux      # Results in dist/TLEscope-Linux/
 ```
 **Arch-based systems**
 ```
-sudo pacman -Syy
-sudo pacman -S --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl
+sudo pacman -Syu --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl
 # If cross-compiling for Windows:
 sudo pacman -S mingw-w64-gcc
 
@@ -89,11 +89,11 @@ make linux      # Results in dist/TLEscope-Linux/
 ```
 **macOS (Apple Silicon / Intel)**
 ```
-brew install raylib
+brew install raylib pkg-config
+
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
 make macos      # Results in dist/TLEscope-macOS-Portable/
-cd dist/TLEscope-macOS-Portable && ./TLEscope
 ```
 
 **Windows systems**
@@ -104,7 +104,5 @@ git clone https://github.com/aweeri/TLEscope
 cd TLEscope
 # Override CC_WIN if using local gcc instead of the cross-compiler
 make windows CC_WIN=gcc
-
-
 ```
 
