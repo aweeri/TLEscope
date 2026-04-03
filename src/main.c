@@ -440,6 +440,39 @@ static void DrawLoadingScreen(float progress, const char *message, Texture2D log
     EndDrawing();
 }
 
+static void UpdateAutoWarpState(bool *is_auto_warping, double *auto_warp_target, double *auto_warp_initial_diff, double *current_epoch, double *time_multiplier, double *saved_multiplier)
+{
+    if (!*is_auto_warping)
+        return;
+
+    double diff_sec = (*auto_warp_target - *current_epoch) * 86400.0;
+    double warp_dir = (*auto_warp_initial_diff >= 0.0) ? 1.0 : -1.0;
+
+    if (diff_sec * warp_dir <= 0.0)
+    {
+        *current_epoch = *auto_warp_target;
+        *time_multiplier = 1.0;
+        *saved_multiplier = 1.0;
+        *is_auto_warping = false;
+    }
+    else
+    {
+        double base_speed = fabs(*auto_warp_initial_diff) / 2.0;
+        double eased_speed = fmin(base_speed, fabs(diff_sec) * 3.0);
+        if (eased_speed < 1.0)
+            eased_speed = 1.0;
+        *time_multiplier = eased_speed * warp_dir;
+
+        if (fabs(diff_sec) <= fabs(*time_multiplier) * GetFrameTime())
+        {
+            *current_epoch = *auto_warp_target;
+            *time_multiplier = 1.0;
+            *saved_multiplier = 1.0;
+            *is_auto_warping = false;
+        }
+    }
+}
+
 static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d, Camera3D cam3d, double gmst_deg, float earth_offset, float map_w, float map_h, float *out_lat, float *out_lon)
 {
     if (is_2d)
@@ -894,35 +927,7 @@ int main(void)
             cfg.ui_scale = 4.0f;
 
         /* time warp logic for jumping to specific dates */
-        if (is_auto_warping)
-        {
-            double diff_sec = (auto_warp_target - current_epoch) * 86400.0;
-            double warp_dir = (auto_warp_initial_diff >= 0.0) ? 1.0 : -1.0;
-
-            if (diff_sec * warp_dir <= 0.0)
-            {
-                current_epoch = auto_warp_target;
-                time_multiplier = 1.0;
-                saved_multiplier = 1.0;
-                is_auto_warping = false;
-            }
-            else
-            {
-                double base_speed = fabs(auto_warp_initial_diff) / 2.0;
-                double eased_speed = fmin(base_speed, fabs(diff_sec) * 3.0);
-                if (eased_speed < 1.0)
-                    eased_speed = 1.0;
-                time_multiplier = eased_speed * warp_dir;
-
-                if (fabs(diff_sec) <= fabs(time_multiplier) * GetFrameTime())
-                {
-                    current_epoch = auto_warp_target;
-                    time_multiplier = 1.0;
-                    saved_multiplier = 1.0;
-                    is_auto_warping = false;
-                }
-            }
-        }
+        UpdateAutoWarpState(&is_auto_warping, &auto_warp_target, &auto_warp_initial_diff, &current_epoch, &time_multiplier, &saved_multiplier);
 
         /* update time continuously for smooth visual interpolation */
         current_epoch += (GetFrameTime() * time_multiplier) / 86400.0;

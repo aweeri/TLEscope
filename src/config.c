@@ -1,5 +1,6 @@
 #include "config.h"
 #include "types.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,33 @@ Color ParseHexColor(const char *hexStr, Color fallback)
         return fallback;
     }
     return (Color){(unsigned char)r, (unsigned char)g, (unsigned char)b, (unsigned char)a};
+}
+
+static bool ParseJsonBool(const char *text, const char *key, bool defaultValue)
+{
+    if (!text || !key)
+        return defaultValue;
+
+    char needle[64];
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    char *ptr = strstr(text, needle);
+    if (!ptr)
+        return defaultValue;
+
+    ptr = strchr(ptr, ':');
+    if (!ptr)
+        return defaultValue;
+    ptr++;
+
+    while (*ptr && isspace((unsigned char)*ptr))
+        ptr++;
+
+    if (strncmp(ptr, "true", 4) == 0)
+        return true;
+    if (strncmp(ptr, "false", 5) == 0)
+        return false;
+
+    return defaultValue;
 }
 
 // read the json file and grab our settings
@@ -94,141 +122,16 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             PARSE_FLOAT("earth_rotation_offset", earth_rotation_offset);
             PARSE_FLOAT("orbits_to_draw", orbits_to_draw);
 
-            // parse the global cloud toggle
-            char *sc_ptr = strstr(text, "\"show_clouds\"");
-            if (sc_ptr)
-            {
-                char *comma = strchr(sc_ptr, ',');
-                char *false_ptr = strstr(sc_ptr, "false");
-                if (false_ptr && (!comma || false_ptr < comma))
-                {
-                    config->show_clouds = false;
-                }
-                else
-                {
-                    config->show_clouds = true;
-                }
-            }
-
-            // parse the global night lights toggle (opt-out)
-            char *snl_ptr = strstr(text, "\"show_night_lights\"");
-            if (snl_ptr)
-            {
-                char *comma = strchr(snl_ptr, ',');
-                char *false_ptr = strstr(snl_ptr, "false");
-                if (false_ptr && (!comma || false_ptr < comma))
-                {
-                    config->show_night_lights = false;
-                }
-                else
-                {
-                    config->show_night_lights = true;
-                }
-            }
-            else
-            {
-                config->show_night_lights = true;
-            }
-
-            // parse the global markers toggle
-            char *sm_ptr = strstr(text, "\"show_markers\"");
-            if (sm_ptr)
-            {
-                char *comma = strchr(sm_ptr, ',');
-                char *false_ptr = strstr(sm_ptr, "false");
-                if (false_ptr && (!comma || false_ptr < comma))
-                {
-                    config->show_markers = false;
-                }
-            }
-
-            // parse the statistics toggle
-            char *stat_ptr = strstr(text, "\"show_statistics\"");
-            if (stat_ptr)
-            {
-                char *comma = strchr(stat_ptr, ',');
-                char *true_ptr = strstr(stat_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->show_statistics = true;
-                }
-            }
-
-            // parse sunlit toggle
-            char *hsl_ptr = strstr(text, "\"highlight_sunlit\"");
-            if (hsl_ptr)
-            {
-                char *comma = strchr(hsl_ptr, ',');
-                char *true_ptr = strstr(hsl_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->highlight_sunlit = true;
-                }
-            }
-
-            // parse slant range toggle
-            char *ssr_ptr = strstr(text, "\"show_slant_range\"");
-            if (ssr_ptr)
-            {
-                char *comma = strchr(ssr_ptr, ',');
-                char *true_ptr = strstr(ssr_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->show_slant_range = true;
-                }
-            }
-
-            // parse skybox toggle
-            char *ssky_ptr = strstr(text, "\"show_skybox\"");
-            if (ssky_ptr)
-            {
-                char *comma = strchr(ssky_ptr, ',');
-                char *false_ptr = strstr(ssky_ptr, "false");
-                if (false_ptr && (!comma || false_ptr < comma))
-                {
-                    config->show_skybox = false;
-                }
-                else
-                {
-                    config->show_skybox = true;
-                }
-            }
-
-            // parse scattering toggle
-            char *sscat_ptr = strstr(text, "\"show_scattering\"");
-            if (sscat_ptr)
-            {
-                char *comma = strchr(sscat_ptr, ',');
-                char *true_ptr = strstr(sscat_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->show_scattering = true;
-                }
-            }
-
-            // parse vsync toggle
-            char *vsync_ptr = strstr(text, "\"hint_vsync\"");
-            if (vsync_ptr)
-            {
-                char *comma = strchr(vsync_ptr, ',');
-                char *true_ptr = strstr(vsync_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->hint_vsync = true;
-                }
-            }
-
-            // parse first run dialog toggle
-            char *sfr_ptr = strstr(text, "\"show_first_run_dialog\"");
-            if (sfr_ptr)
-            {
-                char *comma = strchr(sfr_ptr, ',');
-                char *true_ptr = strstr(sfr_ptr, "true");
-                if (true_ptr && (!comma || true_ptr < comma))
-                {
-                    config->show_first_run_dialog = true;
-                }
-            }
+            config->show_clouds = ParseJsonBool(text, "show_clouds", config->show_clouds);
+            config->show_night_lights = ParseJsonBool(text, "show_night_lights", config->show_night_lights);
+            config->show_markers = ParseJsonBool(text, "show_markers", config->show_markers);
+            config->show_statistics = ParseJsonBool(text, "show_statistics", config->show_statistics);
+            config->highlight_sunlit = ParseJsonBool(text, "highlight_sunlit", config->highlight_sunlit);
+            config->show_slant_range = ParseJsonBool(text, "show_slant_range", config->show_slant_range);
+            config->show_skybox = ParseJsonBool(text, "show_skybox", config->show_skybox);
+            config->show_scattering = ParseJsonBool(text, "show_scattering", config->show_scattering);
+            config->hint_vsync = ParseJsonBool(text, "hint_vsync", config->hint_vsync);
+            config->show_first_run_dialog = ParseJsonBool(text, "show_first_run_dialog", config->show_first_run_dialog);
 
             // load manual TLEs
             char *mt_ptr = strstr(text, "\"manual_tles\"");

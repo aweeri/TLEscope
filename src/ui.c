@@ -864,11 +864,32 @@ static void FindSmartWindowPosition(float w, float h, AppConfig *cfg, float *out
         cascade = 0;
 }
 
+static bool IsAnyEditModeActive(void)
+{
+    bool *flags[] = {
+        &edit_year, &edit_month, &edit_day,
+        &edit_hour, &edit_min, &edit_sec,
+        &edit_unix,
+        &edit_doppler_freq, &edit_doppler_res, &edit_doppler_file,
+        &edit_sat_search, &edit_min_el,
+        &edit_hl_name, &edit_hl_lat, &edit_hl_lon, &edit_hl_alt,
+        &edit_fps, &edit_new_tle,
+        &edit_scope_az, &edit_scope_el, &edit_scope_beam,
+        &rot_edit_host, &rot_edit_port, &rot_edit_get_fmt, &rot_edit_set_fmt,
+        &rot_edit_custom_cmd, &rot_edit_park_az, &rot_edit_park_el, &rot_edit_lead_time
+    };
+
+    for (size_t i = 0; i < sizeof(flags) / sizeof(flags[0]); i++)
+    {
+        if (*flags[i])
+            return true;
+    }
+    return false;
+}
+
 bool IsUITyping(void)
 {
-    return edit_year || edit_month || edit_day || edit_hour || edit_min || edit_sec || edit_unix || edit_doppler_freq || edit_doppler_res || edit_doppler_file || edit_sat_search || edit_min_el ||
-           edit_hl_name || edit_hl_lat || edit_hl_lon || edit_hl_alt || edit_fps || edit_new_tle || edit_scope_az || edit_scope_el || edit_scope_beam ||
-           rot_edit_host || rot_edit_port || rot_edit_get_fmt || rot_edit_set_fmt || rot_edit_custom_cmd || rot_edit_park_az || rot_edit_park_el || rot_edit_lead_time;
+    return IsAnyEditModeActive();
 }
 
 void ToggleTLEWarning(void) { show_tle_warning = !show_tle_warning; }
@@ -2072,14 +2093,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
             struct tm *tm_info = gmtime(&t_unix);
             if (tm_info)
             {
-                sprintf(text_year, "%d", tm_info->tm_year + 1900);
-                sprintf(text_month, "%d", tm_info->tm_mon + 1);
-                sprintf(text_day, "%d", tm_info->tm_mday);
-                sprintf(text_hour, "%d", tm_info->tm_hour);
-                sprintf(text_min, "%d", tm_info->tm_min);
-                sprintf(text_sec, "%d", tm_info->tm_sec);
+                snprintf(text_year, sizeof(text_year), "%d", tm_info->tm_year + 1900);
+                snprintf(text_month, sizeof(text_month), "%d", tm_info->tm_mon + 1);
+                snprintf(text_day, sizeof(text_day), "%d", tm_info->tm_mday);
+                snprintf(text_hour, sizeof(text_hour), "%d", tm_info->tm_hour);
+                snprintf(text_min, sizeof(text_min), "%d", tm_info->tm_min);
+                snprintf(text_sec, sizeof(text_sec), "%d", tm_info->tm_sec);
             }
-            sprintf(text_unix, "%ld", (long)t_unix);
+            snprintf(text_unix, sizeof(text_unix), "%ld", (long)t_unix);
         }
         show_time_dialog = !show_time_dialog;
         BringToFront(WND_TIME);
