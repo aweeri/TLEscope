@@ -68,6 +68,7 @@ macos: bin/TLEscope-macos
 	cp logo*.png $(DIST_MACOS)/ 2>/dev/null || true
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
+	@echo "To make a MacOS bundle: ./macos_bundle.sh"
 
 windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
