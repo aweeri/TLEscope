@@ -1,0 +1,4 @@
+#!/bin/bash
+# this workaround reeks probably please change it later
+cd "$(dirname "$0")"/../Resources
+../MacOS/TLEscope.bin
