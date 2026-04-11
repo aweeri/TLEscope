@@ -149,6 +149,10 @@ static bool show_doppler_dialog = false;
 static bool show_tle_warning = false;
 static bool show_exit_dialog = false;
 
+/* handle taskbar in fullscreen */
+static int last_drawable_height = 0;
+static bool was_fullscreen = false;
+
 static bool show_sat_mgr_dialog = false;
 static bool drag_sat_mgr = false;
 static Vector2 drag_sat_mgr_off = {0};
@@ -706,6 +710,32 @@ Color ApplyAlpha(Color c, float alpha)
     return c;
 }
 
+/* calculate bottom button Y position */
+static float GetButtonBottomY(float ui_scale)
+{
+    int current_height = GetScreenHeight();
+    bool is_fullscreen = IsWindowFullscreen();
+    
+    /* Track height */
+    if (!is_fullscreen && current_height > 0)
+    {
+        last_drawable_height = current_height;
+    }
+    
+    int effective_height = current_height;
+    if (is_fullscreen && was_fullscreen && last_drawable_height > 0 && current_height != last_drawable_height)
+    {
+        /* use the larger of the two */
+        effective_height = fmax(current_height, last_drawable_height);
+    }
+    
+    was_fullscreen = is_fullscreen;
+    
+    float btn_height = 30 * ui_scale;
+    float btn_padding = 10 * ui_scale;
+    return effective_height - btn_padding - btn_height;
+}
+
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color) { DrawTextEx(font, text, (Vector2){x, y}, size, 1.0f, color); }
 
 double StepTimeMultiplier(double current, bool increase)
@@ -960,6 +990,10 @@ bool IsMouseOverUI(AppConfig *cfg)
     float center_x_bottom = (GetScreenWidth() - (6 * 35 - 5) * cfg->ui_scale) / 2.0f;
     float center_x_top = (GetScreenWidth() - (13 * 35 - 5) * cfg->ui_scale) / 2.0f;
 
+    /* position bottom buttons same as in DrawGUI*/
+    float btn_height = 30 * cfg->ui_scale;
+    float bottom_y = GetButtonBottomY(cfg->ui_scale);
+
         Rectangle btnRecs[] = {
             {center_x_top, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
             {center_x_top + 35 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
@@ -974,12 +1008,12 @@ bool IsMouseOverUI(AppConfig *cfg)
             {center_x_top + 350 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
             {center_x_top + 385 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
             {center_x_top + 420 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale},
-            {center_x_bottom + 175 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale}
+            {center_x_bottom, bottom_y, btn_height, btn_height},
+            {center_x_bottom + 35 * cfg->ui_scale, bottom_y, btn_height, btn_height},
+            {center_x_bottom + 70 * cfg->ui_scale, bottom_y, btn_height, btn_height},
+            {center_x_bottom + 105 * cfg->ui_scale, bottom_y, btn_height, btn_height},
+            {center_x_bottom + 140 * cfg->ui_scale, bottom_y, btn_height, btn_height},
+            {center_x_bottom + 175 * cfg->ui_scale, bottom_y, btn_height, btn_height}
         };
         for (int i = 0; i < 19; i++)
     {
@@ -1904,12 +1938,17 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     Rectangle btnSlantRange = {center_x_top + 350 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnFrame = {center_x_top + 385 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
     Rectangle btnPOV = {center_x_top + 420 * cfg->ui_scale, 10 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnRewind = {btn_start_x, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnPlayPause = {btn_start_x + 35 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnFastForward = {btn_start_x + 70 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnNow = {btn_start_x + 105 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnClock = {btn_start_x + 140 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
-    Rectangle btnRotator = {btn_start_x + 175 * cfg->ui_scale, GetScreenHeight() - 40 * cfg->ui_scale, 30 * cfg->ui_scale, 30 * cfg->ui_scale};
+    
+    /* bottom buttons positioning */
+    float btn_height = 30 * cfg->ui_scale;
+    float bottom_y = GetButtonBottomY(cfg->ui_scale);
+    
+    Rectangle btnRewind = {btn_start_x, bottom_y, btn_height, btn_height};
+    Rectangle btnPlayPause = {btn_start_x + 35 * cfg->ui_scale, bottom_y, btn_height, btn_height};
+    Rectangle btnFastForward = {btn_start_x + 70 * cfg->ui_scale, bottom_y, btn_height, btn_height};
+    Rectangle btnNow = {btn_start_x + 105 * cfg->ui_scale, bottom_y, btn_height, btn_height};
+    Rectangle btnClock = {btn_start_x + 140 * cfg->ui_scale, bottom_y, btn_height, btn_height};
+    Rectangle btnRotator = {btn_start_x + 175 * cfg->ui_scale, bottom_y, btn_height, btn_height};
 
     /* main toolbar rendering */
     bool toolbar_blocked_by_window = (top_hovered_wnd != -1);
