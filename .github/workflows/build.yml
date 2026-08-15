@@ -98,12 +98,17 @@ jobs:
             mingw-w64-x86_64-zstd
             mingw-w64-x86_64-libssh2
             mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-brotli
+            mingw-w64-x86_64-libpsl
+            mingw-w64-x86_64-libidn2
+            mingw-w64-x86_64-libunistring
+            mingw-w64-x86_64-libiconv
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-imagemagick
 
       - name: Compile and Bundle Windows
-        run: make win-installer MINGW_PREFIX=/mingw64 PKG_CONFIG_WIN=pkg-config
+        run: make win-installer MINGW_PREFIX=/mingw64
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
@@ -145,13 +150,18 @@ jobs:
             mingw-w64-clang-aarch64-zstd
             mingw-w64-clang-aarch64-libssh2
             mingw-w64-clang-aarch64-openssl
+            mingw-w64-clang-aarch64-brotli
+            mingw-w64-clang-aarch64-libpsl
+            mingw-w64-clang-aarch64-libidn2
+            mingw-w64-clang-aarch64-libunistring
+            mingw-w64-clang-aarch64-libiconv
             mingw-w64-clang-aarch64-pkgconf
 
       - name: Build raylib
         run: make raylib
 
       - name: Compile and Bundle Windows ARM64
-        run: mingw32-make windows-arm64
+        run: make windows-arm64
 
       - name: Upload Windows ARM64 Artifact
         uses: actions/upload-artifact@v4

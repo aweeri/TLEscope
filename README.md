@@ -154,22 +154,23 @@ cd TLEscope
 make macos      # Results in dist/TLEscope-macOS-Portable/
 ```
 
-**Windows systems (MSYS2)**
-Install [MSYS2](https://www.msys2.org/), then run the following in a UCRT64 or MINGW64 terminal:
+**Windows systems (MSYS2 UCRT64 / MINGW64)**
+Install [MSYS2](https://www.msys2.org/), then run the following in a **UCRT64** terminal:
 ```
-pacman -S mingw-w64-x86_64-gcc make mingw-w64-x86_64-curl
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-ngtcp2 mingw-w64-ucrt-x86_64-nghttp3 mingw-w64-ucrt-x86_64-zstd mingw-w64-ucrt-x86_64-libssh2 mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-brotli mingw-w64-ucrt-x86_64-libpsl mingw-w64-ucrt-x86_64-libidn2 mingw-w64-ucrt-x86_64-libunistring mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-pkgconf make git
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
-# Override CC_WIN if using local gcc instead of the cross-compiler
-make windows CC_WIN=gcc
+make windows
 ```
+*(Or in a **MINGW64** terminal using `mingw-w64-x86_64-` packages)*
 
 **Windows ARM64 (MSYS2 CLANGARM64)**
-Install [MSYS2](https://www.msys2.org/), then run the following in a CLANGARM64 terminal:
+Install [MSYS2](https://www.msys2.org/), then run the following in a **CLANGARM64** terminal:
 ```
-pacman -S mingw-w64-clang-aarch64-clang make mingw-w64-clang-aarch64-curl
+pacman -S mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-curl mingw-w64-clang-aarch64-ngtcp2 mingw-w64-clang-aarch64-nghttp3 mingw-w64-clang-aarch64-zstd mingw-w64-clang-aarch64-libssh2 mingw-w64-clang-aarch64-openssl mingw-w64-clang-aarch64-brotli mingw-w64-clang-aarch64-libpsl mingw-w64-clang-aarch64-libidn2 mingw-w64-clang-aarch64-libunistring mingw-w64-clang-aarch64-libiconv mingw-w64-clang-aarch64-pkgconf make git
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
+make raylib
 make windows-arm64
 ```
 

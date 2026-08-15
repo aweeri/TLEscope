@@ -13,6 +13,14 @@ ifeq ($(MSYSTEM),CLANGARM64)
 	CC_WIN = clang++
 	LIB_WIN_PATH = -Ilib/raylib_win_arm64/include -Llib/raylib_win_arm64/lib -I$(CLANG64_PREFIX)/include -L$(CLANG64_PREFIX)/lib
 	DIST_WIN_ARM64 = dist/TLEscope-Win-arm64-Portable
+else ifeq ($(MSYSTEM),UCRT64)
+	PKG_CONFIG_WIN ?= pkg-config
+	CC_WIN = g++
+	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib
+else ifeq ($(MSYSTEM),MINGW64)
+	PKG_CONFIG_WIN ?= pkg-config
+	CC_WIN = g++
+	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib
 else
 	PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
     CC_WIN = x86_64-w64-mingw32-g++
@@ -35,7 +43,7 @@ LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
-    CURL_FIX = -lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32 -lnormaliz
+    CURL_FIX = -lcurl -lngtcp2_crypto_ossl -lngtcp2 -lnghttp3 -lnghttp2 -lssl -lcrypto -lssh2 -lbrotlidec -lbrotlicommon -lz -lpsl -lidn2 -lunistring -liconv -lcrypt32 -lwldap32 -lws2_32 -lnormaliz -lgdi32 -ladvapi32
 else
     CURL_FIX = $(shell echo "$(CURL_FIX_RAW)" | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
 endif
@@ -114,10 +122,10 @@ bin/TLEscope-macos: $(SRC) | bin
 	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
-bin/TLEscope.exe: $(SRC) | bin
+bin/TLEscope.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
-bin/TLEscope-arm64.exe: $(SRC) | bin
+bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.cpp | build
