@@ -8,6 +8,7 @@
 
 #include "astro.h"
 #include "config.h"
+#include "log.h"
 
 static const char* GetAssetPath(const char* theme, const char* filename) {
     static char path[256];
@@ -532,6 +533,8 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
 
 int main(void)
 {
+    LogInit();
+
     LoadAppConfig("settings.json", &cfg);
 
     /* window setup and msaa */
@@ -545,10 +548,12 @@ int main(void)
     strncpy(short_version, TLESCOPE_VERSION, sizeof(short_version) - 1);
     char *dash = strchr(short_version, '-');
     if (dash) *dash = '\0';
+    LOG_INFO("TLEscope %s starting", short_version);
 
     char window_title[128];
     snprintf(window_title, sizeof(window_title), "TLEscope %s - Orbital Data Platform", short_version);
     InitWindow(cfg.window_width, cfg.window_height, window_title);
+    LOG_INFO("Window created: %dx%d, theme=%s", cfg.window_width, cfg.window_height, cfg.theme);
 
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
@@ -598,11 +603,16 @@ int main(void)
 
     /* resource loading phase */
     DrawLoadingScreen(0.1f, "Loading Orbital Data...", logoLTex);
+    LOG_INFO("Loading orbital data...");
     load_orbital_data("data.json");
+    LOG_INFO("Loaded %d satellites from storage", sat_count);
     load_manual_entries(&cfg);
+    LOG_INFO("Loaded %d manual entries", cfg.manual_entry_count);
     LoadSatSelection(); // restore active satellites
+    LOG_INFO("Satellite selection restored");
 
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
+    LOG_INFO("Loading textures...");
     earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
     earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
     skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
@@ -613,6 +623,7 @@ int main(void)
     SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
+    LOG_INFO("Compiling shaders...");
     Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
     shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
@@ -641,6 +652,7 @@ int main(void)
     int viewPosLocAtmosphere = GetShaderLocation(shaderAtmosphere, "viewPos");
 
     DrawLoadingScreen(0.6f, "Generating Meshes...", logoTex);
+    LOG_INFO("Generating 3D meshes...");
     float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
     Mesh sphereMesh = GenEarthMesh(draw_earth_radius, 80, 80);
     earthModel = LoadModelFromMesh(sphereMesh);
@@ -649,6 +661,7 @@ int main(void)
     Shader defaultEarthShader = earthModel.materials[0].shader;
 
     DrawLoadingScreen(0.8f, "Loading Celestial Bodies...", logoTex);
+    LOG_INFO("Loading celestial bodies (Earth, Moon, skybox)...");
 
     Mesh skyboxMesh = GenEarthMesh(-500.0f, 40, 40); /* negative radius flips normals inward */
     skyboxModel = LoadModelFromMesh(skyboxMesh);
@@ -691,6 +704,7 @@ int main(void)
     SetShaderValue(shaderCloud, GetShaderLocation(shaderCloud, "moonRadius"), &draw_moon_radius, SHADER_UNIFORM_FLOAT);
 
     DrawLoadingScreen(0.95f, "Finalizing UI...", logoTex);
+    LOG_INFO("Finalizing UI textures...");
     satIcon = LoadTexture(GetAssetPath(cfg.theme, "sat_icon.png"));
     markerIcon = LoadTexture(GetAssetPath(cfg.theme, "marker_icon.png"));
     periMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
@@ -702,6 +716,7 @@ int main(void)
     SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(1.0f, "Ready!", logoTex);
+    LOG_INFO("Initialization complete — entering main loop");
 
     /* camera defaults */
     Camera Camera3DParams = {0};
@@ -764,6 +779,7 @@ int main(void)
         if (cfg.reload_theme)
         {
             cfg.reload_theme = false;
+            LOG_INFO("Reloading theme: %s", cfg.theme);
             
             UnloadTexture(earthTexture);
             UnloadTexture(earthNightTexture);
@@ -886,17 +902,27 @@ int main(void)
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, false);
             }
-            if (IsKeyPressed(KEY_M))
+            if (IsKeyPressed(KEY_M)) {
                 is_2d_view = !is_2d_view;
-            if (IsKeyPressed(KEY_RIGHT_BRACKET))
+                LOG_INFO("View switched to %s", is_2d_view ? "2D map" : "3D globe");
+            }
+            if (IsKeyPressed(KEY_RIGHT_BRACKET)) {
                 ToggleTLEWarning();
+                LOG_DEBUG("TLE warning toggled");
+            }
 
-            if (IsKeyPressed(KEY_C))
+            if (IsKeyPressed(KEY_C)) {
                 cfg.show_clouds = !cfg.show_clouds;
-            if (IsKeyPressed(KEY_N))
+                LOG_DEBUG("Clouds: %s", cfg.show_clouds ? "ON" : "OFF");
+            }
+            if (IsKeyPressed(KEY_N)) {
                 cfg.show_night_lights = !cfg.show_night_lights;
-            if (IsKeyPressed(KEY_L))
+                LOG_DEBUG("Night lights: %s", cfg.show_night_lights ? "ON" : "OFF");
+            }
+            if (IsKeyPressed(KEY_L)) {
                 cfg.show_markers = !cfg.show_markers;
+                LOG_DEBUG("Markers: %s", cfg.show_markers ? "ON" : "OFF");
+            }
 
             if (IsKeyPressed(KEY_HOME))
             {
@@ -921,12 +947,18 @@ int main(void)
                 }
             }
 
-            if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD))
+            if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {
                 cfg.ui_scale += 0.1f;
-            if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))
+                LOG_DEBUG("UI scale: %.2f", cfg.ui_scale);
+            }
+            if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {
                 cfg.ui_scale -= 0.1f;
-            if (IsKeyPressed(KEY_F11))
+                LOG_DEBUG("UI scale: %.2f", cfg.ui_scale);
+            }
+            if (IsKeyPressed(KEY_F11)) {
                 ToggleFullscreen();
+                LOG_INFO("Fullscreen toggled");
+            }
         }
 
         if (cfg.ui_scale < 0.5f)
@@ -978,6 +1010,7 @@ int main(void)
             sooooo if an orbital body ends up below 80% of earths radius, disable it because it's about to meet earth's theoritical singularity and get ejected at speeds higher than light speed. yeeeeeeeet*/
             if (Vector3Length(satellites[i].current_pos) < EARTH_RADIUS_KM * 0.8f)
             {
+                LOG_WARN("Sat %s deactivated — orbital decay (pos < 0.8x Earth radius)", satellites[i].name);
                 satellites[i].is_active = false;
                 if (selected_sat == &satellites[i])
                     selected_sat = NULL;
@@ -1035,15 +1068,17 @@ int main(void)
         /* vsync config check */
         if (cfg.hint_vsync != IsWindowState(FLAG_VSYNC_HINT))
         {
-            if (cfg.hint_vsync) 
+            if (cfg.hint_vsync)
             {
                 SetWindowState(FLAG_VSYNC_HINT);
                 SetTargetFPS(0);
+                LOG_INFO("VSync enabled");
             }
-            else 
+            else
             {
                 ClearWindowState(FLAG_VSYNC_HINT);
                 SetTargetFPS(cfg.target_fps);
+                LOG_INFO("VSync disabled, target FPS: %d", cfg.target_fps);
             }
         }
         
@@ -2117,6 +2152,7 @@ int main(void)
 
     SaveSatSelection();
     RotatorShutdown();
+    LogShutdown();
 
     CloseWindow();
     return 0;

@@ -34,7 +34,7 @@ else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 endif
 
-SRC          = src/main.cpp src/astro.cpp src/config.cpp src/storage.cpp src/provider.cpp src/cache.cpp src/omm_parser.cpp src/ui_imgui.cpp src/rotator.cpp src/c23_compat.cpp
+SRC          = src/main.cpp src/astro.cpp src/config.cpp src/storage.cpp src/provider.cpp src/cache.cpp src/omm_parser.cpp src/ui_imgui.cpp src/rotator.cpp src/c23_compat.cpp src/log.cpp
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)

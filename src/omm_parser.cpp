@@ -1,10 +1,16 @@
 #include "omm_parser.h"
 #include "astro.h"
+#include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+
+/* ── JSON OMM Parser ────────────────────────────────────────────────────────
+ * Parses satellite orbital data in JSON OMM (Orbital Mean-Elements Message) format.
+ * This is the modern standard for distributing TLE-equivalent data.
+ */
 
 /* ── JSON OMM Parser ────────────────────────────────────────────────────────
  *
@@ -156,6 +162,7 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                     long norad = json_long_value(obj_text, "NORAD_CAT_ID", 0);
                     snprintf(norad_id, sizeof(norad_id), "%ld", norad);
                     json_string_value(obj_text, "OBJECT_ID", intl_desig, sizeof(intl_desig));
+                    LOG_DEBUG("Parsed OMM JSON sat: %s (NORAD: %s)", name, norad_id);
                     json_string_value(obj_text, "EPOCH", epoch_str, sizeof(epoch_str));
 
                     double epoch = omm_epoch_to_epoch(epoch_str);
@@ -307,7 +314,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
 
     if (col_norad < 0 || col_epoch < 0 || col_incl < 0 || col_mm < 0)
     {
-        printf("CSV OMM: Missing required columns\n");
+        LOG_WARN("CSV OMM: Missing required columns");
         return 0;
     }
 
@@ -342,6 +349,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         csv_get_column(buf, col_norad, val, sizeof(val));
         char norad_id[16];
         snprintf(norad_id, sizeof(norad_id), "%s", val);
+        LOG_DEBUG("Parsed OMM CSV sat (NORAD: %s)", norad_id);
 
         // Name
         char name[64] = "";

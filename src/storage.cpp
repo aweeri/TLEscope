@@ -1,5 +1,6 @@
 #include "storage.h"
 #include "types.h"
+#include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,7 +163,11 @@ static bool read_satellite(const char *text, Satellite *sat)
 bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
 {
     FILE *f = fopen(filename, "w");
-    if (!f) return false;
+    if (!f) {
+        LOG_ERROR("Failed to save orbital data to %s", filename);
+        return false;
+    }
+    LOG_INFO("Saving %d satellites to %s", count, filename);
 
     fprintf(f, "{\n");
     fprintf(f, "  \"version\": 2,\n");
@@ -265,7 +270,11 @@ bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
 {
     FILE *f = fopen(filename, "w");
-    if (!f) return false;
+    if (!f) {
+        LOG_ERROR("Failed to save source state to %s", filename);
+        return false;
+    }
+    LOG_INFO("Saving %d source states to %s", count, filename);
 
     fprintf(f, "{\n");
     fprintf(f, "  \"version\": 2,\n");

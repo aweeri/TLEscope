@@ -7,6 +7,7 @@ typedef struct tagMSG *LPMSG;
 #endif
 #include "rotator.h"
 #include "astro.h"
+#include "log.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,7 @@ static void Disconnect(void)
 static bool ConnectTcp(const char *host, const char *port)
 {
     Disconnect();
+    LOG_INFO("Rotator connecting to %s:%s", host, port);
 
 #if defined(_WIN32) || defined(_WIN64)
     static bool wsa_ready = false;
@@ -129,6 +131,7 @@ static bool ConnectTcp(const char *host, const char *port)
 
     if (sfd < 0)
     {
+        LOG_ERROR("Rotator connection failed to %s:%s", host, port);
         snprintf(rot.status, sizeof(rot.status), "Connection failed");
         return false;
     }
@@ -146,6 +149,7 @@ static bool ConnectTcp(const char *host, const char *port)
     rot.sock = sfd;
     rot.connected = true;
     snprintf(rot.status, sizeof(rot.status), "Connected to %s:%s", host, port);
+    LOG_INFO("Rotator connected to %s:%s", host, port);
     return true;
 }
 
@@ -250,6 +254,7 @@ static void PollPosition(void)
         rot.cur_el = el;
         rot.has_position = true;
         snprintf(rot.status, sizeof(rot.status), "OK");
+        LOG_DEBUG("Rotator position: AZ=%.1f EL=%.1f", rot.cur_az, rot.cur_el);
     }
     else
     {
@@ -297,6 +302,7 @@ int RotatorGetLeadTimeBufferSize(void) { return (int)sizeof(rot.lead_time); }
 void RotatorConnect(void) { ConnectTcp(rot.host, rot.port); }
 void RotatorDisconnect(void)
 {
+    LOG_INFO("Rotator shutting down");
     Disconnect();
     snprintf(rot.status, sizeof(rot.status), "Disconnected");
 }

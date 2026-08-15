@@ -11,6 +11,7 @@
 #include "provider.h"
 #include "cache.h"
 #include "storage.h"
+#include "log.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -96,6 +97,8 @@ static bool show_scope_dialog = false;
 static bool show_sat_info_dialog = false;
 
 static bool rot_show_window = false;
+static bool show_log_window = false;
+static bool log_auto_scroll = true;
 
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
 
@@ -146,6 +149,8 @@ static void DrawToolbar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Button("Time")) show_time_dialog = !show_time_dialog;
         ImGui::SameLine();
         if (ImGui::Button("Settings")) show_settings = !show_settings;
+        ImGui::SameLine();
+        if (ImGui::Button("Log")) show_log_window = !show_log_window;
         ImGui::SameLine();
         if (ImGui::Button("Help")) show_help = !show_help;
 
@@ -972,6 +977,118 @@ static void DrawExitDialog(UIContext *ctx, AppConfig *cfg)
     }
 }
 
+/* ── Log Window ──────────────────────────────────────────────────────────── */
+
+static const char *LogLevelFilterLabel(int idx)
+{
+    switch (idx)
+    {
+        case 0:  return "ALL";
+        case 1:  return "INFO+";
+        case 2:  return "WARN+";
+        case 3:  return "ERROR";
+        default: return "ALL";
+    }
+}
+
+static LogLevel LogLevelFilterMinLevel(int idx)
+{
+    switch (idx)
+    {
+        case 0:  return LOG_LEVEL_DEBUG;  /* show everything */
+        case 1:  return LOG_LEVEL_INFO;   /* INFO and above */
+        case 2:  return LOG_LEVEL_WARN;   /* WARN and above */
+        case 3:  return LOG_LEVEL_ERROR;  /* ERROR only */
+        default: return LOG_LEVEL_DEBUG;
+    }
+}
+
+static void DrawLogWindow(UIContext *ctx, AppConfig *cfg)
+{
+    (void)ctx;
+    (void)cfg;
+
+    if (!show_log_window) return;
+
+    ImGui::SetNextWindowSize(ImVec2(600, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(50, 400), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Log", &show_log_window))
+    {
+        /* Toolbar row inside the log window */
+        if (ImGui::Button("Clear"))
+        {
+            LogClear();
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto-scroll", &log_auto_scroll);
+        ImGui::SameLine();
+        ImGui::TextUnformatted("|");
+        ImGui::SameLine();
+
+        /* Level filter dropdown */
+        static int log_level_filter = 0;
+        ImGui::SetNextItemWidth(100.0f);
+        ImGui::Combo("##filter", &log_level_filter, "ALL\0INFO+\0WARN+\0ERROR\0");
+        LogLevel min_level = LogLevelFilterMinLevel(log_level_filter);
+
+        ImGui::Separator();
+
+        /* Scrollable log area */
+        ImGui::BeginChild("LogEntries", ImVec2(0, 0), false,
+                          ImGuiWindowFlags_HorizontalScrollbar);
+
+        /* Get head index before locking to avoid deadlock with LogLock */
+        int head = LogGetHeadIndex();
+
+        int count;
+        const LogEntry *entries = LogLock(&count);
+
+        /* The ring buffer stores entries in chronological order starting from
+         * the oldest at (head - count) mod capacity, wrapping around. */
+        int head_for_read = (head - count + LOG_RING_CAPACITY) % LOG_RING_CAPACITY;
+
+        for (int i = 0; i < count; i++)
+        {
+            int idx = (head_for_read + i) % LOG_RING_CAPACITY;
+            const LogEntry *e = &entries[idx];
+
+            /* Skip entries below the selected filter level */
+            if (e->level < min_level)
+                continue;
+
+            /* Choose colour based on level */
+            ImVec4 color;
+            switch (e->level)
+            {
+                case LOG_LEVEL_DEBUG: color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f); break; /* grey */
+                case LOG_LEVEL_INFO:  color = ImVec4(0.8f, 0.9f, 1.0f, 1.0f); break; /* light blue */
+                case LOG_LEVEL_WARN:  color = ImVec4(1.0f, 0.9f, 0.4f, 1.0f); break; /* yellow */
+                case LOG_LEVEL_ERROR: color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break; /* red */
+                default:             color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            }
+
+            /* Build a single selectable line: "HH:MM:SS message" */
+            char line_buf[576];
+            snprintf(line_buf, sizeof(line_buf), "%s %s", e->timestamp, e->message);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::Selectable(line_buf);
+            ImGui::PopStyleColor();
+        }
+
+        /* Auto-scroll to bottom */
+        if (log_auto_scroll && count > 0)
+        {
+            ImGui::SetScrollHereY(1.0f);
+        }
+
+        LogUnlock();
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
 /* ── Main DrawGUI ────────────────────────────────────────────────────────── */
 
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
@@ -1015,6 +1132,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     DrawPolarPlotDialog(ctx, cfg);
     DrawDopplerDialog(ctx, cfg);
     DrawRotatorDialog(ctx, cfg);
+    DrawLogWindow(ctx, cfg);
     DrawExitDialog(ctx, cfg);
 
     /* End rlImGui frame */

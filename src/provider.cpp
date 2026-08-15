@@ -1,5 +1,6 @@
 #include "provider.h"
 #include "cache.h"
+#include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -192,9 +193,12 @@ static FetchResult http_fetch(const char *url)
     CURL *curl = curl_easy_init();
     if (!curl)
     {
+        LOG_ERROR("curl_easy_init failed for URL: %s", url);
         free(chunk.memory);
         return result;
     }
+
+    LOG_DEBUG("HTTP fetch: %s", url);
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
@@ -226,10 +230,11 @@ static FetchResult http_fetch(const char *url)
         result.data = chunk.memory;
         result.size = chunk.size;
         result.success = true;
+        LOG_INFO("HTTP fetch OK: %s (%zu bytes, HTTP %ld)", url, chunk.size, http_code);
     }
     else
     {
-        printf("HTTP fetch failed: %s (HTTP %ld)\n", url, http_code);
+        LOG_ERROR("HTTP fetch failed: %s (HTTP %ld)", url, http_code);
         free(chunk.memory);
     }
 
@@ -255,7 +260,7 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
         const DataProvider *provider = GetProvider(source->type);
         if (!provider || !provider->build_url(source, format, url, sizeof(url)))
         {
-            printf("Failed to build URL for source %s\n", source->name);
+            LOG_ERROR("Failed to build URL for source %s", source->name);
             return result;
         }
     }
@@ -264,6 +269,7 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
     CacheEntry *cached = CacheGet(url);
     if (cached)
     {
+        LOG_DEBUG("Cache HIT for %s", url);
         result.data = (char*)malloc(cached->data_size + 1);
         if (result.data)
         {
@@ -277,6 +283,7 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
         return result;
     }
 
+    LOG_DEBUG("Cache MISS for %s — fetching from network", url);
     // Fetch from network
     result = http_fetch(url);
     if (result.success)
@@ -284,6 +291,7 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
         result.format = format;
         // Store in cache
         CachePut(url, result.data, result.size, format);
+        LOG_DEBUG("Cached %zu bytes for %s", result.size, url);
     }
 
     return result;

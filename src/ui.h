@@ -35,6 +35,7 @@ typedef struct
     bool show_time_dialog;
     bool show_scope_dialog;
     bool show_sat_info_dialog;
+    bool show_log_window;
 
     /* window positions */
     float sm_x, sm_y;   /* satellite manager */
@@ -48,6 +49,7 @@ typedef struct
     float sc_x, sc_y;   /* scope dialog */
     float si_x, si_y;   /* satellite info */
     float rot_x, rot_y; /* rotator window */
+    float lw_x, lw_y;   /* log window */
 
     /* drag state */
     bool drag_sat_mgr;
@@ -72,6 +74,8 @@ typedef struct
     Vector2 drag_sat_info_off;
     bool rot_dragging;
     Vector2 rot_drag_off;
+    bool drag_log;
+    Vector2 drag_log_off;
 
     /* scroll state */
     Vector2 sat_mgr_scroll;
@@ -134,6 +138,9 @@ typedef struct
 
     /* rotator state */
     bool rot_show_window;
+
+    /* log window state */
+    bool log_auto_scroll;
 
     /* satellite info state */
     bool si_has_been_placed;

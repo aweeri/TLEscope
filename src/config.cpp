@@ -1,5 +1,6 @@
 #include "config.h"
 #include "types.h"
+#include "log.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +74,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
     if (FileExists(filename))
     {
+        LOG_INFO("Loading config from %s", filename);
         char *text = LoadFileText(filename);
         if (text)
         {
@@ -320,10 +322,13 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
             UnloadFileText(text);
+            LOG_INFO("Config loaded: theme=%s, %dx%d, %d markers, %d custom sources",
+                     config->theme, config->window_width, config->window_height,
+                     marker_count, config->custom_data_source_count);
         }
     }
     else {
-        printf("INFO: No config file found at %s! Showing first run dialog!\n", filename);
+        LOG_INFO("No config file found at %s — showing first-run dialog", filename);
         sscanf("default","%63[^\"]",config->theme);
         config->window_width = 1920;
         config->window_height = 1080;
@@ -363,6 +368,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
     if (FileExists(theme_path))
     {
+        LOG_INFO("Loading theme: %s", theme_path);
         char *theme_text = LoadFileText(theme_path);
         if (theme_text)
         {
@@ -412,13 +418,21 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             UnloadFileText(theme_text);
         }
     }
+    else
+    {
+        LOG_WARN("Theme file not found: %s", theme_path);
+    }
 }
 
 void SaveAppConfig(const char *filename, AppConfig *config)
 {
     FILE *file = fopen(filename, "w");
     if (!file)
+    {
+        LOG_ERROR("Failed to save config to %s", filename);
         return;
+    }
+    LOG_INFO("Saving config to %s", filename);
 
     fprintf(file, "{\n");
     fprintf(file, "    \"theme\": \"%s\",\n", config->theme);
