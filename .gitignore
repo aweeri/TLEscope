@@ -3,7 +3,7 @@
 bin/
 build/
 dist/
-
+plans/
 .vscode
 
 # Dynamic Files With Dynamic Data or PIIs

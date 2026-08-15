@@ -39,6 +39,10 @@ IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tabl
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
 
+# a progress bar! (linux only)
+TOTAL_OBJ := $(words $(OBJ))
+$(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescope_build_counter)
+
 LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
@@ -116,7 +120,9 @@ win-installer: windows
 # microsoft, and I mean this sincerely, please keep bloating windows so that people stop using it and annoying me about it thanks bye.
 
 bin/TLEscope: $(OBJ) | bin
+	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_LINUX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS_LIN)
+	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-macos: $(SRC) | bin
 	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
@@ -129,13 +135,13 @@ bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.cpp | build
-	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/imgui/%.cpp | build
-	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/rlImGui/%.cpp | build
-	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
 
 build:
 	mkdir -p build
