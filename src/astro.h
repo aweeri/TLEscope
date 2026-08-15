@@ -22,16 +22,31 @@ extern Satellite *last_pass_calc_sat;
 double get_current_real_time_epoch(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char *buffer);
-void load_tle_data(const char *filename);
-void load_manual_tles(AppConfig *config);
+
+// Orbital data loading (replaces TLE-specific loading)
+void load_orbital_data(const char *filename);
+void load_manual_entries(AppConfig *config);
+
+// OMM-to-TLE conversion for SGP4 compatibility
+bool orbital_data_to_tle(const Satellite *sat, char *line0, size_t l0sz,
+                         char *line1, size_t l1sz, char *line2, size_t l2sz);
+bool add_satellite_from_tle(const char* line0, const char* line1,
+                            const char* line2, OrbitalDataMeta *meta);
+bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
+                                     const char *intl_desig, double epoch,
+                                     double inclination_deg, double raan_deg,
+                                     double eccentricity, double arg_perigee_deg,
+                                     double mean_anomaly_deg, double mean_motion_revday,
+                                     double bstar, OrbitalDataMeta *meta);
+
 double normalize_epoch(double epoch);
 double get_unix_from_epoch(double epoch);
 
 // orbit math stuff
 Vector3 calculate_sun_position(double current_time_days);
 bool is_sat_eclipsed(Vector3 pos_km, Vector3 sun_dir_norm);
-void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float map_w, float map_h, float *out_x,
-                         float *out_y);
+void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float map_w, float map_h,
+                         float *out_x, float *out_y);
 Vector3 calculate_position(Satellite *sat, double current_unix);
 Vector3 calculate_moon_position(double current_time_days);
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset,
@@ -47,8 +62,8 @@ int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, 
 
 double get_sat_range(Satellite *sat, double epoch, Marker obs);
 double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq);
-void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs, 
-                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el, 
+void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs,
+                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el,
                                float scope_beam, Color orbit_color);
 
 #endif // ASTRO_H

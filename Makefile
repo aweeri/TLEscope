@@ -3,19 +3,19 @@ CLANG64_PREFIX   ?= /clangarm64
 
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
 
-CC_LINUX = gcc
-CFLAGS     = -Wall -Wextra -std=c99 -O2 -Isrc -Ilib -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
-CFLAGS_WIN = $(CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
+CC_LINUX = g++
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS_WIN = $(CXXFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 # Sets _WIN variables for each possible architecture
 ifeq ($(MSYSTEM),CLANGARM64)
 	PKG_CONFIG_WIN ?= pkg-config
-	CC_WIN = clang
+	CC_WIN = clang++
 	LIB_WIN_PATH = -Ilib/raylib_win_arm64/include -Llib/raylib_win_arm64/lib -I$(CLANG64_PREFIX)/include -L$(CLANG64_PREFIX)/lib
-	override DIST_WIN = dist/TLEscope-Win-arm64-Portable
+	DIST_WIN_ARM64 = dist/TLEscope-Win-arm64-Portable
 else
 	PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
-    CC_WIN = x86_64-w64-mingw32-gcc
+    CC_WIN = x86_64-w64-mingw32-g++
 	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 endif
 
@@ -26,11 +26,19 @@ else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 endif
 
-SRC       = src/main.c src/astro.c src/config.c src/ui.c src/rotator.c
-OBJ       = $(SRC:src/%.c=build/%.o)
+SRC          = src/main.cpp src/astro.cpp src/config.cpp src/storage.cpp src/provider.cpp src/cache.cpp src/omm_parser.cpp src/ui_imgui.cpp src/rotator.cpp src/c23_compat.cpp
+IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
+RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
+OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
 
 LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
-CURL_FIX = $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g' || echo "-lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32")
+
+CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
+ifeq ($(strip $(CURL_FIX_RAW)),)
+    CURL_FIX = -lcurl -lnghttp2 -lssl -lcrypto -lssh2 -lz -lcrypt32 -lwldap32 -lws2_32 -lnormaliz
+else
+    CURL_FIX = $(shell echo "$(CURL_FIX_RAW)" | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
+endif
 
 LDFLAGS_WIN = $(LIB_WIN_PATH) -lraylib -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -lopengl32 -lgdi32 -lwinmm -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
 DIST_LINUX = dist/TLEscope-Linux-Portable
@@ -41,13 +49,13 @@ LINK_DIR    ?= /usr/local/bin
 APP_DIR     ?= /usr/share/applications
 
 # macOS (Apple Silicon / Intel)
-CC_MACOS = clang
+CC_MACOS = clang++
 RAYLIB_CFLAGS = $(shell pkg-config --cflags raylib 2>/dev/null)
 RAYLIB_LIBS = $(shell pkg-config --libs raylib 2>/dev/null)
 LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild
+.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild test
 
 all: linux
 
@@ -57,8 +65,8 @@ linux: bin/TLEscope
 	cp -r themes $(DIST_LINUX)/
 	cp settings.json $(DIST_LINUX)/ 2>/dev/null || true
 	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
-	@echo "Linux build bundled in $(DIST_LINUX)/, do not run bin/*"
-	@echo "Here's your subshell command to run it! (cd $(DIST_LINUX)/ && ./TLEscope)"
+	@echo "Linux build bundled in $(DIST_LINUX)/"
+	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
 macos: bin/TLEscope-macos
 	@mkdir -p $(DIST_MACOS)
@@ -80,15 +88,15 @@ windows: bin/TLEscope.exe
 	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
 
-windows-arm64: bin/TLEscope.exe
-	@mkdir -p $(DIST_WIN)
-	cp bin/TLEscope.exe $(DIST_WIN)/
-	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
-	cp -r themes $(DIST_WIN)/
-	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
-	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
-	cp $(CLANG64_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
-	@echo "Windows ARM64 build bundled in $(DIST_WIN)/, run it from there!"
+windows-arm64: bin/TLEscope-arm64.exe
+	@mkdir -p $(DIST_WIN_ARM64)
+	cp bin/TLEscope-arm64.exe $(DIST_WIN_ARM64)/TLEscope.exe
+	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN_ARM64)/ 2>/dev/null || true
+	cp -r themes $(DIST_WIN_ARM64)/
+	cp settings.json $(DIST_WIN_ARM64)/ 2>/dev/null || true
+	cp logo*.png $(DIST_WIN_ARM64)/ 2>/dev/null || true
+	cp $(CLANG64_PREFIX)/bin/libssp*.dll $(DIST_WIN_ARM64)/ 2>/dev/null || true
+	@echo "Windows ARM64 build bundled in $(DIST_WIN_ARM64)/, run it from there!"
 
 win-installer: windows
 	@echo "Building Windows installer..."
@@ -96,24 +104,30 @@ win-installer: windows
 	makensis installer.nsi
 	@echo "Installer built at dist/TLEscope-Installer.exe"
 
-# yes makefile this data copied juuuuuuuust fine and is safe and sound don't worry about it :3 
+# yes makefile this data copied juuuuuuuust fine and is safe and sound don't worry about it :3
 # microsoft, and I mean this sincerely, please keep bloating windows so that people stop using it and annoying me about it thanks bye.
 
 bin/TLEscope: $(OBJ) | bin
-	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(LDFLAGS_LIN)
+	$(CC_LINUX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS_LIN)
 
 bin/TLEscope-macos: $(SRC) | bin
 	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
-	$(CC_MACOS) $(CFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
+	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(SRC) | bin
-	$(CC_WIN) $(CFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 bin/TLEscope-arm64.exe: $(SRC) | bin
-	$(CC_WIN) $(CFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
-build/%.o: src/%.c | build
-	$(CC_LINUX) $(CFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+build/%.o: src/%.cpp | build
+	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+
+build/%.o: lib/imgui/%.cpp | build
+	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+
+build/%.o: lib/rlImGui/%.cpp | build
+	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
 
 build:
 	mkdir -p build
@@ -165,3 +179,9 @@ uninstall:
 	rm -f $(DESTDIR)$(LINK_DIR)/TLEscope
 	rm -rf $(DESTDIR)$(INSTALL_DIR)
 	@echo "Uninstall complete."
+
+test: tests/test_astro
+	./tests/test_astro
+
+tests/test_astro: tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp
+	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -DTLESCOPE_VERSION=\"test\" tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp -lm -o tests/test_astro
