@@ -190,7 +190,7 @@ extern int marker_count;
 #define STALE_THRESHOLD_7D      604800
 #define STALE_THRESHOLD_DEFAULT 172800  // 2 days
 
-/* visual settings and colors */
+/* application settings (theme/appearance is managed by Theme in theme.h) */
 typedef struct
 {
     char theme[64];
@@ -227,29 +227,6 @@ typedef struct
     int custom_entry_count;
 
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
-
-    Color bg_color;
-    Color orbit_normal;
-    Color orbit_highlighted;
-    Color sat_normal;
-    Color sat_highlighted;
-    Color sat_selected;
-    Color text_main;
-    Color text_secondary;
-    Color ui_bg;
-    Color periapsis;
-    Color apoapsis;
-    Color footprint_bg;
-    Color footprint_border;
-
-    Color ui_primary;
-    Color ui_secondary;
-    Color ui_accent;
-    Color window_border;
-    Color window_border_focus;
-    Color scope_bg;
-    Color scope_horizon;
-    Color overlay_dim;
 } AppConfig;
 
 #endif // TYPES_H

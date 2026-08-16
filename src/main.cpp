@@ -8,17 +8,11 @@
 
 #include "core/astro.h"
 #include "core/config.h"
+#include "core/theme.h"
 #include "util/log.h"
-
-static const char* GetAssetPath(const char* theme, const char* filename) {
-    static char path[256];
-    snprintf(path, sizeof(path), "themes/%s/%s", theme, filename);
-    if (FileExists(path)) return path;
-    snprintf(path, sizeof(path), "themes/default/%s", filename);
-    return path;
-}
 #include "core/types.h"
 #include "ui/ui.h"
+#include "ui/imgui_theme.h"
 #include "io/rotator.h"
 
 /**
@@ -279,16 +273,6 @@ static AppConfig cfg = []() -> AppConfig {
     c.show_slant_range = false;
     c.show_scattering = false;
     c.hint_vsync = false;
-    c.bg_color = (Color){0, 0, 0, 255};
-    c.text_main = (Color){255, 255, 255, 255};
-    c.ui_primary = (Color){32, 32, 32, 255};
-    c.ui_secondary = (Color){64, 64, 64, 255};
-    c.ui_accent = (Color){0, 255, 0, 255};
-    c.window_border = (Color){110, 110, 110, 255};
-    c.window_border_focus = (Color){0, 255, 0, 255};
-    c.scope_bg = (Color){10, 15, 25, 255};
-    c.scope_horizon = (Color){45, 30, 20, 255};
-    c.overlay_dim = (Color){0, 0, 0, 180};
     return c;
 }();
 
@@ -358,7 +342,7 @@ static Mesh GenEarthMesh(float radius, int slices, int rings)
 /** render orbit lines in 3d space */
 static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step)
 {
-    Color orbitColor = ApplyAlpha(is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal, alpha);
+    Color orbitColor = ApplyAlpha(is_highlighted ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, alpha);
 
     if (is_highlighted)
     {
@@ -387,9 +371,9 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
                 if (cfg.highlight_sunlit)
                 {
                     if (!is_sat_eclipsed(raw_pos, base_sun_dir))
-                        drawCol = ApplyAlpha(cfg.sat_highlighted, alpha);
+                        drawCol = ApplyAlpha(g_theme.world.sat_highlighted, alpha);
                     else
-                        drawCol = ApplyAlpha(cfg.orbit_normal, alpha);
+                        drawCol = ApplyAlpha(g_theme.world.orbit_normal, alpha);
                 }
                 DrawLine3D(prev_pos, pos, drawCol);
             }
@@ -423,7 +407,7 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
 static void DrawLoadingScreen(float progress, const char *message, Texture2D logoTex)
 {
     BeginDrawing();
-    ClearBackground(cfg.bg_color);
+    ClearBackground(g_theme.world.bg);
 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -442,12 +426,12 @@ static void DrawLoadingScreen(float progress, const char *message, Texture2D log
     Rectangle barOutline = {(screenW - barW) / 2, startY, barW, barH};
     Rectangle barProgress = {barOutline.x + 3, barOutline.y + 3, (barW - 6) * progress, barH - 6};
 
-    DrawRectangleRoundedLinesEx(barOutline, 0.5f, 16, 2.0f, cfg.text_main);
+    DrawRectangleRoundedLinesEx(barOutline, 0.5f, 16, 2.0f, g_theme.ui.text_main);
     if (progress > 0.0f)
-        DrawRectangleRounded(barProgress, 0.5f, 16, cfg.text_secondary);
+        DrawRectangleRounded(barProgress, 0.5f, 16, g_theme.ui.text_secondary);
 
     Vector2 msgSize = MeasureTextEx(customFont, message, 18 * cfg.ui_scale, 1.0f);
-    DrawUIText(customFont, message, (screenW - msgSize.x) / 2, barOutline.y + barH + 20 * cfg.ui_scale, 18 * cfg.ui_scale, cfg.text_main);
+    DrawUIText(customFont, message, (screenW - msgSize.x) / 2, barOutline.y + barH + 20 * cfg.ui_scale, 18 * cfg.ui_scale, g_theme.ui.text_main);
 
     EndDrawing();
 }
@@ -599,7 +583,7 @@ int main(void)
     /* font loading with specific glyph range */
     int glyphsCount = 0;
     int *glyphs = LoadCodepoints(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", &glyphsCount);
-    customFont = LoadFontEx(GetAssetPath(cfg.theme, "font.ttf"), 64, glyphs, glyphsCount);
+    customFont = LoadFontEx(ThemeAssetPath(g_theme.font.file), (int)g_theme.font.raylib_size, glyphs, glyphsCount);
     GenTextureMipmaps(&customFont.texture);
     SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
     UnloadCodepoints(glyphs);
@@ -616,9 +600,9 @@ int main(void)
 
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
     LOG_INFO("Loading textures...");
-    earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
-    earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
-    skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
+    earthTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth));
+    earthNightTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth_night));
+    skyboxTexture = LoadTexture(ThemeAssetPath(g_theme.textures.skybox));
 
     /* make textures not blocky when zoomed in on */
     SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
@@ -673,7 +657,7 @@ int main(void)
     float draw_cloud_radius = (EARTH_RADIUS_KM + 25.0f) / DRAW_SCALE;
     Mesh cloudMesh = GenEarthMesh(draw_cloud_radius, 80, 80);
     cloudModel = LoadModelFromMesh(cloudMesh);
-    cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
+    cloudTexture = LoadTexture(ThemeAssetPath(g_theme.textures.clouds));
     SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
     earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
@@ -688,7 +672,7 @@ int main(void)
     float draw_moon_radius = MOON_RADIUS_KM / DRAW_SCALE;
     Mesh moonMesh = GenEarthMesh(draw_moon_radius, 48, 48);
     moonModel = LoadModelFromMesh(moonMesh);
-    moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
+    moonTexture = LoadTexture(ThemeAssetPath(g_theme.textures.moon));
     SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
     moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
     moonModel.materials[0].shader = shaderMoon;
@@ -708,10 +692,10 @@ int main(void)
 
     DrawLoadingScreen(0.95f, "Finalizing UI...", logoTex);
     LOG_INFO("Finalizing UI textures...");
-    satIcon = LoadTexture(GetAssetPath(cfg.theme, "sat_icon.png"));
-    markerIcon = LoadTexture(GetAssetPath(cfg.theme, "marker_icon.png"));
-    periMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
-    apoMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
+    satIcon = LoadTexture(ThemeAssetPath(g_theme.textures.sat_icon));
+    markerIcon = LoadTexture(ThemeAssetPath(g_theme.textures.marker_icon));
+    periMark = LoadTexture(ThemeAssetPath(g_theme.textures.smallmark));
+    apoMark = LoadTexture(ThemeAssetPath(g_theme.textures.smallmark));
 
     SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
@@ -783,7 +767,7 @@ int main(void)
         {
             cfg.reload_theme = false;
             LOG_INFO("Reloading theme: %s", cfg.theme);
-            
+
             UnloadTexture(earthTexture);
             UnloadTexture(earthNightTexture);
             UnloadTexture(cloudTexture);
@@ -794,40 +778,48 @@ int main(void)
             UnloadTexture(periMark);
             UnloadTexture(apoMark);
             UnloadFont(customFont);
-            
-            LoadAppConfig("settings.json", &cfg);
-            
+
+            /* reload theme data + ImGui presentation.
+             * NOTE: Do NOT call LoadAppConfig here — it would re-read
+             * settings.json (which still has the old theme name) and
+             * overwrite cfg.theme, defeating the switch. */
+            ThemeInitDefaults(&g_theme);
+            ThemeLoad(cfg.theme, &g_theme);
+            ThemeRebuildImGuiFonts(&g_theme, cfg.ui_scale);
+            ThemeApplyToImGui(&g_theme, cfg.ui_scale);
+
+            /* reload raylib font + textures from the new theme */
             int glyphsCount = 0;
             int *glyphs = LoadCodepoints(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", &glyphsCount);
-            customFont = LoadFontEx(GetAssetPath(cfg.theme, "font.ttf"), 64, glyphs, glyphsCount);
+            customFont = LoadFontEx(ThemeAssetPath(g_theme.font.file), (int)g_theme.font.raylib_size, glyphs, glyphsCount);
             GenTextureMipmaps(&customFont.texture);
             SetTextureFilter(customFont.texture, TEXTURE_FILTER_BILINEAR);
             UnloadCodepoints(glyphs);
 
-            earthTexture = LoadTexture(GetAssetPath(cfg.theme, "earth.png"));
-            earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
+            earthTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth));
+            earthNightTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth_night));
             SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
             SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
             earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
             earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
 
-            cloudTexture = LoadTexture(GetAssetPath(cfg.theme, "clouds.png"));
+            cloudTexture = LoadTexture(ThemeAssetPath(g_theme.textures.clouds));
             SetTextureFilter(cloudTexture, TEXTURE_FILTER_BILINEAR);
             cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTexture;
             earthModel.materials[0].maps[MATERIAL_MAP_SPECULAR].texture = cloudTexture;
 
-            skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
+            skyboxTexture = LoadTexture(ThemeAssetPath(g_theme.textures.skybox));
             SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
             skyboxModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = skyboxTexture;
 
-            moonTexture = LoadTexture(GetAssetPath(cfg.theme, "moon.png"));
+            moonTexture = LoadTexture(ThemeAssetPath(g_theme.textures.moon));
             SetTextureFilter(moonTexture, TEXTURE_FILTER_BILINEAR);
             moonModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = moonTexture;
 
-            satIcon = LoadTexture(GetAssetPath(cfg.theme, "sat_icon.png"));
-            markerIcon = LoadTexture(GetAssetPath(cfg.theme, "marker_icon.png"));
-            periMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
-            apoMark = LoadTexture(GetAssetPath(cfg.theme, "smallmark.png"));
+            satIcon = LoadTexture(ThemeAssetPath(g_theme.textures.sat_icon));
+            markerIcon = LoadTexture(ThemeAssetPath(g_theme.textures.marker_icon));
+            periMark = LoadTexture(ThemeAssetPath(g_theme.textures.smallmark));
+            apoMark = LoadTexture(ThemeAssetPath(g_theme.textures.smallmark));
 
             SetTextureFilter(satIcon, TEXTURE_FILTER_BILINEAR);
             SetTextureFilter(markerIcon, TEXTURE_FILTER_BILINEAR);
@@ -1449,7 +1441,7 @@ int main(void)
         }
 
         BeginDrawing();
-        ClearBackground(cfg.bg_color);
+        ClearBackground(g_theme.world.bg);
 
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
         float m_text_2d = 16.0f * cfg.ui_scale / Camera2DParams.zoom;
@@ -1534,8 +1526,8 @@ int main(void)
                             for (int offset_i = -1; offset_i <= 1; offset_i++)
                             {
                                 float x_off = offset_i * map_w;
-                                DrawTriangle((Vector2){x1 + x_off, y1}, (Vector2){x3 + x_off, y3}, (Vector2){x2 + x_off, y2}, cfg.footprint_bg);
-                                DrawTriangle((Vector2){x2 + x_off, y2}, (Vector2){x3 + x_off, y3}, (Vector2){x4 + x_off, y4}, cfg.footprint_bg);
+                                DrawTriangle((Vector2){x1 + x_off, y1}, (Vector2){x3 + x_off, y3}, (Vector2){x2 + x_off, y2}, g_theme.world.footprint_bg);
+                                DrawTriangle((Vector2){x2 + x_off, y2}, (Vector2){x3 + x_off, y3}, (Vector2){x4 + x_off, y4}, g_theme.world.footprint_bg);
                             }
                         }
                     }
@@ -1553,7 +1545,7 @@ int main(void)
                         {
                             if (fabs(x2 - x1) < map_w * 0.6f)
                             {
-                                DrawLineEx((Vector2){x1 + offset_i * map_w, y1}, (Vector2){x2 + offset_i * map_w, y2}, 2.0f / Camera2DParams.zoom, cfg.footprint_border);
+                                DrawLineEx((Vector2){x1 + offset_i * map_w, y1}, (Vector2){x2 + offset_i * map_w, y2}, 2.0f / Camera2DParams.zoom, g_theme.world.footprint_border);
                             }
                         }
                     }
@@ -1570,7 +1562,7 @@ int main(void)
                         continue;
 
                     bool is_hl = (active_sat == &satellites[i]);
-                    Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
+                    Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
                     if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
@@ -1608,13 +1600,13 @@ int main(void)
                             {
                                 if (fabs(track_pts[j].x - track_pts[j - 1].x) < map_w * 0.6f)
                                 {
-                                    Color drawCol = ApplyAlpha(cfg.orbit_highlighted, sat_alpha);
+                                    Color drawCol = ApplyAlpha(g_theme.world.orbit_highlighted, sat_alpha);
                                     if (cfg.highlight_sunlit)
                                     {
                                         if (is_sunlit_arr[j])
-                                            drawCol = ApplyAlpha(cfg.sat_highlighted, sat_alpha);
+                                            drawCol = ApplyAlpha(g_theme.world.sat_highlighted, sat_alpha);
                                         else
-                                            drawCol = ApplyAlpha(cfg.orbit_normal, sat_alpha);
+                                            drawCol = ApplyAlpha(g_theme.world.orbit_normal, sat_alpha);
                                     }
                                     DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, 2.0f / Camera2DParams.zoom, drawCol);
                                 }
@@ -1626,11 +1618,11 @@ int main(void)
 
                             DrawTexturePro(
                                 periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d},
-                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(cfg.periapsis, sat_alpha)
+                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.periapsis, sat_alpha)
                             );
                             DrawTexturePro(
                                 apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d},
-                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(cfg.apoapsis, sat_alpha)
+                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
                             );
                         }
                     }
@@ -1688,7 +1680,7 @@ int main(void)
                         float x_off = offset_i * map_w;
                         Vector2 p1 = {hx + x_off, hy};
                         Vector2 p2 = {sx + x_off, sy};
-                        DrawLineEx(p1, p2, 2.0f / Camera2DParams.zoom, ApplyAlpha(cfg.ui_accent, 0.8f));
+                        DrawLineEx(p1, p2, 2.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_accent, 0.8f));
 
                         if (Camera2DParams.zoom > 0.1f)
                         {
@@ -1699,9 +1691,9 @@ int main(void)
 
                             DrawRectangle(
                                 mid.x - tSize.x / 2.0f - 2.0f / Camera2DParams.zoom, mid.y - tSize.y / 2.0f - 2.0f / Camera2DParams.zoom, tSize.x + 4.0f / Camera2DParams.zoom,
-                                tSize.y + 4.0f / Camera2DParams.zoom, ApplyAlpha(cfg.ui_bg, 0.7f)
+                                tSize.y + 4.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_bg, 0.7f)
                             );
-                            DrawUIText(customFont, rng_str, mid.x - tSize.x / 2.0f, mid.y - tSize.y / 2.0f, m_text_2d, cfg.ui_accent);
+                            DrawUIText(customFont, rng_str, mid.x - tSize.x / 2.0f, mid.y - tSize.y / 2.0f, m_text_2d, g_theme.ui.ui_accent);
                         }
                     }
                 }
@@ -1852,14 +1844,14 @@ int main(void)
                         int next = (k + 1) % FP_PTS;
                         Vector3 p1 = Vector3Scale(fp_grid[i][k], 1.02f / DRAW_SCALE), p2 = Vector3Scale(fp_grid[i][next], 1.02f / DRAW_SCALE);
                         Vector3 p3 = Vector3Scale(fp_grid[i + 1][k], 1.02f / DRAW_SCALE), p4 = Vector3Scale(fp_grid[i + 1][next], 1.02f / DRAW_SCALE);
-                        DrawTriangle3D(p1, p3, p2, cfg.footprint_bg);
-                        DrawTriangle3D(p2, p3, p4, cfg.footprint_bg);
+                        DrawTriangle3D(p1, p3, p2, g_theme.world.footprint_bg);
+                        DrawTriangle3D(p2, p3, p4, g_theme.world.footprint_bg);
                     }
                 }
                 for (int k = 0; k < FP_PTS; k++)
                 {
                     int next = (k + 1) % FP_PTS;
-                    DrawLine3D(Vector3Scale(fp_grid[FP_RINGS][k], 1.02f / DRAW_SCALE), Vector3Scale(fp_grid[FP_RINGS][next], 1.02f / DRAW_SCALE), cfg.footprint_border);
+                    DrawLine3D(Vector3Scale(fp_grid[FP_RINGS][k], 1.02f / DRAW_SCALE), Vector3Scale(fp_grid[FP_RINGS][next], 1.02f / DRAW_SCALE), g_theme.world.footprint_border);
                 }
             }
 
@@ -1881,7 +1873,7 @@ int main(void)
                 if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
                 {
                     Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                    DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(cfg.orbit_highlighted, sat_alpha));
+                    DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(g_theme.world.orbit_highlighted, sat_alpha));
                 }
             }
 
@@ -1892,7 +1884,7 @@ int main(void)
                 float h_lon_rad = (home_location.lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                 Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
                 Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
-                DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(cfg.ui_accent, 0.6f));
+                DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(g_theme.ui.ui_accent, 0.6f));
             }
 
             if (show_scope)
@@ -1930,7 +1922,7 @@ int main(void)
                 perp1 = Vector3Normalize(perp1);
                 Vector3 perp2 = Vector3CrossProduct(dir, perp1);
 
-                Color lineCol = ApplyAlpha(cfg.ui_accent, 0.4f);
+                Color lineCol = ApplyAlpha(g_theme.ui.ui_accent, 0.4f);
 
                 for (int i = 0; i < 4; i++) {
                     /* calculate 4 corners at 45, 135, 225, 315 degrees */
@@ -1970,8 +1962,8 @@ int main(void)
                     TextCopy(rng_str, TextFormat("%.1f km", range));
                     Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_3d, 1.0f);
 
-                    DrawRectangle(mid_screen.x - tSize.x / 2.0f - 4, mid_screen.y - tSize.y / 2.0f - 4, tSize.x + 8, tSize.y + 8, ApplyAlpha(cfg.ui_bg, 0.7f));
-                    DrawUIText(customFont, rng_str, mid_screen.x - tSize.x / 2.0f, mid_screen.y - tSize.y / 2.0f, m_text_3d, cfg.ui_accent);
+                    DrawRectangle(mid_screen.x - tSize.x / 2.0f - 4, mid_screen.y - tSize.y / 2.0f - 4, tSize.x + 8, tSize.y + 8, ApplyAlpha(g_theme.ui.ui_bg, 0.7f));
+                    DrawUIText(customFont, rng_str, mid_screen.x - tSize.x / 2.0f, mid_screen.y - tSize.y / 2.0f, m_text_3d, g_theme.ui.ui_accent);
                 }
             }
 
@@ -1992,7 +1984,7 @@ int main(void)
                     Vector2 sp = GetWorldToScreen(draw_p, Camera3DParams);
                     DrawTexturePro(
                         periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
-                        ApplyAlpha(cfg.periapsis, sat_alpha)
+                        ApplyAlpha(g_theme.world.periapsis, sat_alpha)
                     );
                 }
                 if (!IsOccludedByEarth(Camera3DParams.position, draw_a, draw_earth_radius))
@@ -2000,7 +1992,7 @@ int main(void)
                     Vector2 sp = GetWorldToScreen(draw_a, Camera3DParams);
                     DrawTexturePro(
                         apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
-                        ApplyAlpha(cfg.apoapsis, sat_alpha)
+                        ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
                     );
                 }
             }
@@ -2022,7 +2014,7 @@ int main(void)
                     if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
                         bool is_hl = (active_sat == &satellites[i]);
-                        Color sCol = (selected_sat == &satellites[i]) ? cfg.sat_selected : (hovered_sat == &satellites[i]) ? cfg.sat_highlighted : cfg.sat_normal;
+                        Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
                         DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, sCol);

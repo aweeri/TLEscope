@@ -1,5 +1,6 @@
 #include "config.h"
 #include "types.h"
+#include "theme.h"
 #include "util/log.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -7,28 +8,6 @@
 #include <string.h>
 
 Marker home_location;
-
-// turn hex strings into real colors
-Color ParseHexColor(const char *hexStr, Color fallback)
-{
-    if (!hexStr || hexStr[0] != '#')
-        return fallback;
-    unsigned int r = 0, g = 0, b = 0, a = 255;
-    int len = strlen(hexStr);
-    if (len == 7)
-    {
-        sscanf(hexStr, "#%02x%02x%02x", &r, &g, &b);
-    }
-    else if (len >= 9)
-    {
-        sscanf(hexStr, "#%02x%02x%02x%02x", &r, &g, &b, &a);
-    }
-    else
-    {
-        return fallback;
-    }
-    return (Color){(unsigned char)r, (unsigned char)g, (unsigned char)b, (unsigned char)a};
-}
 
 static bool ParseJsonBool(const char *text, const char *key, bool defaultValue)
 {
@@ -493,65 +472,11 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
     }
 
-    // load colors from the selected theme file
-    char theme_path[256];
-    snprintf(theme_path, sizeof(theme_path), "themes/%s/theme.json", config->theme);
-
-    if (FileExists(theme_path))
+    // load theme from the selected theme directory
+    ThemeInitDefaults(&g_theme);
+    if (!ThemeLoad(config->theme, &g_theme))
     {
-        LOG_INFO("Loading theme: %s", theme_path);
-        char *theme_text = LoadFileText(theme_path);
-        if (theme_text)
-        {
-            char hex[32];
-            char *ptr;
-
-#define PARSE_COLOR(key, field)                                                                                                                                                                        \
-    ptr = strstr(theme_text, "\"" key "\"");                                                                                                                                                           \
-    if (ptr)                                                                                                                                                                                           \
-    {                                                                                                                                                                                                  \
-        ptr = strchr(ptr, ':');                                                                                                                                                                        \
-        if (ptr)                                                                                                                                                                                       \
-        {                                                                                                                                                                                              \
-            ptr = strchr(ptr, '\"');                                                                                                                                                                   \
-            if (ptr)                                                                                                                                                                                   \
-            {                                                                                                                                                                                          \
-                sscanf(ptr + 1, "%31[^\"]", hex);                                                                                                                                                      \
-                config->field = ParseHexColor(hex, config->field);                                                                                                                                     \
-            }                                                                                                                                                                                          \
-        }                                                                                                                                                                                              \
-    }
-
-            PARSE_COLOR("bg_color", bg_color);
-            PARSE_COLOR("orbit_normal", orbit_normal);
-            PARSE_COLOR("orbit_highlighted", orbit_highlighted);
-            PARSE_COLOR("sat_normal", sat_normal);
-            PARSE_COLOR("sat_highlighted", sat_highlighted);
-            PARSE_COLOR("sat_selected", sat_selected);
-            PARSE_COLOR("text_main", text_main);
-            PARSE_COLOR("text_secondary", text_secondary);
-            PARSE_COLOR("ui_bg", ui_bg);
-            PARSE_COLOR("periapsis", periapsis);
-            PARSE_COLOR("apoapsis", apoapsis);
-            PARSE_COLOR("footprint_bg", footprint_bg);
-            PARSE_COLOR("footprint_border", footprint_border);
-
-            PARSE_COLOR("ui_primary", ui_primary);
-            PARSE_COLOR("ui_secondary", ui_secondary);
-            PARSE_COLOR("ui_accent", ui_accent);
-            PARSE_COLOR("window_border", window_border);
-            PARSE_COLOR("window_border_focus", window_border_focus);
-
-            PARSE_COLOR("scope_bg", scope_bg);
-            PARSE_COLOR("scope_horizon", scope_horizon);
-            PARSE_COLOR("overlay_dim", overlay_dim);
-
-            UnloadFileText(theme_text);
-        }
-    }
-    else
-    {
-        LOG_WARN("Theme file not found: %s", theme_path);
+        LOG_WARN("Failed to load theme '%s', using defaults", config->theme);
     }
 }
 

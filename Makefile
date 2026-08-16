@@ -4,7 +4,7 @@ CLANG64_PREFIX   ?= /clangarm64
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
 
 CC_LINUX = g++
-CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/cjson -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
 CXXFLAGS_WIN = $(CXXFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
@@ -35,10 +35,11 @@ else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 endif
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/ui/ui.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp
+SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/ui/ui.cpp src/ui/imgui_theme.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
-OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
+CJSON_SRC    = lib/cjson/cJSON.c
+OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o) $(CJSON_SRC:lib/cjson/%.c=build/%.o)
 
 # a progress bar! (linux only)
 TOTAL_OBJ := $(words $(OBJ))
@@ -137,14 +138,14 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-macos: $(SRC) | bin
+bin/TLEscope-macos: $(SRC) $(CJSON_SRC) | bin
 	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
-bin/TLEscope.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
+bin/TLEscope.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
-bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
+bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.cpp | build
@@ -158,6 +159,10 @@ build/%.o: lib/imgui/%.cpp | build
 build/%.o: lib/rlImGui/%.cpp | build
 	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
+
+build/%.o: lib/cjson/%.c | build
+	@mkdir -p $(@D)
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -x c++ -c $< -o $@
 
 build:
 	mkdir -p build

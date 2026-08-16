@@ -8,6 +8,8 @@
 #include "core/astro.h"
 #include "io/rotator.h"
 #include "core/config.h"
+#include "core/theme.h"
+#include "imgui_theme.h"
 #include "data/provider.h"
 #include "data/cache.h"
 #include "data/storage.h"
@@ -29,7 +31,13 @@
 #include "imgui.h"
 #include "rlImGui.h"
 #include "IconsFontAwesome6.h"
-#include "FA6FreeSolidFontData.h"
+
+/* -- Helpers --------------------------------------------------------------- */
+
+static ImVec4 ThemeColor(const Color &c)
+{
+    return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
+}
 
 /* -- UIState instance ------------------------------------------------------ */
 
@@ -164,9 +172,10 @@ static void DrawTopBar(UIContext *ctx, AppConfig *cfg)
         for (int i = 0; i < 10; i++)
         {
             bool is_open = *btns[i].open;
-            // highlight if open: use accent color, otherwise dim
-            ImVec4 btn_color = is_open ? ImVec4(0.4f, 0.7f, 1.0f, 0.9f)
-                                       : ImVec4(0.7f, 0.7f, 0.7f, 0.7f);
+            // highlight if open: use accent, otherwise dim secondary text
+            ImVec4 btn_color = is_open ? ThemeColor(g_theme.ui.ui_accent)
+                                       : ThemeColor(g_theme.ui.text_secondary);
+            btn_color.w = is_open ? 0.9f : 0.7f;  // alpha
             ImGui::PushStyleColor(ImGuiCol_Text, btn_color);
 
             ImGui::PushID(i);
@@ -224,11 +233,11 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         else
             snprintf(time_str, sizeof(time_str), "---");
 
-        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 0.9f), "%s", time_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", time_str);
         ImGui::SameLine(0.0f, spacing);
 
         // slow down / reverse
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
         if (ImGui::Button(ICON_FA_BACKWARD, ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, false);
@@ -239,7 +248,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 
         // play/pause
         bool is_paused = (*ctx->time_multiplier == 0.0);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 1.0f, 0.4f, 0.9f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.ui_accent));
         if (ImGui::Button(is_paused ? ICON_FA_PLAY : ICON_FA_PAUSE, ImVec2(btn_sz, btn_sz)))
         {
             if (is_paused)
@@ -252,7 +261,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         // accelerate
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
         if (ImGui::Button(ICON_FA_FORWARD, ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, true);
@@ -262,7 +271,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         // reset to now
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 0.9f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
         if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT, ImVec2(btn_sz, btn_sz)))
         {
             *ctx->current_epoch = get_current_real_time_epoch();
@@ -273,7 +282,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         // time setter window
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
         if (ImGui::Button(ICON_FA_STOPWATCH, ImVec2(btn_sz, btn_sz)))
         {
             show_time_dialog = !show_time_dialog;
@@ -371,7 +380,7 @@ static void DrawSatelliteManager(UIContext *ctx, AppConfig *cfg)
         }
         if (search_active)
         {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
                                "%d / %d satellites", displayed, sat_count);
         }
 
@@ -390,7 +399,7 @@ static void DrawSatelliteManager(UIContext *ctx, AppConfig *cfg)
             // color code: active = normal, inactive = dimmed
             if (!active)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 0.7f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
             }
 
             char label[128];
@@ -462,26 +471,28 @@ static void DrawSettingsWindow(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::CollapsingHeader("Theme"))
         {
-            /* build \0-separated theme list once */
+            /* discover themes from the themes/ directory (once) */
             if (g_ui.theme_names[0] == '\0')
             {
-                /* simple theme list */
-                const char *themes[] = {"default", "girlypop", "trans-test"};
-                int offset = 0;
-                for (int i = 0; i < 3; i++)
+                ThemeList list;
+                if (ThemeDiscover(&list))
                 {
-                    int len = strlen(themes[i]) + 1;
-                    if (offset + len < (int)sizeof(g_ui.theme_names))
+                    memcpy(g_ui.theme_names, list.names, sizeof(g_ui.theme_names));
+                    g_ui.active_theme_idx = 0;
+                    /* find the active theme in the discovered list */
+                    const char *name = g_ui.theme_names;
+                    int idx = 0;
+                    while (*name)
                     {
-                        memcpy(g_ui.theme_names + offset, themes[i], len);
-                        offset += len;
+                        if (strcmp(name, cfg->theme) == 0)
+                        {
+                            g_ui.active_theme_idx = idx;
+                            break;
+                        }
+                        name += strlen(name) + 1;
+                        idx++;
                     }
-                    if (strcmp(themes[i], cfg->theme) == 0)
-                        g_ui.active_theme_idx = i;
                 }
-                /* ensure double null terminator */
-                if (offset + 1 < (int)sizeof(g_ui.theme_names))
-                    g_ui.theme_names[offset] = '\0';
             }
 
             int prev_theme = g_ui.active_theme_idx;
@@ -1610,11 +1621,11 @@ static void DrawLogWindow(UIContext *ctx, AppConfig *cfg)
             ImVec4 color;
             switch (e->level)
             {
-                case LOG_LEVEL_DEBUG: color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f); break; /* grey */
-                case LOG_LEVEL_INFO:  color = ImVec4(0.8f, 0.9f, 1.0f, 1.0f); break; /* light blue */
-                case LOG_LEVEL_WARN:  color = ImVec4(1.0f, 0.9f, 0.4f, 1.0f); break; /* yellow */
-                case LOG_LEVEL_ERROR: color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break; /* red */
-                default:             color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                case LOG_LEVEL_DEBUG: color = ThemeColor(g_theme.ui.text_secondary); break; /* grey */
+                case LOG_LEVEL_INFO:  color = ThemeColor(g_theme.ui.text_main); break;      /* default text */
+                case LOG_LEVEL_WARN:  color = ImVec4(1.0f, 0.9f, 0.4f, 1.0f); break;        /* yellow */
+                case LOG_LEVEL_ERROR: color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break;        /* red */
+                default:             color = ThemeColor(g_theme.ui.text_main);
             }
 
             /* build a single selectable line: "HH:MM:SS message" */
@@ -1642,53 +1653,33 @@ static void DrawLogWindow(UIContext *ctx, AppConfig *cfg)
 
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 {
-    /* one-time ImGui initialization */
+    /* one-time ImGui initialization.
+     * Theme colors/style/fonts are applied here and again by main.cpp
+     * whenever cfg->reload_theme triggers a theme switch. */
     static bool imgui_inited = false;
+    static float last_ui_scale = 0.0f;
     if (!imgui_inited) {
-        rlImGuiSetup(true);
+        /* initialise the ImGui backend (context, keymap, cursors, backend).
+         * NOTE: rlImGuiEndInitImGui() calls SetupFontAwesome() which adds a
+         * font to the atlas, so it MUST run before ThemeRebuildImGuiFonts()
+         * (which clears + rebuilds the atlas and uploads the texture). */
+        rlImGuiBeginInitImGui();
+        rlImGuiEndInitImGui();
 
-        /* custom ImGui style: subtle rounding */
-        ImGuiStyle &style = ImGui::GetStyle();
-        style.WindowRounding = 3.0f;
-        style.FrameRounding = 2.0f;
-        style.ChildRounding = 3.0f;
-        style.PopupRounding = 3.0f;
-        style.GrabRounding = 2.0f;
-        style.ScrollbarRounding = 2.0f;
-        style.TabRounding = 2.0f;
-        style.WindowBorderSize = 1.0f;
-        style.FrameBorderSize = 0.0f;
-        style.WindowPadding = ImVec2(10, 10);
-        style.FramePadding = ImVec2(6, 4);
-        style.ItemSpacing = ImVec2(8, 6);
-
-        /* load FontAwesome icons as a second font, merge with default */
-        ImGuiIO& io = ImGui::GetIO();
-        ImFontConfig icons_config;
-        icons_config.MergeMode = false;
-        icons_config.PixelSnapH = true;
-        icons_config.FontDataOwnedByAtlas = false;
-        // load default font first
-        io.Fonts->AddFontDefault();
-        // then merge FontAwesome icons
-        icons_config.MergeMode = true;
-        icons_config.FontDataOwnedByAtlas = true;  // we don't own the data
-        static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
-        io.Fonts->AddFontFromMemoryCompressedTTF(
-            fa_solid_900_compressed_data,
-            fa_solid_900_compressed_size,
-            14.0f, &icons_config, icon_ranges);
-
-        /* build font atlas and upload to GPU */
-        io.Fonts->Build();
-        unsigned char *pixels;
-        int width, height;
-        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-        Image img = { pixels, width, height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-        Texture tex = LoadTextureFromImage(img);
-        io.Fonts->SetTexID((ImTextureID)(intptr_t)tex.id);
+        /* apply the active theme's colors + style, then build its fonts */
+        ThemeApplyToImGui(&g_theme, cfg->ui_scale);
+        ThemeRebuildImGuiFonts(&g_theme, cfg->ui_scale);
 
         imgui_inited = true;
+        last_ui_scale = cfg->ui_scale;
+    }
+    else if (cfg->ui_scale != last_ui_scale)
+    {
+        /* UI scale changed at runtime (settings slider / +/- keys):
+         * re-apply the theme so ScaleAllSizes + FontGlobalScale take effect.
+         * Font atlas is NOT rebuilt — io.FontGlobalScale handles scaling. */
+        last_ui_scale = cfg->ui_scale;
+        ThemeApplyToImGui(&g_theme, cfg->ui_scale);
     }
 
     /* begin rlImGui frame */
