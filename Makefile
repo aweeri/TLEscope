@@ -48,7 +48,7 @@ $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescop
 RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
 RAYLIB_LIBS_LIN ?= $(shell pkg-config --libs raylib 2>/dev/null)
 ifeq ($(strip $(RAYLIB_LIBS_LIN)),)
-    RAYLIB_LIBS_LIN = -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt
+    RAYLIB_LIBS_LIN = -lraylib
     ifneq ($(shell pkg-config --exists x11 2>/dev/null || echo no),no)
         RAYLIB_LIBS_LIN += -lX11
     else
@@ -56,7 +56,7 @@ ifeq ($(strip $(RAYLIB_LIBS_LIN)),)
     endif
 endif
 
-LDFLAGS_LIN = $(LIB_LIN_PATH) $(RAYLIB_LIBS_LIN)
+LDFLAGS_LIN = $(LIB_LIN_PATH) $(RAYLIB_LIBS_LIN) -lcurl -lGL -lm -lpthread -ldl -lrt
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
