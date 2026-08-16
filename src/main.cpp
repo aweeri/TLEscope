@@ -6,9 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "astro.h"
-#include "config.h"
-#include "log.h"
+#include "core/astro.h"
+#include "core/config.h"
+#include "util/log.h"
 
 static const char* GetAssetPath(const char* theme, const char* filename) {
     static char path[256];
@@ -17,9 +17,9 @@ static const char* GetAssetPath(const char* theme, const char* filename) {
     snprintf(path, sizeof(path), "themes/default/%s", filename);
     return path;
 }
-#include "types.h"
-#include "ui.h"
-#include "rotator.h"
+#include "core/types.h"
+#include "ui/ui.h"
+#include "io/rotator.h"
 
 /**
  * @brief shader for day/night transition

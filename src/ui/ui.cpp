@@ -1,18 +1,18 @@
  /*
- * ui_imgui.cpp - Dear ImGui UI implementation
+ * ui.cpp - Dear ImGui UI implementation
  *
  * This file implements the UI layer using Dear ImGui + rlImGui.
  */
 
 #include "ui.h"
-#include "astro.h"
-#include "rotator.h"
-#include "config.h"
-#include "provider.h"
-#include "cache.h"
-#include "storage.h"
-#include "omm_parser.h"
-#include "log.h"
+#include "core/astro.h"
+#include "io/rotator.h"
+#include "core/config.h"
+#include "data/provider.h"
+#include "data/cache.h"
+#include "data/storage.h"
+#include "data/omm_parser.h"
+#include "util/log.h"
 
 #include <cstdio>
 #include <cstdlib>

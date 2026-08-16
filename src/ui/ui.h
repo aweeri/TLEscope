@@ -1,8 +1,8 @@
 #ifndef UI_H
 #define UI_H
 
-#include "config.h"
-#include "types.h"
+#include "core/config.h"
+#include "core/types.h"
 #include <raylib.h>
 
 typedef enum

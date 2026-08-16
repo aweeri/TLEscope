@@ -6,7 +6,7 @@
  * @brief Antenna rotator control via TCP (rotctld protocol)
  */
 
-#include "ui.h"
+#include "ui/ui.h"
 
 #define ROTATOR_STEER_POLAR 0
 #define ROTATOR_STEER_SCOPE 1

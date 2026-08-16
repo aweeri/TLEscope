@@ -1,10 +1,10 @@
 #define _GNU_SOURCE
 #include "astro.h"
 #include "types.h"
-#include "storage.h"
+#include "data/storage.h"
 
 #include <math.h>
-#include "log.h"
+#include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #include <time.h>
 
 #define CSGP4_IMPLEMENTATION
-#include "../lib/csgp4.h"
+#include "../../lib/csgp4.h"
 
 #include <raymath.h>
 

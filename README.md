@@ -79,15 +79,15 @@ TLEscope is organized into modular components:
 
 | Module | Description |
 |--------|-------------|
-| [`src/astro.cpp`](src/astro.cpp) | Core orbital mechanics — SGP4 propagation, sun/moon position, pass prediction, Doppler calculation |
-| [`src/config.cpp`](src/config.cpp) | Configuration loading/saving from [`settings.json`](settings.json) |
-| [`src/storage.cpp`](src/storage.cpp) | Structured JSON-based orbital data persistence |
-| [`src/provider.cpp`](src/provider.cpp) | Data provider abstraction — CelesTrak, Retlector, custom sources |
-| [`src/cache.cpp`](src/cache.cpp) | HTTP response cache with disk persistence |
-| [`src/omm_parser.cpp`](src/omm_parser.cpp) | CCSDS OMM parser (JSON, CSV formats) |
-| [`src/ui_imgui.cpp`](src/ui_imgui.cpp) | Dear ImGui interface — all windows and dialogs |
-| [`src/rotator.cpp`](src/rotator.cpp) | Antenna rotator control (TCP/IP, GS-232, EasyComm) |
-| [`src/c23_compat.cpp`](src/c23_compat.cpp) | C23 compatibility |
+| [`src/core/astro.cpp`](src/core/astro.cpp) | Core orbital mechanics — SGP4 propagation, sun/moon position, pass prediction, Doppler calculation |
+| [`src/core/config.cpp`](src/core/config.cpp) | Configuration loading/saving from [`settings.json`](settings.json) |
+| [`src/data/storage.cpp`](src/data/storage.cpp) | Structured JSON-based orbital data persistence |
+| [`src/data/provider.cpp`](src/data/provider.cpp) | Data provider abstraction — CelesTrak, Retlector, custom sources |
+| [`src/data/cache.cpp`](src/data/cache.cpp) | HTTP response cache with disk persistence |
+| [`src/data/omm_parser.cpp`](src/data/omm_parser.cpp) | CCSDS OMM parser (JSON, CSV formats) |
+| [`src/ui/ui.cpp`](src/ui/ui.cpp) | Dear ImGui interface — all windows and dialogs |
+| [`src/io/rotator.cpp`](src/io/rotator.cpp) | Antenna rotator control (TCP/IP, GS-232, EasyComm) |
+| [`src/util/c23_compat.cpp`](src/util/c23_compat.cpp) | C23 compatibility |
 | [`lib/csgp4.h`](lib/csgp4.h) | SGP4 orbital propagator |
 
 ### **Roadmap**

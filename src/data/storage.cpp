@@ -1,6 +1,6 @@
 #include "storage.h"
-#include "types.h"
-#include "log.h"
+#include "core/types.h"
+#include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

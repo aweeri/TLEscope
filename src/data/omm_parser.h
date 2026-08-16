@@ -13,7 +13,7 @@
  *   - CSV:  comma-separated values with OMM keyword header
  */
 
-#include "types.h"
+#include "core/types.h"
 #include <stdbool.h>
 #include <time.h>
 

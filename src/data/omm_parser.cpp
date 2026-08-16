@@ -1,6 +1,6 @@
 #include "omm_parser.h"
-#include "astro.h"
-#include "log.h"
+#include "core/astro.h"
+#include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h> 
 #include <string.h>

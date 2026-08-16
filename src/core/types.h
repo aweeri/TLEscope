@@ -1,7 +1,7 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include "../lib/csgp4.h"
+#include "../../lib/csgp4.h"
 
 /**
  * @file types.h

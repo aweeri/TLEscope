@@ -9,7 +9,7 @@
  * (Celestrak, Retlector, custom) in multiple formats (TLE, JSON OMM, CSV OMM).
  */
 
-#include "types.h"
+#include "core/types.h"
 #include <time.h>
 #include <stdbool.h>
 

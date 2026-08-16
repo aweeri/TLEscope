@@ -1,6 +1,6 @@
 #include "config.h"
 #include "types.h"
-#include "log.h"
+#include "util/log.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>

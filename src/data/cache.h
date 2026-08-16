@@ -1,7 +1,7 @@
 #ifndef CACHE_H
 #define CACHE_H
 
-#include "types.h"
+#include "core/types.h"
 #include <time.h>
 #include <stdbool.h>
 

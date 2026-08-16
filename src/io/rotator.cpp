@@ -6,8 +6,8 @@
 typedef struct tagMSG *LPMSG;
 #endif
 #include "rotator.h"
-#include "astro.h"
-#include "log.h"
+#include "core/astro.h"
+#include "util/log.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

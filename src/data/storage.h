@@ -10,7 +10,7 @@
  * using the same manual JSON approach as config.cpp.
  */
 
-#include "types.h"
+#include "core/types.h"
 #include <time.h>
 #include <stdbool.h>
 
