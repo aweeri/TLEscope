@@ -5,6 +5,7 @@ GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 CC_LINUX = g++
 CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
 CXXFLAGS_WIN = $(CXXFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 # Sets _WIN variables for each possible architecture
@@ -43,7 +44,19 @@ OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o)
 TOTAL_OBJ := $(words $(OBJ))
 $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescope_build_counter)
 
-LDFLAGS_LIN = $(LIB_LIN_PATH) -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11
+# Linux raylib linking - prefer system raylib, fall back to bundled (wayland crap test)
+RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
+RAYLIB_LIBS_LIN ?= $(shell pkg-config --libs raylib 2>/dev/null)
+ifeq ($(strip $(RAYLIB_LIBS_LIN)),)
+    RAYLIB_LIBS_LIN = -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt
+    ifneq ($(shell pkg-config --exists x11 2>/dev/null || echo no),no)
+        RAYLIB_LIBS_LIN += -lX11
+    else
+        RAYLIB_LIBS_LIN += -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon
+    endif
+endif
+
+LDFLAGS_LIN = $(LIB_LIN_PATH) $(RAYLIB_LIBS_LIN)
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
@@ -121,7 +134,7 @@ win-installer: windows
 
 bin/TLEscope: $(OBJ) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
-	$(CC_LINUX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS_LIN)
+	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-macos: $(SRC) | bin
@@ -135,13 +148,13 @@ bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.cpp | build
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/imgui/%.cpp | build
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/rlImGui/%.cpp | build
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build:
 	mkdir -p build
