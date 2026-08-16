@@ -7,11 +7,14 @@ plans/
 .vscode
 
 # Dynamic Files With Dynamic Data or PIIs
-/date.tle
+/data.tle
 /settings.json
 
 # Compoile Commands CLANGD
 /compile_commands.json
+
+$null
+
 
 # csv exports
 *.csv

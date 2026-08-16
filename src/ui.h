@@ -12,13 +12,12 @@ typedef enum
     LOCK_MOON
 } TargetLock;
 
-/*
- * UIState — encapsulates all UI-only state
+/**
+ * @brief encapsulates all UI-only state
  *
- * This struct holds window positions, dialog visibility flags, text buffers,
- * and other UI-specific state that was previously declared as static variables
- * in ui.c. Formalizing this struct makes the separation between core simulation
- * state and UI state explicit.
+ * Holds window positions, dialog visibility flags, text buffers,
+ * and other UI-specific state. Formalizing this struct makes the
+ * separation between core simulation state and UI state explicit.
  */
 typedef struct
 {
@@ -147,13 +146,12 @@ typedef struct
     bool si_rolled_up;
     Satellite *last_selected_sat;
 
-    /* TLE manager state */
-    bool celestrak_expanded;
-    bool retlector_expanded;
-    bool retlector_selected[25];
-    bool other_expanded;
-    bool manual_expanded;
-    bool celestrak_selected[25];
+    /* data sources dialog state */
+    bool retlector_loading;
+    bool retlector_fetch_started;
+    bool retlector_fetch_done;
+    char custom_url_buf[512];
+    char custom_paste_buf[4096];
 
     /* pass state */
     int selected_pass_idx;
@@ -176,7 +174,7 @@ typedef struct
     void *active_tb_ptr;
 } UIState;
 
-/* this context struct passes necessary simulation state to the UI */
+/** this context struct passes necessary simulation state to the UI */
 typedef struct
 {
     double *current_epoch;
@@ -207,7 +205,7 @@ typedef struct
     Camera3D *camera3d;
 } UIContext;
 
-/* core UI Methods */
+/* core UI methods */
 void SaveSatSelection(void);
 void LoadSatSelection(void);
 bool IsUITyping(void);
@@ -215,7 +213,7 @@ void ToggleTLEWarning(void);
 bool IsMouseOverUI(AppConfig *cfg);
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont);
 
-/* shared Helpers */
+/* shared helpers */
 Color ApplyAlpha(Color c, float alpha);
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color);
 double StepTimeMultiplier(double current, bool increase);

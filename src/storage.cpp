@@ -7,7 +7,7 @@
 #include <ctype.h>
 #include <raylib.h>
 
-/* ── Format string conversion ─────────────────────────────────────────────── */
+/* -- Format string conversion ----------------------------------------------- */
 
 const char* FormatToString(OrbitalDataFormat fmt)
 {
@@ -33,7 +33,7 @@ OrbitalDataFormat StringToFormat(const char *str)
     return FORMAT_UNKNOWN;
 }
 
-/* ── Manual JSON helpers (mirrors config.cpp approach) ────────────────────── */
+/* -- Manual JSON helpers (mirrors config.cpp approach) ---------------------- */
 
 static const char* find_key(const char *text, const char *key)
 {
@@ -91,7 +91,7 @@ static bool read_bool(const char *text, const char *key, bool def)
     return (strncmp(val, "true", 4) == 0);
 }
 
-/* ── Satellite serialization ──────────────────────────────────────────────── */
+/* -- Satellite serialization ------------------------------------------------ */
 
 static void write_satellite(FILE *f, const Satellite *sat, int index)
 {
@@ -158,7 +158,7 @@ static bool read_satellite(const char *text, Satellite *sat)
     return true;
 }
 
-/* ── Public API ───────────────────────────────────────────────────────────── */
+/* -- Public API ------------------------------------------------------------- */
 
 bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
 {
@@ -265,7 +265,7 @@ bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
     return loaded > 0;
 }
 
-/* ── Source State Persistence ─────────────────────────────────────────────── */
+/* -- Source State Persistence ------------------------------------------------ */
 
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
 {

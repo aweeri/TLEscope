@@ -2,19 +2,22 @@
 #include "astro.h"
 #include "log.h"
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> 
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
 
-/* ── JSON OMM Parser ────────────────────────────────────────────────────────
+/**
+ * @brief JSON OMM Parser
+ *
  * Parses satellite orbital data in JSON OMM (Orbital Mean-Elements Message) format.
  * This is the modern standard for distributing TLE-equivalent data.
  */
 
-/* ── JSON OMM Parser ────────────────────────────────────────────────────────
+/**
+ * @brief Expected JSON format (CCSDS OMM)
  *
- * Expected JSON format (CCSDS OMM):
+ * @code
  * [
  *   {
  *     "OBJECT_NAME": "ISS (ZARYA)",
@@ -32,9 +35,10 @@
  *   },
  *   ...
  * ]
+ * @endcode
  */
 
-// Simple JSON string value extractor
+/** simple JSON string value extractor */
 static const char* json_string_value(const char *json, const char *key, char *buf, size_t buf_size)
 {
     if (!json || !key) return NULL;
@@ -62,7 +66,7 @@ static double json_double_value(const char *json, const char *key, double def)
     const char *ptr = json_string_value(json, key, buf, sizeof(buf));
     if (!ptr && buf[0] == '\0')
     {
-        // Try numeric value (not quoted)
+        // try numeric value (not quoted)
         char needle[64];
         snprintf(needle, sizeof(needle), "\"%s\"", key);
         const char *p = strstr(json, needle);
@@ -96,7 +100,7 @@ static long json_long_value(const char *json, const char *key, long def)
     return strtol(buf, NULL, 10);
 }
 
-// Convert OMM epoch string (YYYY-MM-DD HH:MM:SS.FFFFFF) to our epoch format (YYYYDDD.FFFF)
+/** converts OMM epoch string (YYYY-MM-DD HH:MM:SS.FFFFFF) to our epoch format (YYYYDDD.FFFF) */
 static double omm_epoch_to_epoch(const char *epoch_str)
 {
     if (!epoch_str || !*epoch_str) return 0;
@@ -107,7 +111,7 @@ static double omm_epoch_to_epoch(const char *epoch_str)
 
     if (year < 100) year += 2000;
 
-    // Calculate day of year
+    // calculate day of year
     int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
         days_in_month[1] = 29;
@@ -152,7 +156,7 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                     strncpy(obj_text, json + obj_start, obj_len);
                     obj_text[obj_len] = '\0';
 
-                    // Extract fields
+                    // extract fields
                     char name[64] = {0};
                     char norad_id[16] = {0};
                     char intl_desig[16] = {0};
@@ -174,7 +178,7 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                     double mean_motion = json_double_value(obj_text, "MEAN_MOTION", 0.0);
                     double bstar = json_double_value(obj_text, "BSTAR", 0.0);
 
-                    // Handle microsecond precision
+                    // handle microsecond precision
                     long epoch_us = json_long_value(obj_text, "EPOCH_MICROSECONDS", 0);
                     if (epoch_us > 0)
                         epoch += (double)epoch_us / 86400000000.0;
@@ -210,7 +214,8 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
     return parsed;
 }
 
-/* ── CSV OMM Parser ─────────────────────────────────────────────────────────
+/**
+ * @brief CSV OMM Parser
  *
  * Expected CSV format (CCSDS OMM):
  * OBJECT_NAME,OBJECT_ID,EPOCH,INCLINATION,RA_OF_ASC_NODE,ECCENTRICITY,ARG_OF_PERICENTER,MEAN_ANOMALY,MEAN_MOTION,BSTAR,NORAD_CAT_ID
@@ -218,7 +223,7 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
  * ...
  */
 
-// Find column index in CSV header
+/** find column index in CSV header */
 static int csv_find_column(const char *header, const char *name)
 {
     if (!header || !name) return -1;
@@ -234,7 +239,7 @@ static int csv_find_column(const char *header, const char *name)
             col_name[i++] = *ptr++;
         col_name[i] = '\0';
 
-        // Trim quotes
+        // trim quotes
         char *start = col_name;
         char *end = col_name + strlen(col_name) - 1;
         if (*start == '"') start++;
@@ -249,7 +254,7 @@ static int csv_find_column(const char *header, const char *name)
     return -1;
 }
 
-// Get value at column index from a CSV line
+/** get value at column index from a CSV line */
 static const char* csv_get_column(const char *line, int col_idx, char *buf, size_t buf_size)
 {
     if (!line || col_idx < 0) return NULL;
@@ -265,7 +270,7 @@ static const char* csv_get_column(const char *line, int col_idx, char *buf, size
 
     if (col != col_idx) return NULL;
 
-    // Extract value
+    // extract value
     size_t i = 0;
     bool quoted = (*ptr == '"');
     if (quoted) ptr++;
@@ -294,12 +299,12 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
     (void)size;
     if (!csv || !count || !sats) return 0;
 
-    // Find the header line (first non-empty line)
+    // find the header line (first non-empty line)
     const char *header = csv;
     while (*header && (*header == '\r' || *header == '\n')) header++;
     if (!*header) return 0;
 
-    // Find column indices
+    // find column indices
     int col_name = csv_find_column(header, "OBJECT_NAME");
     int col_norad = csv_find_column(header, "NORAD_CAT_ID");
     int col_id = csv_find_column(header, "OBJECT_ID");
@@ -318,7 +323,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         return 0;
     }
 
-    // Skip to first data line
+    // skip to first data line
     const char *ptr = header;
     while (*ptr && *ptr != '\n') ptr++;
     if (*ptr == '\n') ptr++;
@@ -328,52 +333,52 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
 
     while (*ptr && parsed < max)
     {
-        // Skip empty lines
+        // skip empty lines
         while (*ptr == '\r' || *ptr == '\n') ptr++;
         if (!*ptr) break;
 
-        // Get end of line
+        // get end of line
         const char *eol = ptr;
         while (*eol && *eol != '\n') eol++;
 
-        // Extract line
+        // extract line
         size_t line_len = (size_t)(eol - ptr);
         if (line_len > sizeof(buf) - 1) line_len = sizeof(buf) - 1;
         strncpy(buf, ptr, line_len);
         buf[line_len] = '\0';
 
-        // Parse columns
+        // parse columns
         char val[128];
 
-        // NORAD ID
+        // norad ID
         csv_get_column(buf, col_norad, val, sizeof(val));
         char norad_id[16];
         snprintf(norad_id, sizeof(norad_id), "%s", val);
         LOG_DEBUG("Parsed OMM CSV sat (NORAD: %s)", norad_id);
 
-        // Name
+        // name
         char name[64] = "";
         if (col_name >= 0)
             csv_get_column(buf, col_name, name, sizeof(name));
 
-        // International designator
+        // international designator
         char intl_desig[16] = "";
         if (col_id >= 0)
             csv_get_column(buf, col_id, intl_desig, sizeof(intl_desig));
 
-        // Epoch
+        // epoch
         csv_get_column(buf, col_epoch, val, sizeof(val));
         double epoch = omm_epoch_to_epoch(val);
 
-        // Inclination
+        // inclination
         csv_get_column(buf, col_incl, val, sizeof(val));
         double inclination = strtod(val, NULL);
 
-        // RAAN
+        // raan
         csv_get_column(buf, col_raan, val, sizeof(val));
         double raan = strtod(val, NULL);
 
-        // Eccentricity
+        // eccentricity
         double eccentricity = 0.0;
         if (col_ecc >= 0)
         {
@@ -381,7 +386,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
             eccentricity = strtod(val, NULL);
         }
 
-        // Arg of perigee
+        // arg of perigee
         double arg_perigee = 0.0;
         if (col_argp >= 0)
         {
@@ -389,7 +394,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
             arg_perigee = strtod(val, NULL);
         }
 
-        // Mean anomaly
+        // mean anomaly
         double mean_anomaly = 0.0;
         if (col_ma >= 0)
         {
@@ -397,11 +402,11 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
             mean_anomaly = strtod(val, NULL);
         }
 
-        // Mean motion
+        // mean motion
         csv_get_column(buf, col_mm, val, sizeof(val));
         double mean_motion = strtod(val, NULL);
 
-        // B*
+        // b*
         double bstar = 0.0;
         if (col_bstar >= 0)
         {

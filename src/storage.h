@@ -1,27 +1,28 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
-#include "types.h"
-#include <time.h>
-#include <stdbool.h>
-
-/*
- * storage.h — Structured orbital data persistence
+/**
+ * @file storage.h
+ * @brief Structured orbital data persistence
  *
  * Replaces the flat data.tle file with a JSON-based structured store.
  * Each satellite's orbital elements and metadata are serialized/deserialized
  * using the same manual JSON approach as config.cpp.
  */
 
-// ── Orbital Data Store ─────────────────────────────────────────────────────
+#include "types.h"
+#include <time.h>
+#include <stdbool.h>
 
-// Save all satellite data to a structured JSON file
+// -- Orbital Data Store ------------------------------------------------------
+
+/** save all satellite data to a structured JSON file */
 bool SaveOrbitalData(const char *filename, Satellite *sats, int count);
 
-// Load all satellite data from a structured JSON file
+/** load all satellite data from a structured JSON file */
 bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max);
 
-// ── Source State Persistence ────────────────────────────────────────────────
+// -- Source State Persistence ------------------------------------------------
 
 typedef struct {
     char provider_name[64];
@@ -35,7 +36,7 @@ typedef struct {
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count);
 bool LoadSourceState(const char *filename, DataSourceState *sources, int *count, int max);
 
-// ── Utility ─────────────────────────────────────────────────────────────────
+// -- Utility -----------------------------------------------------------------
 
 const char* FormatToString(OrbitalDataFormat fmt);
 OrbitalDataFormat StringToFormat(const char *str);

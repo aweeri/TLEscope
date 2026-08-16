@@ -71,6 +71,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
     config->custom_data_source_count = 0;
+    config->retlector_group_count = 0;
+    config->retlector_groups_fetched = false;
+    config->custom_entry_count = 0;
+    config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
 
     if (FileExists(filename))
     {
@@ -123,6 +127,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             PARSE_FLOAT("ui_scale", ui_scale);
             PARSE_FLOAT("earth_rotation_offset", earth_rotation_offset);
             PARSE_FLOAT("orbits_to_draw", orbits_to_draw);
+            PARSE_INT("data_stale_threshold_seconds", data_stale_threshold_seconds);
 
             config->show_clouds = ParseJsonBool(text, "show_clouds", config->show_clouds);
             config->show_night_lights = ParseJsonBool(text, "show_night_lights", config->show_night_lights);
@@ -201,7 +206,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                                 sscanf(quote_start + 1, "%255[^\"]", config->custom_data_sources[config->custom_data_source_count].url);
                         }
 
-                        // Parse preferred format
+                        // parse preferred format
                         config->custom_data_sources[config->custom_data_source_count].preferred_format = FORMAT_TLE;
                         if (fmt_ptr && fmt_ptr < obj_end)
                         {
@@ -225,6 +230,130 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         config->custom_data_source_count++;
                     }
                     cts_ptr = obj_end + 1;
+                }
+            }
+
+            // load retlector groups (cached from API)
+            char *rg_ptr = strstr(text, "\"retlector_groups\"");
+            if (rg_ptr)
+            {
+                char *block_end = strchr(rg_ptr, ']');
+                if (!block_end) block_end = text + strlen(text);
+
+                while ((rg_ptr = strstr(rg_ptr, "{")) && rg_ptr < block_end)
+                {
+                    if (config->retlector_group_count >= MAX_RETLECTOR_GROUPS) break;
+
+                    char *obj_end = strchr(rg_ptr, '}');
+                    if (!obj_end || obj_end > block_end) obj_end = block_end;
+
+                    char *name_ptr = strstr(rg_ptr, "\"name\"");
+                    char *csv_ptr = strstr(rg_ptr, "\"csv_endpoint\"");
+                    char *sel_ptr = strstr(rg_ptr, "\"selected\"");
+
+                    if (name_ptr && name_ptr < obj_end)
+                    {
+                        RetlectorGroup *g = &config->retlector_groups[config->retlector_group_count];
+                        memset(g, 0, sizeof(RetlectorGroup));
+
+                        char *colon = strchr(name_ptr, ':');
+                        if (colon && colon < obj_end)
+                        {
+                            char *q = strchr(colon, '"');
+                            if (q && q < obj_end)
+                                sscanf(q + 1, "%63[^\"]", g->name);
+                        }
+
+                        if (csv_ptr && csv_ptr < obj_end)
+                        {
+                            char *colon = strchr(csv_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                char *q = strchr(colon, '"');
+                                if (q && q < obj_end)
+                                    sscanf(q + 1, "%255[^\"]", g->csv_endpoint);
+                            }
+                        }
+
+                        if (sel_ptr && sel_ptr < obj_end)
+                        {
+                            char *colon = strchr(sel_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                colon++;
+                                while (*colon == ' ') colon++;
+                                g->selected = (strncmp(colon, "true", 4) == 0);
+                            }
+                        }
+
+                        config->retlector_group_count++;
+                    }
+                    rg_ptr = obj_end + 1;
+                }
+                config->retlector_groups_fetched = (config->retlector_group_count > 0);
+            }
+
+            // load custom entries (pasted orbital data)
+            char *ce_ptr = strstr(text, "\"custom_entries\"");
+            if (ce_ptr)
+            {
+                char *block_end = strchr(ce_ptr, ']');
+                if (!block_end) block_end = text + strlen(text);
+
+                while ((ce_ptr = strstr(ce_ptr, "{")) && ce_ptr < block_end)
+                {
+                    if (config->custom_entry_count >= MAX_CUSTOM_ENTRIES) break;
+
+                    char *obj_end = strchr(ce_ptr, '}');
+                    if (!obj_end || obj_end > block_end) obj_end = block_end;
+
+                    char *data_ptr = strstr(ce_ptr, "\"data\"");
+                    char *fmt_ptr = strstr(ce_ptr, "\"detected_format\"");
+                    char *sel_ptr = strstr(ce_ptr, "\"selected\"");
+
+                    if (data_ptr && data_ptr < obj_end)
+                    {
+                        CustomEntry *e = &config->custom_entries[config->custom_entry_count];
+                        memset(e, 0, sizeof(CustomEntry));
+
+                        char *colon = strchr(data_ptr, ':');
+                        if (colon && colon < obj_end)
+                        {
+                            char *q = strchr(colon, '"');
+                            if (q && q < obj_end)
+                            {
+                                q++;
+                                int i = 0;
+                                while (*q && *q != '"' && i < 4095) e->data[i++] = *q++;
+                                e->data[i] = '\0';
+                            }
+                        }
+
+                        if (fmt_ptr && fmt_ptr < obj_end)
+                        {
+                            char *colon = strchr(fmt_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                colon++;
+                                while (*colon == ' ') colon++;
+                                e->detected_format = (OrbitalDataFormat)atoi(colon);
+                            }
+                        }
+
+                        if (sel_ptr && sel_ptr < obj_end)
+                        {
+                            char *colon = strchr(sel_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                colon++;
+                                while (*colon == ' ') colon++;
+                                e->selected = (strncmp(colon, "true", 4) == 0);
+                            }
+                        }
+
+                        config->custom_entry_count++;
+                    }
+                    ce_ptr = obj_end + 1;
                 }
             }
 
@@ -322,13 +451,15 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
             UnloadFileText(text);
-            LOG_INFO("Config loaded: theme=%s, %dx%d, %d markers, %d custom sources",
+            LOG_INFO("Config loaded: theme=%s, %dx%d, %d markers, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
                      config->theme, config->window_width, config->window_height,
-                     marker_count, config->custom_data_source_count);
+                     marker_count, config->custom_data_source_count,
+                     config->retlector_group_count, config->custom_entry_count,
+                     config->data_stale_threshold_seconds);
         }
     }
     else {
-        LOG_INFO("No config file found at %s — showing first-run dialog", filename);
+        LOG_INFO("No config file found at %s -- showing first-run dialog", filename);
         sscanf("default","%63[^\"]",config->theme);
         config->window_width = 1920;
         config->window_height = 1080;
@@ -452,6 +583,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
+    fprintf(file, "    \"data_stale_threshold_seconds\": %d,\n", config->data_stale_threshold_seconds);
 
     if (config->custom_data_source_count > 0)
     {
@@ -474,6 +606,36 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         for (int i = 0; i < config->manual_entry_count; i++)
         {
             fprintf(file, "        \"%s\"%s\n", config->manual_entries[i], (i == config->manual_entry_count - 1) ? "" : ",");
+        }
+        fprintf(file, "    ],\n");
+    }
+
+    // save retlector groups (cached from API)
+    if (config->retlector_group_count > 0)
+    {
+        fprintf(file, "    \"retlector_groups\": [\n");
+        for (int i = 0; i < config->retlector_group_count; i++)
+        {
+            RetlectorGroup *g = &config->retlector_groups[i];
+            fprintf(file, "    {\"name\": \"%s\", \"csv_endpoint\": \"%s\", \"selected\": %s}%s\n",
+                    g->name, g->csv_endpoint,
+                    g->selected ? "true" : "false",
+                    (i == config->retlector_group_count - 1) ? "" : ",");
+        }
+        fprintf(file, "    ],\n");
+    }
+
+    // save custom entries (pasted orbital data)
+    if (config->custom_entry_count > 0)
+    {
+        fprintf(file, "    \"custom_entries\": [\n");
+        for (int i = 0; i < config->custom_entry_count; i++)
+        {
+            CustomEntry *e = &config->custom_entries[i];
+            fprintf(file, "    {\"data\": \"%s\", \"detected_format\": %d, \"selected\": %s}%s\n",
+                    e->data, (int)e->detected_format,
+                    e->selected ? "true" : "false",
+                    (i == config->custom_entry_count - 1) ? "" : ",");
         }
         fprintf(file, "    ],\n");
     }

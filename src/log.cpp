@@ -6,14 +6,14 @@
 #include <ctime>
 #include <mutex>
 
-/* ── Ring buffer state ───────────────────────────────────────────────────── */
+/* -- Ring buffer state ----------------------------------------------------- */
 
 static LogEntry s_buffer[LOG_RING_CAPACITY];
 static int     s_head = 0;          /* next write position */
 static int     s_count = 0;         /* number of valid entries */
 static std::mutex s_mutex;
 
-/* ── Level label strings ─────────────────────────────────────────────────── */
+/* -- Level label strings --------------------------------------------------- */
 
 static const char *LevelLabel(LogLevel level)
 {
@@ -27,11 +27,11 @@ static const char *LevelLabel(LogLevel level)
     }
 }
 
-/* ── Public API ──────────────────────────────────────────────────────────── */
+/* -- Public API ------------------------------------------------------------ */
 
 void LogInit(void)
 {
-    /* nothing dynamic to allocate — buffer is static */
+    /* nothing dynamic to allocate - buffer is static */
     s_head  = 0;
     s_count = 0;
 }
@@ -48,7 +48,7 @@ void LogMessage(LogLevel level, const char *format, ...)
     LogEntry entry;
     entry.level = level;
 
-    /* Build timestamp */
+    /* build timestamp */
     time_t raw = time(nullptr);
     struct tm *local = localtime(&raw);
     if (local)
@@ -61,17 +61,17 @@ void LogMessage(LogLevel level, const char *format, ...)
         snprintf(entry.timestamp, sizeof(entry.timestamp), "??:??:??");
     }
 
-    /* Format message */
+    /* format message */
     va_list args;
     va_start(args, format);
     vsnprintf(entry.message, sizeof(entry.message), format, args);
     va_end(args);
 
-    /* Also write to stderr so it appears in the terminal */
+    /* also write to stderr so it appears in the terminal */
     fprintf(stderr, "[%s] [%s] %s\n",
             entry.timestamp, LevelLabel(level), entry.message);
 
-    /* Thread-safe ring-buffer insert */
+    /* thread-safe ring-buffer insert */
     {
         std::lock_guard<std::mutex> lock(s_mutex);
 

@@ -49,24 +49,24 @@ typedef struct
 } RotatorState;
 
 static RotatorState rot = {
-    "127.0.0.1",       /* host */
-    "4533",            /* port */
-    "p",               /* get_fmt */
-    "P %.1f %.1f",     /* set_fmt */
-    "",                /* custom_cmd */
-    "180.0",           /* park_az */
-    "0.0",             /* park_el */
-    "30",              /* lead_time */
-    true,              /* auto_steer */
-    ROTATOR_STEER_POLAR, /* steer_mode */
-    false,             /* connected */
-    -1,                /* sock */
-    0.0f,              /* cur_az */
-    0.0f,              /* cur_el */
-    false,             /* has_position */
-    0.0,               /* last_poll_time */
-    0.0,               /* last_send_time */
-    "Disconnected"     /* status */
+    "127.0.0.1",       // host
+    "4533",            // port
+    "p",               // get_fmt
+    "P %.1f %.1f",     // set_fmt
+    "",                // custom_cmd
+    "180.0",           // park_az
+    "0.0",             // park_el
+    "30",              // lead_time
+    true,              // auto_steer
+    ROTATOR_STEER_POLAR, // steer_mode
+    false,             // connected
+    -1,                // sock
+    0.0f,              // cur_az
+    0.0f,              // cur_el
+    false,             // has_position
+    0.0,               // last_poll_time
+    0.0,               // last_send_time
+    "Disconnected"     // status
 };
 
 static void Disconnect(void)

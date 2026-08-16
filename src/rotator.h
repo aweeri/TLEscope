@@ -1,6 +1,11 @@
 #ifndef ROTATOR_H
 #define ROTATOR_H
 
+/**
+ * @file rotator.h
+ * @brief Antenna rotator control via TCP (rotctld protocol)
+ */
+
 #include "ui.h"
 
 #define ROTATOR_STEER_POLAR 0

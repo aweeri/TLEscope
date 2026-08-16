@@ -21,9 +21,12 @@ static const char* GetAssetPath(const char* theme, const char* filename) {
 #include "ui.h"
 #include "rotator.h"
 
-/* * shaders for day/night transition
- * uses dot product between surface normal and sun direction
- * casting a ray from the fragment towards the sun and calculating its minimum distance to the Moon's center in local space for solar eclipses
+/**
+ * @brief shader for day/night transition
+ *
+ * Uses the dot product between surface normal and sun direction.
+ * For solar eclipses it casts a ray from the fragment towards the sun
+ * and calculates its minimum distance to the Moon's center in local space.
  */
 const char *fs3D = "#version 330\n"
                    "in vec2 fragTexCoord;\n"
@@ -133,7 +136,7 @@ const char *fs2D = "#version 330\n"
                    "    finalColor = mix(night, shadowedDay, blend) * fragColor;\n"
                    "}\n";
 
-/* cloud shader handles transparency based on sun position */
+/** cloud shader handles transparency based on sun position */
 const char *fsCloud3D = "#version 330\n"
                         "in vec2 fragTexCoord;\n"
                         "in vec4 fragColor;\n"
@@ -171,7 +174,7 @@ const char *fsCloud3D = "#version 330\n"
                         "    finalColor = vec4(cloudColor * shadow, texel.a * alpha) * fragColor;\n"
                         "}\n";
 
-/* shader to handle moon self-shadowing and earth's eclipse projection */
+/** shader to handle moon self-shadowing and earth's eclipse projection */
 const char *fsMoon3D = "#version 330\n"
                        "in vec2 fragTexCoord;\n"
                        "in vec4 fragColor;\n"
@@ -209,7 +212,7 @@ const char *fsMoon3D = "#version 330\n"
                        "    finalColor = vec4(shadowColor * light, texel.a) * fragColor;\n"
                        "}\n";
 
-/* atmospheric scattering glow shader */
+/** atmospheric scattering glow shader */
 const char *fsAtmosphere3D = "#version 330\n"
                        "in vec2 fragTexCoord;\n"
                        "in vec4 fragColor;\n"
@@ -228,31 +231,31 @@ const char *fsAtmosphere3D = "#version 330\n"
                        "    float NdotL = dot(normal, sunDir);\n"
                        "    \n"
                        "    vec3 dayColor = vec3(0.25, 0.58, 1.0);\n"
-                       "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // Realistic gold-orange\n"
+                       "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // realistic gold-orange\n"
                        "    \n"
-                       "    // fresnel for soft edge glow\n"
+                       "    // fresnel for the soft edge glow\n"
                        "    float fresnel = pow(1.0 - NdotV, 2.5);\n"
                        "    \n"
-                       "    // sun brightness: 15% on night side, 100% on day side\n"
+                       "    // sun brightness: 15% on the night side, 100% on the day side\n"
                        "    float sunBlend = smoothstep(-0.3, 0.3, NdotL);\n"
                        "    float brightness = mix(0.05, 1.0, sunBlend);\n"
                        "    \n"
-                       "    // atmosphere base color with sunset shift near terminator\n"
+                       "    // atmosphere base color with a sunset shift near the terminator\n"
                        "    float sunsetBlend = smoothstep(0.35, -0.15, NdotL);\n"
                        "    vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);\n"
                        "    \n"
-                       "    // shiten the atmosphere where it is thickest\n"
+                       "    // brighten the atmosphere where it is thickest\n"
                        "    atmosColor = mix(atmosColor, vec3(0.7, 0.85, 1.0), pow(fresnel, 1.5) * 0.7);\n"
                        "    \n"
-                       "    // forward-scatter glow: brighter when looking toward sun through the limb\n"
+                       "    // forward-scatter glow: brighter when looking toward the sun through the limb\n"
                        "    float VdotL = dot(viewDir, sunDir);\n"
                        "    float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.15;\n"
                        "    atmosColor += vec3(1.0, 0.6, 0.3) * forwardGlow * sunBlend;\n"
                        "    \n"
-                       "    // smooth fadeout into the vacuum at the absolute edge\n"
+                       "    // smooth fadeout into the vacuum at the very edge\n"
                        "    float vacuumFade = smoothstep(0.0, 0.35, NdotV);\n"
                        "    \n"
-                       "    // combine for a smoof transparent atmospheric ring\n"
+                       "    // combine into a smooth transparent atmospheric ring\n"
                        "    vec3 color = atmosColor * brightness;\n"
                        "    float alpha = fresnel * vacuumFade * brightness * 2.0;\n"
                        "    \n"
@@ -294,7 +297,7 @@ static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, e
 static Texture2D periMark, apoMark;
 static Model earthModel, moonModel, cloudModel, atmosphereModel, skyboxModel;
 
-/* manual mesh generation for the planetary spheres */
+/** manual mesh generation for the planetary spheres */
 static Mesh GenEarthMesh(float radius, int slices, int rings)
 {
     Mesh mesh = {0};
@@ -352,7 +355,7 @@ static Mesh GenEarthMesh(float radius, int slices, int rings)
     return mesh;
 }
 
-/* render orbit lines in 3d space */
+/** render orbit lines in 3d space */
 static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step)
 {
     Color orbitColor = ApplyAlpha(is_highlighted ? cfg.orbit_highlighted : cfg.orbit_normal, alpha);
@@ -408,7 +411,7 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
             prev_pos = pos;
         }
         
-        // Draw final segment if needed
+        // draw final segment if needed
         if ((cache_size - 1) % step != 0)
         {
             DrawLine3D(prev_pos, sat->orbit_cache[cache_size - 1], orbitColor);
@@ -416,7 +419,7 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
     }
 }
 
-/* simple progress bar during init */
+/** simple progress bar during init */
 static void DrawLoadingScreen(float progress, const char *message, Texture2D logoTex)
 {
     BeginDrawing();
@@ -489,7 +492,7 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
         Vector2 world = GetScreenToWorld2D(mouse, cam2d);
         float mx = world.x;
         float my = world.y;
-        // Wrap x to [-map_w/2, map_w/2)
+        // wrap x to [-map_w/2, map_w/2)
         mx = fmodf(mx + map_w / 2, map_w);
         if (mx < 0)
             mx += map_w;
@@ -564,7 +567,7 @@ int main(void)
 
     if (current_w >= max_w || current_h >= max_h)
     {
-        /* shrink and center the window slightly before maximizing so the restored state has a valid position */
+        /* shrink and center the window a bit before maximizing so the restored state has a valid position */
         SetWindowSize(max_w - 100, max_h - 100);
         SetWindowPosition((int)monitorPos.x + 50, (int)monitorPos.y + 50);
         SetWindowState(FLAG_WINDOW_MAXIMIZED);
@@ -617,7 +620,7 @@ int main(void)
     earthNightTexture = LoadTexture(GetAssetPath(cfg.theme, "earth_night.png"));
     skyboxTexture = LoadTexture(GetAssetPath(cfg.theme, "skybox.png"));
 
-    /* make textures not blocky when zoomed in on*/
+    /* make textures not blocky when zoomed in on */
     SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
     SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
@@ -716,7 +719,7 @@ int main(void)
     SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(1.0f, "Ready!", logoTex);
-    LOG_INFO("Initialization complete — entering main loop");
+    LOG_INFO("Initialization complete - entering main loop");
 
     /* camera defaults */
     Camera Camera3DParams = {0};
@@ -981,7 +984,7 @@ int main(void)
             {
                 if (satellites[current_update_idx].is_active)
                 {
-                    // Only update if satellite drifted
+                    // only update if satellite drifted
                     if (!is_orbit_cache_valid(&satellites[current_update_idx], 
                                               satellites[current_update_idx].current_pos,
                                               cfg.orbit_cache_drift_threshold_km))
@@ -995,7 +998,7 @@ int main(void)
 
         double current_unix = get_unix_from_epoch(current_epoch);
 
-        /* update current positions of all active sats */
+        /* update current positions of all active satellites */
         int active_render_count = 0;
         for (int i = 0; i < sat_count; i++)
         {
@@ -1006,11 +1009,11 @@ int main(void)
             satellites[i].current_pos = calculate_position(&satellites[i], current_unix);
 
             
-            /* spaghetti is good, but orbital spaghetti isn't.
-            sooooo if an orbital body ends up below 80% of earths radius, disable it because it's about to meet earth's theoritical singularity and get ejected at speeds higher than light speed. yeeeeeeeet*/
+            /* if an orbital body ends up below 80% of earth's radius, disable it -
+               it's about to hit the singularity and get ejected at absurd speeds */
             if (Vector3Length(satellites[i].current_pos) < EARTH_RADIUS_KM * 0.8f)
             {
-                LOG_WARN("Sat %s deactivated — orbital decay (pos < 0.8x Earth radius)", satellites[i].name);
+                LOG_WARN("Sat %s deactivated - orbital decay (pos < 0.8x Earth radius)", satellites[i].name);
                 satellites[i].is_active = false;
                 if (selected_sat == &satellites[i])
                     selected_sat = NULL;
@@ -1236,7 +1239,7 @@ int main(void)
                     if (distToCamSqr > 0.00001f)
                     {
                         float proj = Vector3DotProduct(to_sat, mouseRay.direction);
-                        if (proj > 0.0f) // Only check if in front of camera
+                        if (proj > 0.0f) // only check if in front of camera
                         {
                             Vector3 closest_on_ray = Vector3Scale(mouseRay.direction, proj);
                             float distToRaySqr = Vector3DistanceSqr(to_sat, closest_on_ray);
@@ -1278,7 +1281,7 @@ int main(void)
                     double current_time = GetTime();
                     if (current_time - last_left_click_time < 0.3)
                     {
-                        // double‑click lock logic (unchanged)
+                        // double-click lock logic (unchanged)
                         if (is_2d_view)
                         {
                             Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), Camera2DParams);
@@ -1331,7 +1334,7 @@ int main(void)
         }
 
         float smooth_speed = 10.0f * GetFrameTime();
-        if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp that thang to prevent spinny explosions when alt tabbed
+        if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
 
         Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
         Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
@@ -1556,7 +1559,7 @@ int main(void)
                     }
                 }
 
-                /* render all sats on 2d map */
+                /* render all satellites on 2d map */
                 for (int i = 0; i < sat_count; i++)
                 {
                     if (!satellites[i].is_active)
@@ -1917,7 +1920,7 @@ int main(void)
                 );
                 dir = Vector3Normalize(dir);
 
-                /* extend out to GEO-ish distance */
+                /* extend out to roughly GEO distance */
                 float cone_length = 25000.0f / DRAW_SCALE; 
                 float cone_radius = cone_length * tanf((scope_beam / 2.0f) * DEG2RAD);
                 Vector3 center_end = Vector3Add(h_pos3d, Vector3Scale(dir, cone_length));
@@ -2127,7 +2130,7 @@ int main(void)
         EndDrawing();
     }
 
-    /* cleanup and save*/
+    /* cleanup and save */
     UnloadTexture(logoTex);
     UnloadTexture(satIcon);
     UnloadTexture(markerIcon);

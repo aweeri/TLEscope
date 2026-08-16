@@ -4,7 +4,7 @@ CLANG64_PREFIX   ?= /clangarm64
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
 
 CC_LINUX = g++
-CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 CXXFLAGS_WIN = $(CXXFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 # Sets _WIN variables for each possible architecture

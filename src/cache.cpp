@@ -5,12 +5,12 @@
 #include <string.h>
 #include <raylib.h>
 
-/* ── Static cache storage ─────────────────────────────────────────────────── */
+/* -- Static cache storage -------------------------------------------------- */
 
 static CacheEntry cache[MAX_CACHE_ENTRIES];
 static int cache_count = 0;
 
-/* ── Simple URL hash (djb2) ───────────────────────────────────────────────── */
+/* -- Simple URL hash (djb2) ------------------------------------------------ */
 
 static void hash_url(const char *url, char *out, size_t out_size)
 {
@@ -21,7 +21,7 @@ static void hash_url(const char *url, char *out, size_t out_size)
     snprintf(out, out_size, "%016lx", hash);
 }
 
-/* ── Public API ───────────────────────────────────────────────────────────── */
+/* -- Public API ------------------------------------------------------------ */
 
 bool IsCacheValid(const CacheEntry *entry)
 {
@@ -43,7 +43,7 @@ CacheEntry* CacheGet(const char *url)
         {
             if (IsCacheValid(&cache[i]))
                 return &cache[i];
-            // Expired - mark invalid
+            // expired - mark invalid
             cache[i].valid = false;
             return NULL;
         }
@@ -58,7 +58,7 @@ void CachePut(const char *url, const char *data, size_t size, OrbitalDataFormat 
     char h[64];
     hash_url(url, h, sizeof(h));
 
-    // Find existing entry to overwrite, or use next slot
+    // find existing entry to overwrite, or use next slot
     int idx = -1;
     for (int i = 0; i < cache_count; i++)
     {
@@ -73,7 +73,7 @@ void CachePut(const char *url, const char *data, size_t size, OrbitalDataFormat 
     {
         if (cache_count >= MAX_CACHE_ENTRIES)
         {
-            // Evict oldest entry
+            // evict oldest entry
             time_t oldest = cache[0].fetch_time;
             idx = 0;
             for (int i = 1; i < cache_count; i++)
@@ -136,7 +136,7 @@ bool CacheSave(const char *filename)
         fprintf(f, "      \"fetch_time\": %ld,\n", (long)cache[i].fetch_time);
         fprintf(f, "      \"format\": %d,\n", (int)cache[i].format);
         fprintf(f, "      \"data_size\": %zu,\n", cache[i].data_size);
-        // Store data as base64 or hex? For simplicity, skip data persistence for now.
+        // store data as base64 or hex? for simplicity, skip data persistence for now.
         fprintf(f, "      \"data\": \"\"\n");
         fprintf(f, "    }");
         if (i < cache_count - 1) fprintf(f, ",");
@@ -151,8 +151,8 @@ bool CacheSave(const char *filename)
 
 bool CacheLoad(const char *filename)
 {
-    // Cache is ephemeral - we just track metadata on disk
-    // Actual data is re-fetched on next launch
+    // cache is ephemeral - we just track metadata on disk
+    // actual data is re-fetched on next launch
     (void)filename;
     cache_count = 0;
     return true;

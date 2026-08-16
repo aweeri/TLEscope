@@ -1,6 +1,11 @@
 #ifndef ASTRO_H
 #define ASTRO_H
 
+/**
+ * @file astro.h
+ * @brief Orbital mechanics, pass prediction, and coordinate transforms
+ */
+
 #include "types.h"
 
 #define MAX_PASSES 1000
@@ -23,7 +28,7 @@ double get_current_real_time_epoch(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char *buffer);
 
-// Orbital data loading (replaces TLE-specific loading)
+// orbital data loading (replaces TLE-specific loading)
 void load_orbital_data(const char *filename);
 void load_manual_entries(AppConfig *config);
 
