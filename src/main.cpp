@@ -12,6 +12,7 @@
 #include "util/log.h"
 #include "core/types.h"
 #include "ui/ui.h"
+#include "ui/ui_layout.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 
@@ -954,6 +955,20 @@ int main(void)
                 ToggleFullscreen();
                 LOG_INFO("Fullscreen toggled");
             }
+
+            /* panel toggle shortcuts */
+            if (IsKeyPressed(KEY_ONE))   LayoutTogglePanel(PANEL_SAT_MGR);
+            if (IsKeyPressed(KEY_TWO))   LayoutTogglePanel(PANEL_DATA_SOURCES);
+            if (IsKeyPressed(KEY_THREE)) LayoutTogglePanel(PANEL_TIME_CTRL);
+            if (IsKeyPressed(KEY_FOUR))  LayoutTogglePanel(PANEL_SCOPE);
+            if (IsKeyPressed(KEY_FIVE))  LayoutTogglePanel(PANEL_PASSES);
+            if (IsKeyPressed(KEY_SIX))   LayoutTogglePanel(PANEL_POLAR_PLOT);
+            if (IsKeyPressed(KEY_SEVEN)) LayoutTogglePanel(PANEL_DOPPLER);
+            if (IsKeyPressed(KEY_EIGHT)) LayoutTogglePanel(PANEL_ROTATOR);
+            if (IsKeyPressed(KEY_NINE))  LayoutTogglePanel(PANEL_LOG);
+            if (IsKeyPressed(KEY_ZERO))  LayoutTogglePanel(PANEL_SAT_INFO);
+            if (IsKeyPressed(KEY_R))     LayoutTogglePanel(PANEL_ROTATOR);
+            if (IsKeyPressed(KEY_GRAVE)) LayoutTogglePanel(PANEL_TIME_CTRL);
         }
 
         if (cfg.ui_scale < 0.5f)
@@ -1000,7 +1015,17 @@ int main(void)
                 continue;
             satellites[i].current_pos = calculate_position(&satellites[i], current_unix);
 
-            
+            /* check for NaN/Inf positions (SGP4 propagation failure) */
+            if (isnan(satellites[i].current_pos.x) || isnan(satellites[i].current_pos.y) || isnan(satellites[i].current_pos.z) ||
+                isinf(satellites[i].current_pos.x) || isinf(satellites[i].current_pos.y) || isinf(satellites[i].current_pos.z))
+            {
+                LOG_WARN("Sat %s deactivated - NaN/Inf position (SGP4 error %d)", satellites[i].name, satellites[i].satrec.error);
+                satellites[i].is_active = false;
+                if (selected_sat == &satellites[i])
+                    selected_sat = NULL;
+                continue;
+            }
+
             /* if an orbital body ends up below 80% of earth's radius, disable it -
                it's about to hit the singularity and get ejected at absurd speeds */
             if (Vector3Length(satellites[i].current_pos) < EARTH_RADIUS_KM * 0.8f)
@@ -2117,6 +2142,34 @@ int main(void)
             .camera2d = &Camera2DParams,
             .camera3d = &Camera3DParams
         };
+        /* blur + darken the background behind the settings modal.
+         * The screen is downscaled before the Gaussian blur for performance,
+         * then upscaled back when drawing — the low-res pass reads as a soft
+         * frosted-glass blur while keeping the CPU cost modest. */
+        if (LayoutSettingsOpen())
+        {
+            Image screen = LoadImageFromScreen();
+            if (screen.data != NULL)
+            {
+                int dw = screen.width  / 4;
+                int dh = screen.height / 4;
+                if (dw < 16) dw = 16;
+                if (dh < 16) dh = 16;
+                ImageResize(&screen, dw, dh);
+                ImageBlurGaussian(&screen, 10);
+                Texture2D blurTex = LoadTextureFromImage(screen);
+                UnloadImage(screen);
+                DrawTexturePro(
+                    blurTex,
+                    (Rectangle){ 0, 0, (float)blurTex.width, (float)blurTex.height },
+                    (Rectangle){ 0, 0, (float)GetScreenWidth(), (float)GetScreenHeight() },
+                    (Vector2){ 0, 0 }, 0.0f, WHITE);
+                UnloadTexture(blurTex);
+            }
+            DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                          (Color){ 0, 0, 0, 110 });
+        }
+
         DrawGUI(&uiCtx, &cfg, customFont);
 
         EndDrawing();
@@ -2144,6 +2197,10 @@ int main(void)
     UnloadShader(shaderAtmosphere);
     UnloadModel(atmosphereModel);
     UnloadFont(customFont);
+
+    /* persist layout state before shutdown */
+    LayoutFillPersist(&cfg.ui_layout);
+    SaveAppConfig("settings.json", &cfg);
 
     SaveSatSelection();
     RotatorShutdown();

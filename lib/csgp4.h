@@ -467,6 +467,64 @@ CSGP4_DECORATOR int ParseFileOrString( FILE * f, const char * sLineSet, struct T
 
 #if CSGP4_INIT
 
+/**
+ * @brief Initialize SGP4 propagator directly from orbital elements
+ *
+ * Bypasses TLE string generation and parsing by calling sgp4init() directly
+ * with raw orbital element values. This eliminates the CPU-intensive TLE
+ * round-trip when loading large numbers of satellites from JSON/CSV sources.
+ *
+ * Converts Unix epoch to SGP4 internal epoch (days from Jan 0, 1950) internally.
+ *
+ * @param satrec       Output: initialized elsetrec structure
+ * @param epoch_unix   Epoch time in Unix seconds (since 1970-01-01)
+ * @param bstar        B* drag term (decimal, not TLE-encoded)
+ * @param ndot         First derivative of mean motion (rad/min^2)
+ * @param nddot        Second derivative of mean motion (rad/min^3)
+ * @param ecco         Eccentricity (unitless)
+ * @param argpo        Argument of perigee (radians)
+ * @param inclo        Inclination (radians)
+ * @param mo           Mean anomaly (radians)
+ * @param no_kozai     Mean motion (rad/min)
+ * @param nodeo        Right ascension of ascending node (radians)
+ * @return int         0 on success, non-zero on error (satrec->error is also set)
+ *
+ * @author Aria Wiktoria Horak (@Aweeri)
+ */
+CSGP4_DECORATOR int sgp4init_from_elements
+     (
+       struct elsetrec * satrec,
+       double epoch_unix,
+       SGPF bstar,
+       SGPF ndot,
+       SGPF nddot,
+       SGPF ecco,
+       SGPF argpo,
+       SGPF inclo,
+       SGPF mo,
+       SGPF no_kozai,
+       SGPF nodeo
+     )
+{
+	enum gravconsttype whichconst = wgs72;
+
+	// Convert Unix epoch to SGP4 epoch (days from Jan 0, 1950)
+	// Unix epoch: 1970-01-01 = JD 2440587.5
+	// SGP4 epoch: days from Jan 0, 1950 = JD - 2433281.5
+	// sgp4_epoch = epoch_unix / 86400.0 + 2440587.5 - 2433281.5
+	//            = epoch_unix / 86400.0 + 7306.0
+	SGPF epoch = (SGPF)(epoch_unix / 86400.0) + (SGPF)7306.0;
+
+	SGPF initial_r[3] = {0};
+	SGPF initial_v[3] = {0};
+
+	sgp4init(whichconst, 'a', epoch, bstar, ndot, nddot,
+		 ecco, argpo, inclo, mo, no_kozai,
+		 nodeo, 0.0, initial_r, initial_v, satrec);
+
+	return satrec->error;
+}
+
 CSGP4_DECORATOR int ConvertTLEToSGP4( struct elsetrec * satrec, struct TLEObject * obj, SGPF initial_time, SGPF * initial_r, SGPF* initial_v )
 { 
 	if( !obj->valid ) return -1;

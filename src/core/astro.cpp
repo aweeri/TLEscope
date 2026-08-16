@@ -158,60 +158,36 @@ void epoch_to_datetime_str(double epoch, char *buffer)
 }
 
 /**
- * @brief OMM-to-TLE conversion
+ * @brief Initialize SGP4 directly from stored orbital elements
  *
- * Generates TLE strings from orbital elements so SGP4 can be used.
- * This is the bridge between modern OMM data and the legacy SGP4 propagator.
+ * Calls sgp4init_from_elements() with the satellite's stored orbital data,
+ * bypassing the legacy TLE generation/parsing round-trip entirely.
+ * This is the modern path for JSON/CSV OMM data and cached orbital stores.
  */
-bool orbital_data_to_tle(const Satellite *sat, char *line0, size_t l0sz,
-                         char *line1, size_t l1sz, char *line2, size_t l2sz)
+static bool init_sgp4_from_satellite(Satellite *sat)
 {
-    // line 0: satellite name
-    snprintf(line0, l0sz, "%-24s", sat->name);
+    // mean motion: convert from rad/s (stored) to rad/min (SGP4 expects)
+    double no_kozai = sat->mean_motion * 60.0;
 
-    // line 1: TLE format
-    int norad_int = (int)sat->norad_id_num;
-    int epoch_year = (int)(sat->epoch_days / 1000.0);
-    int epoch_yy = epoch_year % 100;
-    double epoch_day = fmod(sat->epoch_days, 1000.0);
+    int ret = sgp4init_from_elements(
+        &sat->satrec,
+        sat->epoch_unix,
+        (double)sat->bstar,       // B* drag term (decimal)
+        0.0,                      // ndot: first derivative (rad/min^2) - typically 0 for OMM
+        0.0,                      // nddot: second derivative (rad/min^3) - typically 0 for OMM
+        sat->eccentricity,
+        sat->arg_perigee,
+        sat->inclination,
+        sat->mean_anomaly,
+        no_kozai,
+        sat->raan
+    );
 
-    // b* from satrec (default to 0 if not available)
-    double bstar = sat->satrec.bstar;
-
-    // compute bstar in TLE format (scientific notation, 5 digits + sign)
-    int bstar_exp = 0;
-    double bstar_mant = fabs(bstar);
-    if (bstar_mant > 1e-99)
+    if (ret != 0 || sat->satrec.error != 0)
     {
-        while (bstar_mant < 1.0) { bstar_mant *= 10.0; bstar_exp--; }
-        while (bstar_mant >= 10.0) { bstar_mant /= 10.0; bstar_exp++; }
+        LOG_WARN("SGP4 init failed for %s - error=%d", sat->name, sat->satrec.error);
+        return false;
     }
-    char bstar_sign = (bstar >= 0) ? '+' : '-';
-    int bstar_int = (int)(bstar_mant * 10000.0 + 0.5);
-    if (bstar_int > 99999) bstar_int = 99999;
-
-    snprintf(line1, l1sz,
-             "1 %05dU %-8s %02d%012.8f  .00000000  00000-0 %c%05d-%d 0    0",
-             norad_int % 100000,  // TLE only supports 5-digit NORAD in the format
-             sat->intl_designator,
-             epoch_yy, epoch_day,
-             bstar_sign, bstar_int, abs(bstar_exp));
-
-    // line 2: TLE format
-    double inc_deg = sat->inclination * RAD2DEG;
-    double raan_deg = sat->raan * RAD2DEG;
-    double argp_deg = sat->arg_perigee * RAD2DEG;
-    double ma_deg = sat->mean_anomaly * RAD2DEG;
-    double revs_per_day = (sat->mean_motion * 86400.0) / (2.0 * PI);
-
-    snprintf(line2, l2sz,
-             "2 %05d %8.4f %8.4f %07.0f %8.4f %8.4f %11.8f    0",
-             norad_int % 100000,
-             inc_deg, raan_deg,
-             sat->eccentricity * 1e7,
-             argp_deg, ma_deg,
-             revs_per_day);
-
     return true;
 }
 
@@ -223,6 +199,7 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
         return false;
     }
     Satellite *sat = &satellites[sat_count];
+    memset(sat, 0, sizeof(Satellite));
 
     strncpy(sat->name, line0, 24);
     sat->name[24] = '\0';
@@ -238,57 +215,53 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
     strncpy(sat->intl_designator, line1 + 9, sizeof(sat->intl_designator) - 1);
     sat->norad_id_num = (uint32_t)atoi(sat->norad_id);
 
-    char combined[768];
-    snprintf(combined, sizeof(combined), "%s\n%s\n%s\n", line0, line1, line2);
+    /* scrape orbital elements directly from TLE strings */
+    double raw_epoch = parse_tle_double(line1, 18, 14);
+    int yy = (int)(raw_epoch / 1000.0);
+    int year = (yy < 57) ? 2000 + yy : 1900 + yy;
+    sat->epoch_days = (year * 1000.0) + fmod(raw_epoch, 1000.0);
+    sat->epoch_unix = get_unix_from_epoch(sat->epoch_days);
+    sat->inclination = parse_tle_double(line2, 8, 8) * DEG2RAD;
+    sat->raan = parse_tle_double(line2, 17, 8) * DEG2RAD;
 
-    struct TLEObject *parsed_objs = NULL;
-    int num_objs = 0;
-    ParseFileOrString(NULL, combined, &parsed_objs, &num_objs);
+    char ecc_buf[32] = "0.";
+    strncpy(ecc_buf + 2, line2 + 26, 7);
+    sat->eccentricity = atof(ecc_buf);
 
-    if (num_objs > 0 && parsed_objs != NULL)
+    sat->arg_perigee = parse_tle_double(line2, 34, 8) * DEG2RAD;
+    sat->mean_anomaly = parse_tle_double(line2, 43, 8) * DEG2RAD;
+
+    double revs_per_day = parse_tle_double(line2, 52, 11);
+    sat->mean_motion = (revs_per_day * 2.0 * PI) / 86400.0;
+    sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
+
+    // parse B* drag term from TLE line 1 (positions 53-61)
+    char bstar_buf[16] = {0};
+    strncpy(bstar_buf, line1 + 53, 8);
+    bstar_buf[8] = '\0';
+    sat->bstar = ParseFixedEponential(bstar_buf, 0, NULL);
+
+    sat->is_active = true;
+
+    // store metadata
+    if (meta)
+        sat->data_meta = *meta;
+    else
     {
-        double initial_r[3] = {0};
-        double initial_v[3] = {0};
-
-        /* feed the TLE into the sgp4 state machine */
-        ConvertTLEToSGP4(&sat->satrec, &parsed_objs[0], 0.0, initial_r, initial_v);
-        free(parsed_objs);
-
-        /* manually scrape the rest of the struct fields */
-        double raw_epoch = parse_tle_double(line1, 18, 14);
-        int yy = (int)(raw_epoch / 1000.0);
-        int year = (yy < 57) ? 2000 + yy : 1900 + yy;
-        sat->epoch_days = (year * 1000.0) + fmod(raw_epoch, 1000.0);
-        sat->epoch_unix = get_unix_from_epoch(sat->epoch_days);
-        sat->inclination = parse_tle_double(line2, 8, 8) * DEG2RAD;
-        sat->raan = parse_tle_double(line2, 17, 8) * DEG2RAD;
-
-        char ecc_buf[32] = "0.";
-        strncpy(ecc_buf + 2, line2 + 26, 7);
-        sat->eccentricity = atof(ecc_buf);
-
-        sat->arg_perigee = parse_tle_double(line2, 34, 8) * DEG2RAD;
-        sat->mean_anomaly = parse_tle_double(line2, 43, 8) * DEG2RAD;
-
-        double revs_per_day = parse_tle_double(line2, 52, 11);
-        sat->mean_motion = (revs_per_day * 2.0 * PI) / 86400.0;
-        sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
-        sat->is_active = true;
-
-        // store metadata
-        if (meta)
-            sat->data_meta = *meta;
-        else
-        {
-            memset(&sat->data_meta, 0, sizeof(sat->data_meta));
-            sat->data_meta.format = FORMAT_TLE;
-        }
-
-        sat_count++;
-        return true;
+        memset(&sat->data_meta, 0, sizeof(sat->data_meta));
+        sat->data_meta.format = FORMAT_TLE;
     }
-    LOG_WARN("Failed to parse TLE for satellite: %s", line0);
-    return false;
+
+    // initialize SGP4 directly from orbital elements (no TLE round-trip)
+    if (!init_sgp4_from_satellite(sat))
+    {
+        LOG_WARN("SGP4 init failed for TLE satellite: %s", line0);
+        memset(sat, 0, sizeof(Satellite));
+        return false;
+    }
+
+    sat_count++;
+    return true;
 }
 
 /** adds a satellite from parsed OMM orbital elements (JSON/CSV OMM -> SGP4) */
@@ -323,6 +296,7 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
     sat->mean_anomaly = mean_anomaly_deg * DEG2RAD;
     sat->mean_motion = (mean_motion_revday * 2.0 * PI) / 86400.0;
     sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
+    sat->bstar = bstar;
     sat->is_active = true;
 
     // store metadata
@@ -334,31 +308,17 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
         sat->data_meta.format = FORMAT_OMM_JSON;
     }
 
-    // generate TLE strings for SGP4 initialization
-    char line0[128], line1[128], line2[128];
-    orbital_data_to_tle(sat, line0, sizeof(line0), line1, sizeof(line1), line2, sizeof(line2));
-
-    // feed to SGP4
-    char combined[768];
-    snprintf(combined, sizeof(combined), "%s\n%s\n%s\n", line0, line1, line2);
-
-    struct TLEObject *parsed_objs = NULL;
-    int num_objs = 0;
-    ParseFileOrString(NULL, combined, &parsed_objs, &num_objs);
-
-    if (num_objs > 0 && parsed_objs != NULL)
+    // initialize SGP4 directly from orbital elements (no TLE round-trip)
+    if (!init_sgp4_from_satellite(sat))
     {
-        double initial_r[3] = {0};
-        double initial_v[3] = {0};
-        ConvertTLEToSGP4(&sat->satrec, &parsed_objs[0], 0.0, initial_r, initial_v);
-        free(parsed_objs);
-        sat_count++;
-        LOG_DEBUG("Added OMM satellite: %s (NORAD: %s)", name, norad_id);
-        return true;
+        LOG_WARN("SGP4 init failed for %s (NORAD: %s)", name, norad_id);
+        memset(sat, 0, sizeof(Satellite));
+        return false;
     }
 
-    LOG_WARN("Failed to initialize SGP4 for OMM satellite: %s", name);
-    return false;
+    sat_count++;
+    LOG_DEBUG("Added OMM satellite: %s (NORAD: %s)", name, norad_id);
+    return true;
 }
 
 /** bulk loading of orbital data from structured storage */
@@ -375,25 +335,8 @@ void load_orbital_data(const char *filename)
             Satellite *sat = &satellites[i];
             if (!sat->is_active) continue;
 
-            // generate TLE from stored elements and feed to SGP4
-            char line0[128], line1[128], line2[128];
-            orbital_data_to_tle(sat, line0, sizeof(line0), line1, sizeof(line1), line2, sizeof(line2));
-
-            char combined[768];
-            snprintf(combined, sizeof(combined), "%s\n%s\n%s\n", line0, line1, line2);
-
-            struct TLEObject *parsed_objs = NULL;
-            int num_objs = 0;
-            ParseFileOrString(NULL, combined, &parsed_objs, &num_objs);
-
-            if (num_objs > 0 && parsed_objs != NULL)
-            {
-                double initial_r[3] = {0};
-                double initial_v[3] = {0};
-                ConvertTLEToSGP4(&sat->satrec, &parsed_objs[0], 0.0, initial_r, initial_v);
-                free(parsed_objs);
-            }
-            else
+            // initialize SGP4 directly from stored elements (no TLE round-trip)
+            if (!init_sgp4_from_satellite(sat))
             {
                 LOG_WARN("SGP4 re-init failed for %s - deactivating", sat->name);
                 sat->is_active = false;
@@ -453,6 +396,27 @@ Vector3 calculate_position(Satellite *sat, double current_unix)
     double vo[3] = {0};
 
     sgp4(&sat->satrec, tsince, ro, vo);
+
+    /* Check for SGP4 errors that produce NaN positions */
+    if (sat->satrec.error != 0)
+    {
+        LOG_WARN("SGP4 error %d for %s at tsince=%.1f", sat->satrec.error, sat->name, tsince);
+        return (Vector3){NAN, NAN, NAN};
+    }
+
+    /* Check for NaN/Inf in output */
+    bool nan_or_inf = false;
+    for (int i = 0; i < 3; i++)
+    {
+        if (isnan(ro[i]) || isinf(ro[i]))
+            nan_or_inf = true;
+    }
+    if (nan_or_inf)
+    {
+        LOG_WARN("SGP4 produced NaN/Inf for %s at tsince=%.1f", sat->name, tsince);
+        sat->satrec.error = 7;
+        return (Vector3){NAN, NAN, NAN};
+    }
 
     Vector3 pos;
     pos.x = (float)(ro[0]);

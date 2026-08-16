@@ -55,6 +55,35 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
 
+    /* default UI layout (first-run state) */
+    {
+        UILayoutPersist *L = &config->ui_layout;
+        L->left_sidebar_width = 300.0f;
+        L->right_sidebar_width = 300.0f;
+        L->left_sidebar_visible = true;
+        L->right_sidebar_visible = true;
+        L->left_sidebar_hidden = false;
+        L->right_sidebar_hidden = false;
+
+        /* left sidebar: core functions */
+        int left_defaults[MAX_LEFT_PANELS] = {0, 1, 2, 3, 4}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
+        bool left_open_defaults[MAX_LEFT_PANELS] = {true, true, true, false, false};
+        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+        {
+            L->left_panel_order[i] = left_defaults[i];
+            L->left_panel_open[i] = left_open_defaults[i];
+        }
+
+        /* right sidebar: inspector + scientific tools */
+        int right_defaults[MAX_RIGHT_PANELS] = {5, 6, 7, 8, 9}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
+        bool right_open_defaults[MAX_RIGHT_PANELS] = {true, false, false, false, false};
+        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+        {
+            L->right_panel_order[i] = right_defaults[i];
+            L->right_panel_open[i] = right_open_defaults[i];
+        }
+    }
+
     if (FileExists(filename))
     {
         LOG_INFO("Loading config from %s", filename);
@@ -429,6 +458,98 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     m_ptr = obj_end + 1;
                 }
             }
+
+            // load UI layout (sidebar geometry + panel arrangement)
+            {
+                UILayoutPersist *L = &config->ui_layout;
+                char *ul_ptr = strstr(text, "\"ui_layout\"");
+                if (ul_ptr)
+                {
+                    char *block_end = strchr(ul_ptr, '}');
+                    if (!block_end) block_end = text + strlen(text);
+
+                    // sidebar widths
+                    char *w = strstr(ul_ptr, "\"left_sidebar_width\"");
+                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->left_sidebar_width); }
+                    w = strstr(ul_ptr, "\"right_sidebar_width\"");
+                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->right_sidebar_width); }
+
+                    // visibility
+                    L->left_sidebar_visible = ParseJsonBool(ul_ptr, "left_sidebar_visible", L->left_sidebar_visible);
+                    L->right_sidebar_visible = ParseJsonBool(ul_ptr, "right_sidebar_visible", L->right_sidebar_visible);
+                    L->left_sidebar_hidden = ParseJsonBool(ul_ptr, "left_sidebar_hidden", L->left_sidebar_hidden);
+                    L->right_sidebar_hidden = ParseJsonBool(ul_ptr, "right_sidebar_hidden", L->right_sidebar_hidden);
+
+                    // panel order arrays
+                    char *po = strstr(ul_ptr, "\"left_panel_order\"");
+                    if (po && po < block_end)
+                    {
+                        char *arr = strchr(po, '[');
+                        if (arr)
+                        {
+                            char *cur = arr + 1;
+                            for (int i = 0; i < MAX_LEFT_PANELS && cur && *cur != ']'; i++)
+                            {
+                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
+                                if (*cur == ']' || *cur == '\0') break;
+                                L->left_panel_order[i] = atoi(cur);
+                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                            }
+                        }
+                    }
+                    po = strstr(ul_ptr, "\"right_panel_order\"");
+                    if (po && po < block_end)
+                    {
+                        char *arr = strchr(po, '[');
+                        if (arr)
+                        {
+                            char *cur = arr + 1;
+                            for (int i = 0; i < MAX_RIGHT_PANELS && cur && *cur != ']'; i++)
+                            {
+                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
+                                if (*cur == ']' || *cur == '\0') break;
+                                L->right_panel_order[i] = atoi(cur);
+                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                            }
+                        }
+                    }
+
+                    // panel open arrays
+                    char *po2 = strstr(ul_ptr, "\"left_panel_open\"");
+                    if (po2 && po2 < block_end)
+                    {
+                        char *arr = strchr(po2, '[');
+                        if (arr)
+                        {
+                            char *cur = arr + 1;
+                            for (int i = 0; i < MAX_LEFT_PANELS && cur && *cur != ']'; i++)
+                            {
+                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
+                                if (*cur == ']' || *cur == '\0') break;
+                                L->left_panel_open[i] = (strncmp(cur, "true", 4) == 0);
+                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                            }
+                        }
+                    }
+                    po2 = strstr(ul_ptr, "\"right_panel_open\"");
+                    if (po2 && po2 < block_end)
+                    {
+                        char *arr = strchr(po2, '[');
+                        if (arr)
+                        {
+                            char *cur = arr + 1;
+                            for (int i = 0; i < MAX_RIGHT_PANELS && cur && *cur != ']'; i++)
+                            {
+                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
+                                if (*cur == ']' || *cur == '\0') break;
+                                L->right_panel_open[i] = (strncmp(cur, "true", 4) == 0);
+                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                            }
+                        }
+                    }
+                }
+            }
+
             UnloadFileText(text);
             LOG_INFO("Config loaded: theme=%s, %dx%d, %d markers, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
                      config->theme, config->window_width, config->window_height,
@@ -572,7 +693,41 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     {
         fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f}%s\n", markers[i].name, markers[i].lat, markers[i].lon, markers[i].alt, (i == marker_count - 1) ? "" : ",");
     }
-    fprintf(file, "    ]\n");
+    fprintf(file, "    ],\n");
+
+    /* -- UI layout (sidebar geometry + panel arrangement) ----------------- */
+    {
+        const UILayoutPersist *L = &config->ui_layout;
+        fprintf(file, "    \"ui_layout\": {\n");
+        fprintf(file, "        \"left_sidebar_width\": %.1f,\n", L->left_sidebar_width);
+        fprintf(file, "        \"right_sidebar_width\": %.1f,\n", L->right_sidebar_width);
+        fprintf(file, "        \"left_sidebar_visible\": %s,\n", L->left_sidebar_visible ? "true" : "false");
+        fprintf(file, "        \"right_sidebar_visible\": %s,\n", L->right_sidebar_visible ? "true" : "false");
+        fprintf(file, "        \"left_sidebar_hidden\": %s,\n", L->left_sidebar_hidden ? "true" : "false");
+        fprintf(file, "        \"right_sidebar_hidden\": %s,\n", L->right_sidebar_hidden ? "true" : "false");
+
+        fprintf(file, "        \"left_panel_order\": [");
+        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+            fprintf(file, "%s%d", i ? "," : "", L->left_panel_order[i]);
+        fprintf(file, "],\n");
+
+        fprintf(file, "        \"right_panel_order\": [");
+        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+            fprintf(file, "%s%d", i ? "," : "", L->right_panel_order[i]);
+        fprintf(file, "],\n");
+
+        fprintf(file, "        \"left_panel_open\": [");
+        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+            fprintf(file, "%s%s", i ? "," : "", L->left_panel_open[i] ? "true" : "false");
+        fprintf(file, "],\n");
+
+        fprintf(file, "        \"right_panel_open\": [");
+        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+            fprintf(file, "%s%s", i ? "," : "", L->right_panel_open[i] ? "true" : "false");
+        fprintf(file, "]\n");
+
+        fprintf(file, "    }\n");
+    }
     fprintf(file, "}\n");
     fclose(file);
 }

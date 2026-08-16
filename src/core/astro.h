@@ -32,9 +32,7 @@ void epoch_to_datetime_str(double epoch, char *buffer);
 void load_orbital_data(const char *filename);
 void load_manual_entries(AppConfig *config);
 
-// OMM-to-TLE conversion for SGP4 compatibility
-bool orbital_data_to_tle(const Satellite *sat, char *line0, size_t l0sz,
-                         char *line1, size_t l1sz, char *line2, size_t l2sz);
+// SGP4 initialization from orbital elements
 bool add_satellite_from_tle(const char* line0, const char* line1,
                             const char* line2, OrbitalDataMeta *meta);
 bool add_satellite_from_omm_elements(const char *name, const char *norad_id,

@@ -110,6 +110,7 @@ static void write_satellite(FILE *f, const Satellite *sat, int index)
     fprintf(f, "      \"mean_anomaly\": %.15f,\n", sat->mean_anomaly);
     fprintf(f, "      \"mean_motion\": %.15f,\n", sat->mean_motion);
     fprintf(f, "      \"semi_major_axis\": %.6f,\n", sat->semi_major_axis);
+    fprintf(f, "      \"bstar\": %.15f,\n", sat->bstar);
     fprintf(f, "      \"is_active\": %s,\n", sat->is_active ? "true" : "false");
     fprintf(f, "      \"data_meta\": {\n");
     fprintf(f, "        \"source_name\": \"%s\",\n", sat->data_meta.source_name);
@@ -137,6 +138,7 @@ static bool read_satellite(const char *text, Satellite *sat)
     sat->mean_anomaly = read_double(text, "mean_anomaly", 0.0);
     sat->mean_motion = read_double(text, "mean_motion", 0.0);
     sat->semi_major_axis = read_double(text, "semi_major_axis", 0.0);
+    sat->bstar = read_double(text, "bstar", 0.0);
     sat->is_active = read_bool(text, "is_active", true);
 
     // Parse nested data_meta

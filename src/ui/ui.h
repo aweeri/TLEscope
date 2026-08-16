@@ -205,6 +205,9 @@ typedef struct
     Camera3D *camera3d;
 } UIContext;
 
+/* global UI-only state instance (defined in ui.cpp) */
+extern UIState g_ui;
+
 /* core UI methods */
 void SaveSatSelection(void);
 void LoadSatSelection(void);
@@ -212,6 +215,12 @@ bool IsUITyping(void);
 void ToggleTLEWarning(void);
 bool IsMouseOverUI(AppConfig *cfg);
 void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont);
+
+/* modal visibility accessors used by the nav bar / layout */
+void UIOpenSettings(void);
+void UIOpenHelp(void);
+void UIOpenAbout(void);
+void UIRequestExit(void);
 
 /* shared helpers */
 Color ApplyAlpha(Color c, float alpha);

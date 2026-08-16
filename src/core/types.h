@@ -88,6 +88,11 @@
 #define MAX_RETLECTOR_GROUPS 64
 #define MAX_CUSTOM_ENTRIES 20
 
+/* sidebar layout limits */
+#define MAX_LEFT_PANELS   5
+#define MAX_RIGHT_PANELS  5
+#define MAX_PANELS        10   /* PANEL_COUNT */
+
 /** supported orbital data formats */
 typedef enum {
     FORMAT_UNKNOWN = 0,
@@ -122,6 +127,7 @@ typedef struct
     double mean_anomaly;
     double mean_motion;
     double semi_major_axis;
+    double bstar;               // B* drag term (decimal, not TLE-encoded)
     Vector3 current_pos;
 
     struct elsetrec satrec;
@@ -170,6 +176,31 @@ typedef struct {
     OrbitalDataFormat detected_format;
     bool selected;
 } CustomEntry;
+
+/**
+ * @brief persisted UI layout state (sidebar geometry, panel order, open state)
+ *
+ * Mirrors the runtime UILayoutState from ui_layout.h so layout can be
+ * serialised to settings.json without the UI layer being required at
+ * config-parse time.
+ */
+typedef struct {
+    /* sidebar geometry */
+    float left_sidebar_width;
+    float right_sidebar_width;
+    bool left_sidebar_visible;
+    bool right_sidebar_visible;
+    bool left_sidebar_hidden;   /* snap-hidden: pull-tab shown instead */
+    bool right_sidebar_hidden;
+
+    /* panel order (PanelId values in display order, -1 = unused slot) */
+    int left_panel_order[MAX_LEFT_PANELS];
+    int right_panel_order[MAX_RIGHT_PANELS];
+
+    /* open/closed state, parallel to the order arrays above */
+    bool left_panel_open[MAX_LEFT_PANELS];
+    bool right_panel_open[MAX_RIGHT_PANELS];
+} UILayoutPersist;
 
 extern Satellite satellites[MAX_SATELLITES];
 extern int sat_count;
@@ -227,6 +258,8 @@ typedef struct
     int custom_entry_count;
 
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
+
+    UILayoutPersist ui_layout;  // sidebar/panel layout persistence
 } AppConfig;
 
 #endif // TYPES_H

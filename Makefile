@@ -35,7 +35,7 @@ else
 LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
 endif
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/ui/ui.cpp src/ui/imgui_theme.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp
+SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/panels.cpp src/ui/imgui_theme.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 CJSON_SRC    = lib/cjson/cJSON.c

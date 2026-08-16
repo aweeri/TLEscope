@@ -129,6 +129,8 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                   const char *source_name, OrbitalDataFormat fmt)
 {
     (void)size;
+    (void)count;
+    (void)sats;
     if (!json || !count || !sats) return 0;
 
     int parsed = 0;
@@ -210,7 +212,8 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
         ptr++;
     }
 
-    *count += parsed;
+    /* NOTE: add_satellite_from_omm_elements already increments sat_count,
+     * so we do NOT do *count += parsed here to avoid double-counting. */
     return parsed;
 }
 
@@ -297,6 +300,8 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
                  const char *source_name, OrbitalDataFormat fmt)
 {
     (void)size;
+    (void)count;
+    (void)sats;
     if (!csv || !count || !sats) return 0;
 
     // find the header line (first non-empty line)
@@ -433,6 +438,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         if (*ptr == '\n') ptr++;
     }
 
-    *count += parsed;
+    /* NOTE: add_satellite_from_omm_elements already increments sat_count,
+     * so we do NOT do *count += parsed here to avoid double-counting. */
     return parsed;
 }
