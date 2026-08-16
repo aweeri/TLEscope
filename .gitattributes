@@ -1,0 +1,5 @@
+# Ensure shell scripts and Dockerfiles are checked out with LF line endings
+# CRLF in shebang lines breaks script execution on Linux/WSL/macOS
+*.sh text eol=lf
+*.Dockerfile text eol=lf
+Dockerfile text eol=lf

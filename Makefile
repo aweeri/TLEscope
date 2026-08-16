@@ -148,12 +148,15 @@ bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 
 build/%.o: src/%.cpp | build
+	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/imgui/%.cpp | build
+	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build/%.o: lib/rlImGui/%.cpp | build
+	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
 
 build:

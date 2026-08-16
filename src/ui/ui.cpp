@@ -462,53 +462,41 @@ static void DrawSettingsWindow(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::CollapsingHeader("Theme"))
         {
-            /* scan themes directory */
-            static char theme_names[1024] = "";
-            static int active_theme = 0;
-            if (theme_names[0] == '\0')
+            /* build \0-separated theme list once */
+            if (g_ui.theme_names[0] == '\0')
             {
                 /* simple theme list */
                 const char *themes[] = {"default", "girlypop", "trans-test"};
-                theme_names[0] = '\0';
+                int offset = 0;
                 for (int i = 0; i < 3; i++)
                 {
-                    if (i > 0) strcat(theme_names, ";");
-                    strcat(theme_names, themes[i]);
-                    if (strcmp(themes[i], cfg->theme) == 0) active_theme = i;
+                    int len = strlen(themes[i]) + 1;
+                    if (offset + len < (int)sizeof(g_ui.theme_names))
+                    {
+                        memcpy(g_ui.theme_names + offset, themes[i], len);
+                        offset += len;
+                    }
+                    if (strcmp(themes[i], cfg->theme) == 0)
+                        g_ui.active_theme_idx = i;
                 }
+                /* ensure double null terminator */
+                if (offset + 1 < (int)sizeof(g_ui.theme_names))
+                    g_ui.theme_names[offset] = '\0';
             }
 
-            int prev_theme = active_theme;
-            ImGui::Combo("Theme", &active_theme, theme_names);
-            if (active_theme != prev_theme)
+            int prev_theme = g_ui.active_theme_idx;
+            ImGui::Combo("Theme##dropdown", &g_ui.active_theme_idx, g_ui.theme_names);
+            if (g_ui.active_theme_idx != prev_theme)
             {
-                /* extract theme name from semicolon-separated list */
-                char temp[64];
-                const char *start = theme_names;
-                for (int i = 0; i < active_theme; i++)
+                /* extract theme name from \0-separated list */
+                const char *name = g_ui.theme_names;
+                for (int i = 0; i < g_ui.active_theme_idx; i++)
                 {
-                    start = strchr(start, ';');
-                    if (!start) break;
-                    start++;
+                    name += strlen(name) + 1;
                 }
-                if (start)
-                {
-                    const char *end = strchr(start, ';');
-                    if (end)
-                    {
-                        size_t len = end - start;
-                        if (len > 63) len = 63;
-                        strncpy(temp, start, len);
-                        temp[len] = '\0';
-                    }
-                    else
-                    {
-                        strncpy(temp, start, 63);
-                        temp[63] = '\0';
-                    }
-                    strncpy(cfg->theme, temp, 63);
-                    cfg->reload_theme = true;
-                }
+                strncpy(cfg->theme, name, 63);
+                cfg->theme[63] = '\0';
+                cfg->reload_theme = true;
             }
         }
 
