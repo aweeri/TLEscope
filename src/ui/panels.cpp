@@ -121,14 +121,18 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     /* empty state - point the user at the data puller */
     if (sat_count == 0)
     {
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
                            "No satellites loaded yet.");
         ImGui::TextWrapped("Add data sources in the Data Sources tab, then pull to populate this list.");
+        ImGui::PopTextWrapPos();
         ImGui::Spacing();
         if (ImGui::SmallButton(ICON_FA_DATABASE " Open Data Sources"))
             LayoutOpenPanel(PANEL_DATA_SOURCES);
         return;
     }
+
+    ImGui::PushTextWrapPos(0.0f);
 
     /* search box + icon buttons on the same line */
     float avail_w = ImGui::GetContentRegionAvail().x;
@@ -231,6 +235,8 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     }
 
     ImGui::EndChild();
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Data Sources ---------------------------------------------------------- */
@@ -239,6 +245,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     /* ====================================================================
      *  Retlector Section
@@ -556,51 +563,14 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
      *  Pull All Selected Sources Button
      * ==================================================================== */
     ImGui::Separator();
-    if (g_data_selection_count == 0)
-        ImGui::BeginDisabled();
+    ImGui::PopTextWrapPos();
 
     if (ImGui::Button("Pull All Selected Sources", ImVec2(avail_w, 30)))
     {
-        /* ---- Phase 1: remove satellites that came from sources we're about to re-fetch ---- */
-        int new_count = 0;
-        for (int i = 0; i < sat_count; i++)
-        {
-            bool keep = true;
-            for (int j = 0; j < g_data_selection_count; j++)
-            {
-                DataSourceSelection *s = &g_data_selections[j];
-                char expected[80];
-                switch (s->type)
-                {
-                    case SOURCE_RETLECTOR:
-                        snprintf(expected, sizeof(expected), "retlector:%s", s->identifier);
-                        break;
-                    case SOURCE_CELESTRAK:
-                        snprintf(expected, sizeof(expected), "celestrak:%s", s->identifier);
-                        break;
-                    case SOURCE_CUSTOM_URL:
-                        snprintf(expected, sizeof(expected), "custom:%.31s", s->name);
-                        break;
-                    case SOURCE_CUSTOM_PASTE:
-                        snprintf(expected, sizeof(expected), "paste:%d", j);
-                        break;
-                }
-                if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
-                {
-                    keep = false;
-                    break;
-                }
-            }
-            if (keep)
-            {
-                if (new_count != i)
-                    satellites[new_count] = satellites[i];
-                new_count++;
-            }
-        }
-        sat_count = new_count;
+        /* ---- Phase 1: clear the slate (purge all satellites) ---- */
+        sat_count = 0;
 
-        /* ---- Phase 2: fetch each selected source ---- */
+        /* ---- Phase 2: fetch each selected source (if any) ---- */
         for (int i = 0; i < g_data_selection_count; i++)
         {
             DataSourceSelection *s = &g_data_selections[i];
@@ -749,9 +719,6 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         SaveOrbitalData("data.json", satellites, sat_count);
         LOG_INFO("Pull complete: %d satellites total", sat_count);
     }
-
-    if (g_data_selection_count == 0)
-        ImGui::EndDisabled();
 }
 
 /* -- Layers ----------------------------------------------------------------- */
@@ -759,6 +726,8 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
+
+    ImGui::PushTextWrapPos(0.0f);
 
     /* fixed icon width so all checkboxes align vertically */
     const float icon_w = 24.0f;
@@ -785,6 +754,8 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     DrawLayerCheckbox("Skybox", &cfg->show_skybox, ICON_FA_STAR, "Show starfield skybox");
     DrawLayerCheckbox("Highlight Sunlit", &cfg->highlight_sunlit, ICON_FA_BOLT, "Highlight sunlit portions of orbits");
     DrawLayerCheckbox("Slant Range", &cfg->show_slant_range, ICON_FA_RULER, "Show slant range line to home");
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Time Control ---------------------------------------------------------- */
@@ -793,6 +764,7 @@ void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     ImGui::Text("Current: %s", ctx->datetime_str);
     ImGui::SetNextItemWidth(avail_w);
@@ -818,6 +790,8 @@ void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
         *ctx->current_epoch = get_current_real_time_epoch();
         *ctx->time_multiplier = 1.0;
     }
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Scope ----------------------------------------------------------------- */
@@ -826,6 +800,7 @@ void DrawPanelScope(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     ImGui::SetNextItemWidth(avail_w);
     ImGui::SliderFloat("Azimuth", ctx->scope_az, 0.0f, 360.0f, "%.1f");
@@ -848,6 +823,8 @@ void DrawPanelScope(UIContext *ctx, AppConfig *cfg)
     ImGui::Checkbox("Show GEO", &g_ui.scope_show_geo);
     if (items_per_row >= 4) { ImGui::SameLine(); }
     ImGui::Checkbox("Show Trails", &g_ui.scope_show_trails);
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Rotator Control ------------------------------------------------------- */
@@ -857,6 +834,7 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg)
     (void)ctx;
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     if (ImGui::Button(RotatorIsConnected() ? "Disconnect" : "Connect", ImVec2(avail_w, 0)))
     {
@@ -898,9 +876,70 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg)
     {
         ImGui::Text("Status: Disconnected");
     }
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Satellite Info (inspector) -------------------------------------------- */
+
+/** compute apogee altitude (km) from semi-major axis and eccentricity */
+static double calc_apogee_km(const Satellite *sat)
+{
+    return sat->semi_major_axis * (1.0 + sat->eccentricity) - EARTH_RADIUS_KM;
+}
+
+/** compute perigee altitude (km) from semi-major axis and eccentricity */
+static double calc_perigee_km(const Satellite *sat)
+{
+    return sat->semi_major_axis * (1.0 - sat->eccentricity) - EARTH_RADIUS_KM;
+}
+
+/** observer position in ECI, same axis convention as calculate_position() */
+static Vector3 calc_observer_eci(const Marker *obs, double gmst_deg)
+{
+    double ox, oy, oz;
+    geodetic_to_ecef(obs->lat, obs->lon + gmst_deg, obs->alt, &ox, &oy, &oz);
+    Vector3 o = { (float)ox, (float)oz, (float)-oy };
+    return o;
+}
+
+/** topocentric declination / right ascension of the satellite as seen from the observer */
+static void calc_topocentric_radec(Vector3 eci_pos, Vector3 obs_eci,
+                                   double *out_dec_deg, double *out_ra_deg)
+{
+    double rx = eci_pos.x - obs_eci.x;
+    double ry = eci_pos.y - obs_eci.y;
+    double rz = eci_pos.z - obs_eci.z;
+    double r = sqrt(rx * rx + ry * ry + rz * rz);
+    if (r < 0.001) { *out_dec_deg = 0; *out_ra_deg = 0; return; }
+
+    *out_dec_deg = asin(ry / r) * RAD2DEG;
+
+    double ra = atan2(-rz, rx) * RAD2DEG;
+    while (ra < 0.0) ra += 360.0;
+    while (ra >= 360.0) ra -= 360.0;
+    *out_ra_deg = ra;
+}
+
+/** apparent angular speed (deg/s) of the satellite across the sky from the observer */
+static double calc_topocentric_ang_speed(Satellite *sat, double current_unix, Vector3 obs_eci)
+{
+    Vector3 p0 = calculate_position(sat, current_unix);
+    Vector3 p1 = calculate_position(sat, current_unix + 1.0);
+
+    double x0 = p0.x - obs_eci.x, y0 = p0.y - obs_eci.y, z0 = p0.z - obs_eci.z;
+    double x1 = p1.x - obs_eci.x, y1 = p1.y - obs_eci.y, z1 = p1.z - obs_eci.z;
+
+    double r0 = sqrt(x0 * x0 + y0 * y0 + z0 * z0);
+    double r1 = sqrt(x1 * x1 + y1 * y1 + z1 * z1);
+    if (r0 < 0.001 || r1 < 0.001) return 0.0;
+
+    double cos_a = (x0 * x1 + y0 * y1 + z0 * z1) / (r0 * r1);
+    if (cos_a > 1.0) cos_a = 1.0;
+    if (cos_a < -1.0) cos_a = -1.0;
+
+    return acos(cos_a) * RAD2DEG;   /* degrees per second */
+}
 
 void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 {
@@ -909,35 +948,112 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 
     if (!*ctx->selected_sat)
     {
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
                            "No satellite selected.\nClick a satellite in the 3D view or in the Satellite Manager.");
+        ImGui::PopTextWrapPos();
         return;
     }
+
+    ImGui::PushTextWrapPos(0.0f);
 
     Satellite *sat = *ctx->selected_sat;
     ImGui::Text("NORAD: %s", sat->norad_id);
     ImGui::Text("Active: %s", sat->is_active ? "Yes" : "No");
 
-    ImGui::Separator();
-    ImGui::Text("Position:");
-    ImGui::Text("  X: %.2f km", sat->current_pos.x);
-    ImGui::Text("  Y: %.2f km", sat->current_pos.y);
-    ImGui::Text("  Z: %.2f km", sat->current_pos.z);
+    /* -- Observer geometry (home location) --------------------------------- */
+    Vector3 obs_eci = calc_observer_eci(&home_location, ctx->gmst_deg);
+    double current_unix = get_unix_from_epoch(*ctx->current_epoch);
 
+    double dec = 0.0, ra = 0.0;
+    calc_topocentric_radec(sat->current_pos, obs_eci, &dec, &ra);
+    double ang_speed = calc_topocentric_ang_speed(sat, current_unix, obs_eci);
+
+    /* -- Main orbital elements -------------------------------------------- */
     ImGui::Separator();
     ImGui::Text("Orbital Elements:");
-    ImGui::Text("  Inclination: %.4f deg", sat->inclination);
-    ImGui::Text("  RAAN: %.4f deg", sat->raan);
-    ImGui::Text("  Eccentricity: %.6f", sat->eccentricity);
-    ImGui::Text("  Arg of Perigee: %.4f deg", sat->arg_perigee);
-    ImGui::Text("  Mean Anomaly: %.4f deg", sat->mean_anomaly);
-    ImGui::Text("  Mean Motion: %.6f rev/day", sat->mean_motion);
 
+    // inclination & eccentricity (most critical)
+    ImGui::Text("  Inclination: %.4f deg", sat->inclination * RAD2DEG);
+    ImGui::Text("  Eccentricity: %.6f", sat->eccentricity);
+
+    // apogee & perigee altitude
+    ImGui::Text("  Apogee: %.1f km", calc_apogee_km(sat));
+    ImGui::Text("  Perigee: %.1f km", calc_perigee_km(sat));
+
+    // topocentric sky position (computed from home location)
+    ImGui::Text("  Declination: %.4f deg", dec);
+    ImGui::Text("  Right Ascension: %.4f deg", ra);
+    ImGui::Text("  Angular Speed: %.4f deg/s", ang_speed);
+
+    /* -- Home-location relative info -------------------------------------- */
+    ImGui::Separator();
+    ImGui::Text("From Home Location:");
+
+    double az = 0.0, el = 0.0;
+    get_az_el(sat->current_pos, ctx->gmst_deg,
+              home_location.lat, home_location.lon, home_location.alt,
+              &az, &el);
+    ImGui::Text("  Azimuth: %.2f deg", az);
+    ImGui::Text("  Elevation: %.2f deg", el);
+
+    double range = get_sat_range(sat, *ctx->current_epoch, home_location);
+    ImGui::Text("  Range: %.1f km", range);
+
+    /* -- Advanced (hidden by default) ------------------------------------- */
+    ImGui::Separator();
+    ImGui::PushID("sat_adv");
+    if (ImGui::TreeNodeEx(ICON_FA_GEAR " Advanced Orbital Data", ImGuiTreeNodeFlags_Framed))
+    {
+        ImGui::Text("  RAAN: %.4f deg", sat->raan * RAD2DEG);
+        ImGui::Text("  Arg of Perigee: %.4f deg", sat->arg_perigee * RAD2DEG);
+        ImGui::Text("  Mean Anomaly: %.4f deg", sat->mean_anomaly * RAD2DEG);
+        ImGui::Text("  Mean Motion: %.6f rev/day", sat->mean_motion * 86400.0 / (2.0 * PI));
+        ImGui::Text("  Semi-major Axis: %.3f km", sat->semi_major_axis);
+        ImGui::Text("  B* Drag: %.4e", sat->bstar);
+        ImGui::Text("  Period: %.2f min", (2.0 * PI / sat->mean_motion) / 60.0);
+
+        ImGui::Separator();
+        ImGui::Text("ECI Position:");
+        ImGui::Text("  X: %.2f km", sat->current_pos.x);
+        ImGui::Text("  Y: %.2f km", sat->current_pos.y);
+        ImGui::Text("  Z: %.2f km", sat->current_pos.z);
+
+        ImGui::Separator();
+        ImGui::Text("Epoch: %.4f", sat->epoch_days);
+        char epoch_str[64];
+        epoch_to_datetime_str(sat->epoch_days, epoch_str);
+        ImGui::Text("  %s", epoch_str);
+
+        if (sat->data_meta.format != FORMAT_UNKNOWN)
+        {
+            ImGui::Separator();
+            ImGui::Text("Data Source: %s", sat->data_meta.source_name);
+            const char *fmt_str = "Unknown";
+            switch (sat->data_meta.format)
+            {
+                case FORMAT_TLE:      fmt_str = "TLE";       break;
+                case FORMAT_OMM_JSON: fmt_str = "OMM JSON";  break;
+                case FORMAT_OMM_CSV:  fmt_str = "OMM CSV";   break;
+                case FORMAT_OMM_XML:  fmt_str = "OMM XML";   break;
+                case FORMAT_OMM_KVN:  fmt_str = "OMM KVN";   break;
+                default: break;
+            }
+            ImGui::Text("  Format: %s", fmt_str);
+        }
+
+        ImGui::TreePop();
+    }
+    ImGui::PopID();
+
+    /* -- Activate / Deactivate -------------------------------------------- */
     ImGui::Separator();
     if (sat->is_active && ImGui::Button("Deactivate", ImVec2(avail_w, 0)))
         sat->is_active = false;
     else if (!sat->is_active && ImGui::Button("Activate", ImVec2(avail_w, 0)))
         sat->is_active = true;
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Satellite Passes ------------------------------------------------------ */
@@ -946,6 +1062,7 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     ImGui::SetNextItemWidth(avail_w);
     static char min_el_buf[8] = "0";
@@ -976,6 +1093,8 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
     }
 
     ImGui::EndChild();
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Polar Plot ------------------------------------------------------------ */
@@ -1025,6 +1144,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     ImGui::Checkbox("Lunar Mode", &g_ui.polar_lunar_mode);
 
@@ -1127,12 +1247,16 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         {
             *ctx->current_epoch = passes[g_ui.selected_pass_idx].aos_epoch;
         }
+    
+        ImGui::PopTextWrapPos();
     }
     ImGui::SameLine();
     if (ImGui::Button("Doppler Analysis", ImVec2(half_w, 0)))
     {
         LayoutOpenPanel(PANEL_DOPPLER);
     }
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Doppler Analysis ------------------------------------------------------ */
@@ -1142,6 +1266,7 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
     (void)ctx;
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     static float freq = 145800000.0f; /* default: 2m band */
     static float csv_res = 1.0f;
@@ -1158,6 +1283,8 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
     {
         /* TODO: Implement CSV export */
     }
+
+    ImGui::PopTextWrapPos();
 }
 
 /* -- Log ------------------------------------------------------------------- */
@@ -1191,6 +1318,7 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
     (void)ctx;
     (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
+    ImGui::PushTextWrapPos(0.0f);
 
     if (ImGui::Button("Clear", ImVec2(avail_w * 0.2f, 0)))
     {
@@ -1280,4 +1408,6 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
 
     LogUnlock();
     ImGui::EndChild();
+
+    ImGui::PopTextWrapPos();
 }

@@ -2,6 +2,7 @@
 #include <math.h>
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,6 +98,7 @@ const char *fs3D = "#version 330\n"
                    "    finalColor = mix(night, dayColor, blend) * fragColor;\n"
                    "}\n";
 
+/// @brief 
 const char *fs2D = "#version 330\n"
                    "in vec2 fragTexCoord;\n"
                    "in vec4 fragColor;\n"
