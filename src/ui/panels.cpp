@@ -118,6 +118,18 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     static char search_buf[64] = "";
     bool search_active = (search_buf[0] != '\0');
 
+    /* empty state - point the user at the data puller */
+    if (sat_count == 0)
+    {
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+                           "No satellites loaded yet.");
+        ImGui::TextWrapped("Add data sources in the Data Sources tab, then pull to populate this list.");
+        ImGui::Spacing();
+        if (ImGui::SmallButton(ICON_FA_DATABASE " Open Data Sources"))
+            LayoutOpenPanel(PANEL_DATA_SOURCES);
+        return;
+    }
+
     /* search box + icon buttons on the same line */
     float avail_w = ImGui::GetContentRegionAvail().x;
     float btn_w = ImGui::GetFrameHeight();
@@ -162,7 +174,16 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     }
 
     ImGui::Separator();
-    ImGui::BeginChild("##SatList");
+
+    /* cap the list at ~1/4 of the sidebar height so a huge catalogue
+     * doesn't take over the whole sidebar */
+    float sidebar_h = ImGui::GetIO().DisplaySize.y - ImGui::GetFrameHeight();
+    float max_list_h = sidebar_h * 0.25f;
+    float row_h = 20.0f + ImGui::GetStyle().ItemSpacing.y;
+    float content_h = displayed * row_h + ImGui::GetStyle().ItemSpacing.y;
+    float avail_h = ImGui::GetContentRegionAvail().y;
+    float list_h = fminf(fminf(content_h, max_list_h), avail_h);
+    ImGui::BeginChild("##SatList", ImVec2(0.0f, list_h));
 
     for (int i = 0; i < sat_count; i++)
     {
