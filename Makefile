@@ -86,6 +86,8 @@ macos: bin/TLEscope-macos
 windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
 	cp bin/TLEscope.exe $(DIST_WIN)/
+	cp $(MINGW_PREFIX)/bin/libraylib.dll $(DIST_WIN)/ 2>/dev/null || true
+	cp $(MINGW_PREFIX)/bin/glfw3.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp $(MINGW_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp -r themes $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
@@ -124,6 +126,8 @@ bin/TLEscope-macos: $(SRC) $(CJSON_SRC) | bin
 bin/TLEscope.exe: $(OBJ_WIN) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	cp $(MINGW_PREFIX)/bin/libraylib.dll bin/ 2>/dev/null || true
+	cp $(MINGW_PREFIX)/bin/glfw3.dll bin/ 2>/dev/null || true
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-arm64.exe: $(OBJ_WIN) | bin

@@ -117,6 +117,10 @@ typedef struct
     bool rot_edit_lead_time;
     bool theme_dropdown_edit;
 
+    /* RA/Dec display format state */
+    int ra_format;      /* 0 = decimal degrees, 1 = hours:minutes:seconds */
+    int dec_format;     /* 0 = decimal degrees, 1 = degrees:arcminutes:arcseconds */
+
     /* scope state */
     bool scope_drag_active;
     Vector2 scope_drag_last;
