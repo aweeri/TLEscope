@@ -4,8 +4,8 @@
 # Wraps compiler commands to show a live progress bar during compilation.
 # Usage: progress.sh <compiler_command...>
 
-COUNTER_FILE="/tmp/tlescope_build_counter"
-TOTAL_FILE="/tmp/tlescope_build_total"
+COUNTER_FILE="${COUNTER_FILE:-/tmp/tlescope_build_counter}"
+TOTAL_FILE="${TOTAL_FILE:-/tmp/tlescope_build_total}"
 
 # If total file doesn't exist, just run the command directly (fallback)
 if [ ! -f "$TOTAL_FILE" ]; then
@@ -65,7 +65,7 @@ for ((i=0; i<E; i++)); do BAR="${BAR}░"; done
 # -- Extract the source filename being compiled --
 SRC=""
 for arg in "$@"; do
-    if [[ "$arg" == *.cpp ]]; then
+    if [[ "$arg" == *.cpp || "$arg" == *.c ]]; then
         SRC=$(basename "$arg")
         break
     fi

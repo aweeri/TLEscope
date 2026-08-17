@@ -40,10 +40,13 @@ IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tabl
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 CJSON_SRC    = lib/cjson/cJSON.c
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o) $(CJSON_SRC:lib/cjson/%.c=build/%.o)
+OBJ_WIN      = $(SRC:src/%.cpp=build_win/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build_win/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build_win/%.o) $(CJSON_SRC:lib/cjson/%.c=build_win/%.o)
 
-# a progress bar! (linux only)
+# a progress bar!
 TOTAL_OBJ := $(words $(OBJ))
 $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescope_build_counter)
+TOTAL_WIN_OBJ := $(words $(OBJ_WIN))
+$(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp/tlescope_build_counter_win)
 
 # Linux raylib linking - prefer system raylib, fall back to bundled (wayland crap test)
 RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
@@ -142,11 +145,15 @@ bin/TLEscope-macos: $(SRC) $(CJSON_SRC) | bin
 	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
-bin/TLEscope.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
+bin/TLEscope.exe: $(OBJ_WIN) | bin
+	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-arm64.exe: $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
+bin/TLEscope-arm64.exe: $(OBJ_WIN) | bin
+	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 build/%.o: src/%.cpp | build
 	@mkdir -p $(@D)
@@ -164,8 +171,27 @@ build/%.o: lib/cjson/%.c | build
 	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -x c++ -c $< -o $@
 
+build_win/%.o: src/%.cpp | build_win
+	@mkdir -p $(@D)
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+
+build_win/%.o: lib/imgui/%.cpp | build_win
+	@mkdir -p $(@D)
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+
+build_win/%.o: lib/rlImGui/%.cpp | build_win
+	@mkdir -p $(@D)
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+
+build_win/%.o: lib/cjson/%.c | build_win
+	@mkdir -p $(@D)
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -x c++ -c $< -o $@
+
 build:
 	mkdir -p build
+
+build_win:
+	mkdir -p build_win
 
 bin:
 	mkdir -p bin
@@ -181,7 +207,7 @@ raylib-crossbuild:
 	docker run --rm -v "$(PWD)/lib:/build/lib" tlescope-crossbuild
 
 clean:
-	rm -rf build bin dist
+	rm -rf build build_win bin dist
 
 install: linux
 	@echo "Installing to $(DESTDIR)$(INSTALL_DIR)..."

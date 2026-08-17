@@ -18,3 +18,4 @@ $null
 
 # csv exports
 *.csv
+build_win/
