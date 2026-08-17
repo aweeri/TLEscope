@@ -60,10 +60,55 @@ static bool str_contains_ic(const char *str, const char *substr)
     return false;
 }
 
-/* -- Shared state (moved from ui.cpp) -------------------------------------- */
+/* -- Shared state ---------------------------------------------------------- */
 
-bool celestrak_sel[25] = {false};
 bool log_auto_scroll = true;
+bool log_show_timestamps = false;  /* timestamps hidden by default (cleaner) */
+
+/* -- Data Source Selection List (shopping-cart model) ---------------------- */
+
+static DataSourceSelection g_data_selections[MAX_DATA_SOURCE_SELECTIONS];
+static int g_data_selection_count = 0;
+
+/** helper: check if a selection already exists (type + identifier match) */
+static bool selection_exists(SourceType type, const char *identifier)
+{
+    for (int i = 0; i < g_data_selection_count; i++)
+    {
+        if (g_data_selections[i].type == type &&
+            strcmp(g_data_selections[i].identifier, identifier) == 0)
+            return true;
+    }
+    return false;
+}
+
+/** helper: add a selection, returns true if added */
+static bool selection_add(SourceType type, const char *name, const char *identifier,
+                          const char *paste_data, OrbitalDataFormat format)
+{
+    if (g_data_selection_count >= MAX_DATA_SOURCE_SELECTIONS) return false;
+    if (selection_exists(type, identifier)) return false;
+
+    DataSourceSelection *s = &g_data_selections[g_data_selection_count++];
+    s->type = type;
+    strncpy(s->name, name, sizeof(s->name) - 1);
+    strncpy(s->identifier, identifier, sizeof(s->identifier) - 1);
+    if (paste_data)
+        strncpy(s->paste_data, paste_data, sizeof(s->paste_data) - 1);
+    else
+        s->paste_data[0] = '\0';
+    s->format = format;
+    return true;
+}
+
+/** helper: remove a selection by index */
+static void selection_remove(int idx)
+{
+    if (idx < 0 || idx >= g_data_selection_count) return;
+    for (int i = idx; i < g_data_selection_count - 1; i++)
+        g_data_selections[i] = g_data_selections[i + 1];
+    g_data_selection_count--;
+}
 
 /* -- Satellite Manager ----------------------------------------------------- */
 
@@ -77,11 +122,11 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     float avail_w = ImGui::GetContentRegionAvail().x;
     float btn_w = ImGui::GetFrameHeight();
     ImGui::SetNextItemWidth(avail_w - btn_w * 2.0f - ImGui::GetStyle().ItemSpacing.x * 2.0f - 4.0f);
-    ImGui::InputText("##search", search_buf, sizeof(search_buf));
+    ImGui::InputText("##sat_mgr_search", search_buf, sizeof(search_buf));
     ImGui::SameLine();
 
     /* Enable All (eye icon) */
-    if (ImGui::Button(ICON_FA_EYE, ImVec2(btn_w, btn_w)))
+    if (ImGui::Button(ICON_FA_EYE "##enable_all", ImVec2(btn_w, btn_w)))
     {
         for (int i = 0; i < sat_count; i++)
         {
@@ -93,7 +138,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     ImGui::SameLine();
 
     /* Disable All (eye-slash icon) */
-    if (ImGui::Button(ICON_FA_EYE_SLASH, ImVec2(btn_w, btn_w)))
+    if (ImGui::Button(ICON_FA_EYE_SLASH "##disable_all", ImVec2(btn_w, btn_w)))
     {
         for (int i = 0; i < sat_count; i++)
         {
@@ -117,7 +162,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     }
 
     ImGui::Separator();
-    ImGui::BeginChild("SatList");
+    ImGui::BeginChild("##SatList");
 
     for (int i = 0; i < sat_count; i++)
     {
@@ -172,16 +217,22 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
-    /* -- Retlector Section (baseline) ------------------------------------- */
+    float avail_w = ImGui::GetContentRegionAvail().x;
+
+    /* ====================================================================
+     *  Retlector Section
+     * ==================================================================== */
     {
         static std::atomic<bool> s_fetch_running{false};
         static std::atomic<bool> s_fetch_done{false};
         static RetlectorGroup s_pending[MAX_RETLECTOR_GROUPS];
         static int s_pending_count = 0;
         static std::thread s_fetch_thread;
+        static int s_retlector_combo_idx = 0;
 
-        if (ImGui::CollapsingHeader("Retlector (baseline)"))
+        if (ImGui::CollapsingHeader("Retlector"))
         {
+            /* async fetch of retlector groups */
             if (!cfg->retlector_groups_fetched && !s_fetch_running.load())
             {
                 s_fetch_running = true;
@@ -222,185 +273,183 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             else if (cfg->retlector_group_count > 0)
             {
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%d sources available (CSV format)",
-                                   cfg->retlector_group_count);
-                ImGui::Separator();
-                for (int i = 0; i < cfg->retlector_group_count; i++)
+                /* dropdown + add button */
+                if (s_retlector_combo_idx >= cfg->retlector_group_count)
+                    s_retlector_combo_idx = 0;
+
+                const char *combo_preview = cfg->retlector_groups[s_retlector_combo_idx].name;
+                ImGui::SetNextItemWidth(avail_w * 0.65f);
+                if (ImGui::BeginCombo("##retlector_group", combo_preview))
                 {
-                    RetlectorGroup *g = &cfg->retlector_groups[i];
-                    ImGui::PushID(i);
-                    ImGui::Checkbox(g->name, &g->selected);
-                    ImGui::PopID();
+                    for (int i = 0; i < cfg->retlector_group_count; i++)
+                    {
+                        bool is_selected = (i == s_retlector_combo_idx);
+                        if (ImGui::Selectable(cfg->retlector_groups[i].name, is_selected))
+                            s_retlector_combo_idx = i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
+
+                ImGui::SameLine();
+
+                /* Add to Selection button (plus icon) */
+                if (ImGui::Button(ICON_FA_PLUS "##add_retlector"))
+                {
+                    const char *name = cfg->retlector_groups[s_retlector_combo_idx].name;
+                    if (!selection_add(SOURCE_RETLECTOR, name, name, NULL, FORMAT_OMM_CSV))
+                    {
+                        LOG_DEBUG("Retlector group '%s' already in selection list", name);
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Add this group to the active selections list");
             }
             else
             {
                 ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f), "Failed to reach retlector.eu");
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Use Celestrak fallback below.");
                 if (ImGui::SmallButton("Retry"))
-                {
                     cfg->retlector_groups_fetched = false;
-                }
             }
         }
     }
 
-    /* -- Celestrak Section (fallback) ------------------------------------- */
-    if (ImGui::CollapsingHeader("Celestrak (fallback)"))
+    /* ====================================================================
+     *  Celestrak Section
+     * ==================================================================== */
+    if (ImGui::CollapsingHeader("Celestrak"))
     {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "CSV format (default)");
-        ImGui::Separator();
-        for (int i = 0; i < NUM_CELESTRAK_SOURCES && i < 25; i++)
+        static int s_celestrak_combo_idx = 0;
+
+        if (s_celestrak_combo_idx >= NUM_CELESTRAK_SOURCES)
+            s_celestrak_combo_idx = 0;
+
+        const char *combo_preview = CELESTRAK_SOURCES[s_celestrak_combo_idx].name;
+        ImGui::SetNextItemWidth(avail_w * 0.65f);
+        if (ImGui::BeginCombo("##celestrak_group", combo_preview))
         {
-            ImGui::PushID(i + 1000);
-            ImGui::Checkbox(CELESTRAK_SOURCES[i].name, &celestrak_sel[i]);
-            ImGui::PopID();
+            for (int i = 0; i < NUM_CELESTRAK_SOURCES; i++)
+            {
+                bool is_selected = (i == s_celestrak_combo_idx);
+                if (ImGui::Selectable(CELESTRAK_SOURCES[i].name, is_selected))
+                    s_celestrak_combo_idx = i;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
         }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_PLUS "##add_celestrak"))
+        {
+            const char *name = CELESTRAK_SOURCES[s_celestrak_combo_idx].name;
+            if (!selection_add(SOURCE_CELESTRAK, name, name, NULL, FORMAT_OMM_CSV))
+            {
+                LOG_DEBUG("Celestrak group '%s' already in selection list", name);
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Add this group to the active selections list");
     }
 
-    /* -- Custom URL Section ------------------------------------------------ */
+    /* ====================================================================
+     *  Custom URL Section
+     * ==================================================================== */
     if (ImGui::CollapsingHeader("Custom URL"))
     {
-        static char custom_url_buf[512] = "";
-        ImGui::InputText("##custom_url", custom_url_buf, sizeof(custom_url_buf));
+        static char s_url_buf[512] = "";
+
+        /* URL input + Add button on the same line */
+        float url_btn_w = ImGui::GetFrameHeight();
+        ImGui::SetNextItemWidth(avail_w - url_btn_w - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::InputText("##custom_url", s_url_buf, sizeof(s_url_buf));
         ImGui::SameLine();
-        if (ImGui::Button("Fetch") && custom_url_buf[0])
+
+        if (ImGui::Button(ICON_FA_PLUS "##add_custom_url", ImVec2(url_btn_w, url_btn_w)) && s_url_buf[0])
         {
-            FetchResult result = FetchFromCustomURL(custom_url_buf);
-            if (result.success)
+            /* extract a short name from the URL for display */
+            const char *name_start = strrchr(s_url_buf, '/');
+            if (name_start) name_start++; else name_start = s_url_buf;
+
+            if (!selection_add(SOURCE_CUSTOM_URL, name_start, s_url_buf, NULL, FORMAT_UNKNOWN))
             {
-                const char *fmt_name = FormatToString(result.format);
-                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s", fmt_name);
-                LOG_INFO("Custom URL fetched: %s, format: %s", custom_url_buf, fmt_name);
-
-                const char *name_start = strrchr(custom_url_buf, '/');
-                if (name_start) name_start++; else name_start = custom_url_buf;
-
-                if (cfg->custom_data_source_count < MAX_CUSTOM_DATA_SOURCES)
-                {
-                    CustomDataSource *ds = &cfg->custom_data_sources[cfg->custom_data_source_count];
-                    snprintf(ds->name, sizeof(ds->name), "%.63s", name_start);
-                    snprintf(ds->url, sizeof(ds->url), "%s", custom_url_buf);
-                    ds->preferred_format = result.format;
-                    ds->selected = true;
-                    cfg->custom_data_source_count++;
-                }
-
-                int before = sat_count;
-                if (result.format == FORMAT_TLE)
-                {
-                    char *ptr = result.data;
-                    char l0[256], l1[256], l2[256];
-                    while (*ptr && sat_count < MAX_SATELLITES)
-                    {
-                        while (*ptr == '\r' || *ptr == '\n') ptr++;
-                        if (!*ptr) break;
-                        if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
-                        int j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
-                        l0[j] = '\0'; if (*ptr == '\n') ptr++;
-                        j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
-                        l1[j] = '\0'; if (*ptr == '\n') ptr++;
-                        j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
-                        l2[j] = '\0'; if (*ptr == '\n') ptr++;
-                        OrbitalDataMeta meta = {0};
-                        snprintf(meta.source_name, sizeof(meta.source_name), "custom:%.31s", name_start);
-                        meta.format = result.format;
-                        meta.fetch_time = time(NULL);
-                        add_satellite_from_tle(l0, l1, l2, &meta);
-                    }
-                }
-                else if (result.format == FORMAT_OMM_JSON)
-                {
-                    ParseOMMJson(result.data, result.size, satellites, &sat_count, MAX_SATELLITES,
-                                 "custom_url", result.format);
-                }
-                else if (result.format == FORMAT_OMM_CSV)
-                {
-                    ParseOMMCsv(result.data, result.size, satellites, &sat_count, MAX_SATELLITES,
-                                "custom_url", result.format);
-                }
-                if (sat_count > before)
-                    SaveOrbitalData("data.json", satellites, sat_count);
-
-                FreeFetchResult(&result);
-                custom_url_buf[0] = '\0';
+                LOG_DEBUG("URL '%s' already in selection list", s_url_buf);
             }
             else
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Fetch failed (HTTP %ld)", result.http_code);
-                FreeFetchResult(&result);
+                s_url_buf[0] = '\0'; /* clear on success */
             }
         }
-
-        if (custom_url_buf[0])
-        {
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Enter URL and press Fetch to auto-detect format");
-        }
-
-        if (cfg->custom_data_source_count > 0)
-        {
-            ImGui::Separator();
-            for (int i = 0; i < cfg->custom_data_source_count; i++)
-            {
-                CustomDataSource *ds = &cfg->custom_data_sources[i];
-                ImGui::PushID(i + 3000);
-
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[%s]",
-                                   FormatToString(ds->preferred_format));
-                ImGui::SameLine();
-                ImGui::Checkbox(ds->name, &ds->selected);
-
-                ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 30);
-                if (ImGui::SmallButton("X"))
-                {
-                    for (int j = i; j < cfg->custom_data_source_count - 1; j++)
-                        cfg->custom_data_sources[j] = cfg->custom_data_sources[j + 1];
-                    cfg->custom_data_source_count--;
-                    ImGui::PopID();
-                    break;
-                }
-
-                ImGui::PopID();
-            }
-        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Add this URL to the active selections (fetched on pull)");
     }
 
-    /* -- Paste Entry Section ---------------------------------------------- */
-    if (ImGui::CollapsingHeader("Paste Entry"))
+    /* ====================================================================
+     *  Custom Paste Section
+     * ==================================================================== */
+    if (ImGui::CollapsingHeader("Custom Paste"))
     {
-        static char custom_paste_buf[4096] = "";
+        static char s_paste_buf[4096] = "";
+
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
             "Accepted formats: TLE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
-        ImGui::InputTextMultiline("##paste", custom_paste_buf, sizeof(custom_paste_buf),
-                                  ImVec2(0, 100));
 
-        OrbitalDataFormat paste_fmt = FORMAT_UNKNOWN;
-        bool has_content = (custom_paste_buf[0] != '\0');
-        if (has_content)
+        /* thin by default (1 line), expands as content is pasted */
+        float paste_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
+        if (s_paste_buf[0] != '\0')
         {
-            paste_fmt = DetectDataFormat(custom_paste_buf, strlen(custom_paste_buf));
+            int line_count = 1;
+            for (const char *p = s_paste_buf; *p; p++)
+                if (*p == '\n') line_count++;
+            paste_h = fminf(line_count * ImGui::GetTextLineHeightWithSpacing() + 8.0f, 200.0f);
         }
 
-        bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN) &&
-                       (cfg->custom_entry_count < MAX_CUSTOM_ENTRIES);
+        /* paste textbox + add button on the same line (mirrors the Custom URL row) */
+        float paste_btn_w = ImGui::GetFrameHeight();
+        float paste_box_w = avail_w - paste_btn_w - ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetNextItemWidth(paste_box_w);
+        ImGui::InputTextMultiline("##paste", s_paste_buf, sizeof(s_paste_buf),
+                                  ImVec2(0, paste_h));
+        ImGui::SameLine();
+
+        OrbitalDataFormat paste_fmt = FORMAT_UNKNOWN;
+        bool has_content = (s_paste_buf[0] != '\0');
+        if (has_content)
+            paste_fmt = DetectDataFormat(s_paste_buf, strlen(s_paste_buf));
+
+        bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
 
         if (!can_add)
             ImGui::BeginDisabled();
 
-        if (ImGui::Button("Add Entry"))
+        if (ImGui::Button(ICON_FA_PLUS "##add_custom_paste", ImVec2(paste_btn_w, paste_btn_w)))
         {
-            const char *fmt_name = FormatToString(paste_fmt);
-            LOG_INFO("Pasted entry detected format: %s", fmt_name);
+            /* build a short preview for the name */
+            char preview[64];
+            const char *nl = strchr(s_paste_buf, '\n');
+            if (nl)
+            {
+                int len = (int)(nl - s_paste_buf);
+                if (len > 55) len = 55;
+                strncpy(preview, s_paste_buf, len);
+                preview[len] = '\0';
+            }
+            else
+            {
+                strncpy(preview, s_paste_buf, 55);
+                preview[55] = '\0';
+            }
 
-            CustomEntry *e = &cfg->custom_entries[cfg->custom_entry_count];
-            strncpy(e->data, custom_paste_buf, sizeof(e->data) - 1);
-            e->detected_format = paste_fmt;
-            e->selected = true;
-            cfg->custom_entry_count++;
-            custom_paste_buf[0] = '\0';
+            if (!selection_add(SOURCE_CUSTOM_PASTE, preview, preview, s_paste_buf, paste_fmt))
+            {
+                LOG_DEBUG("Paste entry already in selection list");
+            }
+            else
+            {
+                s_paste_buf[0] = '\0'; /* clear on success */
+            }
         }
 
         if (!can_add)
@@ -408,133 +457,119 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         if (has_content)
         {
-            ImGui::SameLine();
             if (paste_fmt != FORMAT_UNKNOWN)
-            {
-                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s", FormatToString(paste_fmt));
-            }
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s",
+                                   FormatToString(paste_fmt));
             else
-            {
-                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Format unknown - not a valid orbital data format");
-            }
-        }
-
-        if (cfg->custom_entry_count > 0)
-        {
-            ImGui::Separator();
-            for (int i = 0; i < cfg->custom_entry_count; i++)
-            {
-                CustomEntry *e = &cfg->custom_entries[i];
-                ImGui::PushID(i + 2000);
-
-                char preview[64];
-                const char *nl = strchr(e->data, '\n');
-                if (nl)
-                {
-                    int len = (int)(nl - e->data);
-                    if (len > 60) len = 60;
-                    strncpy(preview, e->data, len);
-                    preview[len] = '\0';
-                }
-                else
-                {
-                    strncpy(preview, e->data, 60);
-                    preview[60] = '\0';
-                }
-
-                bool was_selected = e->selected;
-                ImGui::Checkbox(preview, &e->selected);
-
-                if (was_selected && !e->selected)
-                {
-                    for (int j = i; j < cfg->custom_entry_count - 1; j++)
-                        cfg->custom_entries[j] = cfg->custom_entries[j + 1];
-                    cfg->custom_entry_count--;
-                    ImGui::PopID();
-                    break;
-                }
-
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[%s]", FormatToString(e->detected_format));
-                ImGui::PopID();
-            }
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                                   "Format unknown - not a valid orbital data format");
         }
     }
 
-    /* -- Pull Button ------------------------------------------------------- */
+    /* ====================================================================
+     *  Active Selections List
+     * ==================================================================== */
     ImGui::Separator();
-    if (ImGui::Button("Pull Selected Sources", ImVec2(ImGui::GetContentRegionAvail().x, 30)))
+    ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s Active Selections",
+                       ICON_FA_LIST);
+    ImGui::Separator();
+
+    if (g_data_selection_count == 0)
     {
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+                           "No sources selected. Add sources from the sections above.");
+    }
+    else
+    {
+        /* show count */
+        char count_str[32];
+        snprintf(count_str, sizeof(count_str), "%d source(s) selected", g_data_selection_count);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", count_str);
+
+        /* scrollable list of selections */
+        ImGui::BeginChild("##active_selections", ImVec2(0, fminf(g_data_selection_count * 28.0f, 200.0f)),
+                          true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+        for (int i = 0; i < g_data_selection_count; i++)
+        {
+            DataSourceSelection *s = &g_data_selections[i];
+            ImGui::PushID(i);
+
+            /* source badge with color */
+            const char *badge = "";
+            ImVec4 badge_col;
+            switch (s->type)
+            {
+                case SOURCE_RETLECTOR:  badge = "R";  badge_col = ImVec4(0.3f, 0.6f, 1.0f, 1.0f); break;
+                case SOURCE_CELESTRAK:  badge = "C";  badge_col = ImVec4(0.3f, 1.0f, 0.4f, 1.0f); break;
+                case SOURCE_CUSTOM_URL: badge = "URL"; badge_col = ImVec4(1.0f, 0.7f, 0.2f, 1.0f); break;
+                case SOURCE_CUSTOM_PASTE: badge = "P"; badge_col = ImVec4(0.8f, 0.4f, 1.0f, 1.0f); break;
+            }
+
+            ImGui::TextColored(badge_col, "[%s]", badge);
+            ImGui::SameLine();
+
+            /* name */
+            ImGui::TextUnformatted(s->name);
+
+            /* red X remove button on the right */
+            float x_pos = ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f;
+            ImGui::SameLine(x_pos);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+            if (ImGui::Button(ICON_FA_XMARK, ImVec2(20, 20)))
+            {
+                selection_remove(i);
+                ImGui::PopStyleColor();
+                ImGui::PopID();
+                break; /* list shifted, break to avoid invalid iteration */
+            }
+            ImGui::PopStyleColor();
+
+            ImGui::PopID();
+        }
+
+        ImGui::EndChild();
+    }
+
+    /* ====================================================================
+     *  Pull All Selected Sources Button
+     * ==================================================================== */
+    ImGui::Separator();
+    if (g_data_selection_count == 0)
+        ImGui::BeginDisabled();
+
+    if (ImGui::Button("Pull All Selected Sources", ImVec2(avail_w, 30)))
+    {
+        /* ---- Phase 1: remove satellites that came from sources we're about to re-fetch ---- */
         int new_count = 0;
         for (int i = 0; i < sat_count; i++)
         {
-            bool keep = false;
-
-            for (int j = 0; j < cfg->retlector_group_count; j++)
+            bool keep = true;
+            for (int j = 0; j < g_data_selection_count; j++)
             {
-                if (cfg->retlector_groups[j].selected)
+                DataSourceSelection *s = &g_data_selections[j];
+                char expected[80];
+                switch (s->type)
                 {
-                    char expected[80];
-                    snprintf(expected, sizeof(expected), "retlector:%s", cfg->retlector_groups[j].name);
-                    if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
-                    {
-                        keep = true;
+                    case SOURCE_RETLECTOR:
+                        snprintf(expected, sizeof(expected), "retlector:%s", s->identifier);
                         break;
-                    }
-                }
-            }
-
-            if (!keep)
-            {
-                for (int j = 0; j < NUM_CELESTRAK_SOURCES && j < 25; j++)
-                {
-                    if (celestrak_sel[j])
-                    {
-                        char expected[80];
-                        snprintf(expected, sizeof(expected), "celestrak:%s", CELESTRAK_SOURCES[j].name);
-                        if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
-                        {
-                            keep = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!keep)
-            {
-                for (int j = 0; j < cfg->custom_data_source_count; j++)
-                {
-                    if (cfg->custom_data_sources[j].selected)
-                    {
-                        char expected[80];
-                        snprintf(expected, sizeof(expected), "custom:%.31s", cfg->custom_data_sources[j].name);
-                        if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
-                        {
-                            keep = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!keep)
-            {
-                for (int j = 0; j < cfg->custom_entry_count; j++)
-                {
-                    if (cfg->custom_entries[j].selected)
-                    {
-                        char expected[80];
+                    case SOURCE_CELESTRAK:
+                        snprintf(expected, sizeof(expected), "celestrak:%s", s->identifier);
+                        break;
+                    case SOURCE_CUSTOM_URL:
+                        snprintf(expected, sizeof(expected), "custom:%.31s", s->name);
+                        break;
+                    case SOURCE_CUSTOM_PASTE:
                         snprintf(expected, sizeof(expected), "paste:%d", j);
-                        if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
-                        {
-                            keep = true;
-                            break;
-                        }
-                    }
+                        break;
+                }
+                if (strcmp(satellites[i].data_meta.source_name, expected) == 0)
+                {
+                    keep = false;
+                    break;
                 }
             }
-
             if (keep)
             {
                 if (new_count != i)
@@ -544,149 +579,191 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         }
         sat_count = new_count;
 
-        for (int i = 0; i < cfg->retlector_group_count; i++)
+        /* ---- Phase 2: fetch each selected source ---- */
+        for (int i = 0; i < g_data_selection_count; i++)
         {
-            if (!cfg->retlector_groups[i].selected) continue;
+            DataSourceSelection *s = &g_data_selections[i];
 
-            char url[512];
-            snprintf(url, sizeof(url), "https://retlector.eu/%s/csv", cfg->retlector_groups[i].name);
-            FetchResult result = FetchFromCustomURL(url);
-            if (result.success)
+            switch (s->type)
             {
-                int before = sat_count;
-                int parsed = ParseOMMCsv(result.data, result.size, satellites, &sat_count,
-                                          MAX_SATELLITES, "", FORMAT_OMM_CSV);
-                char source_tag[80];
-                snprintf(source_tag, sizeof(source_tag), "retlector:%s", cfg->retlector_groups[i].name);
-                for (int s = before; s < sat_count; s++)
-                    strncpy(satellites[s].data_meta.source_name, source_tag,
-                            sizeof(satellites[s].data_meta.source_name) - 1);
-                LOG_INFO("Retlector %s: parsed %d satellites", cfg->retlector_groups[i].name, sat_count - before);
-                FreeFetchResult(&result);
-            }
-        }
+                case SOURCE_RETLECTOR:
+                {
+                    char url[512];
+                    snprintf(url, sizeof(url), "https://retlector.eu/%s/csv", s->identifier);
+                    FetchResult result = FetchFromCustomURL(url);
+                    if (result.success)
+                    {
+                        int before = sat_count;
+                        ParseOMMCsv(result.data, result.size, satellites, &sat_count,
+                                    MAX_SATELLITES, "", FORMAT_OMM_CSV);
+                        char source_tag[80];
+                        snprintf(source_tag, sizeof(source_tag), "retlector:%s", s->identifier);
+                        for (int si = before; si < sat_count; si++)
+                            strncpy(satellites[si].data_meta.source_name, source_tag,
+                                    sizeof(satellites[si].data_meta.source_name) - 1);
+                        LOG_INFO("Retlector %s: parsed %d satellites", s->identifier, sat_count - before);
+                        FreeFetchResult(&result);
+                    }
+                    break;
+                }
 
-        {
-            for (int i = 0; i < NUM_CELESTRAK_SOURCES && i < 25; i++)
-            {
-                if (!celestrak_sel[i]) continue;
+                case SOURCE_CELESTRAK:
+                {
+                    /* find the matching source index */
+                    for (int ci = 0; ci < NUM_CELESTRAK_SOURCES; ci++)
+                    {
+                        if (strcmp(CELESTRAK_SOURCES[ci].name, s->identifier) == 0)
+                        {
+                            FetchResult result = FetchFromSource(&CELESTRAK_SOURCES[ci], FORMAT_OMM_CSV);
+                            if (result.success)
+                            {
+                                int before = sat_count;
+                                ParseOMMCsv(result.data, result.size, satellites, &sat_count,
+                                            MAX_SATELLITES, "", FORMAT_OMM_CSV);
+                                char source_tag[80];
+                                snprintf(source_tag, sizeof(source_tag), "celestrak:%s", s->identifier);
+                                for (int si = before; si < sat_count; si++)
+                                    strncpy(satellites[si].data_meta.source_name, source_tag,
+                                            sizeof(satellites[si].data_meta.source_name) - 1);
+                                LOG_INFO("Celestrak %s: parsed %d satellites", s->identifier, sat_count - before);
+                                FreeFetchResult(&result);
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
 
-                FetchResult result = FetchFromSource(&CELESTRAK_SOURCES[i], FORMAT_OMM_CSV);
-                if (result.success)
+                case SOURCE_CUSTOM_URL:
+                {
+                    FetchResult result = FetchFromCustomURL(s->identifier);
+                    if (result.success)
+                    {
+                        int before = sat_count;
+                        if (result.format == FORMAT_TLE)
+                        {
+                            char *ptr = result.data;
+                            char l0[256], l1[256], l2[256];
+                            while (*ptr && sat_count < MAX_SATELLITES)
+                            {
+                                while (*ptr == '\r' || *ptr == '\n') ptr++;
+                                if (!*ptr) break;
+                                if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
+                                int j = 0;
+                                while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
+                                l0[j] = '\0'; if (*ptr == '\n') ptr++;
+                                j = 0;
+                                while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
+                                l1[j] = '\0'; if (*ptr == '\n') ptr++;
+                                j = 0;
+                                while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
+                                l2[j] = '\0'; if (*ptr == '\n') ptr++;
+                                OrbitalDataMeta meta = {0};
+                                snprintf(meta.source_name, sizeof(meta.source_name), "custom:%.31s", s->name);
+                                meta.format = result.format;
+                                meta.fetch_time = time(NULL);
+                                add_satellite_from_tle(l0, l1, l2, &meta);
+                            }
+                        }
+                        else if (result.format == FORMAT_OMM_JSON)
+                        {
+                            ParseOMMJson(result.data, result.size, satellites, &sat_count,
+                                         MAX_SATELLITES, s->name, result.format);
+                        }
+                        else if (result.format == FORMAT_OMM_CSV)
+                        {
+                            ParseOMMCsv(result.data, result.size, satellites, &sat_count,
+                                        MAX_SATELLITES, s->name, result.format);
+                        }
+                        LOG_INFO("Custom URL %s: parsed %d satellites", s->identifier, sat_count - before);
+                        FreeFetchResult(&result);
+                    }
+                    break;
+                }
+
+                case SOURCE_CUSTOM_PASTE:
                 {
                     int before = sat_count;
-                    int parsed = ParseOMMCsv(result.data, result.size, satellites, &sat_count,
-                                              MAX_SATELLITES, "", FORMAT_OMM_CSV);
-                    char source_tag[80];
-                    snprintf(source_tag, sizeof(source_tag), "celestrak:%s", CELESTRAK_SOURCES[i].name);
-                    for (int s = before; s < sat_count; s++)
-                        strncpy(satellites[s].data_meta.source_name, source_tag,
-                                sizeof(satellites[s].data_meta.source_name) - 1);
-                    LOG_INFO("Celestrak %s: parsed %d satellites", CELESTRAK_SOURCES[i].name, sat_count - before);
-                    FreeFetchResult(&result);
-                }
-            }
-        }
-
-        for (int i = 0; i < cfg->custom_data_source_count; i++)
-        {
-            if (!cfg->custom_data_sources[i].selected) continue;
-
-            FetchResult result = FetchFromCustomURL(cfg->custom_data_sources[i].url);
-            if (result.success)
-            {
-                int before = sat_count;
-                if (result.format == FORMAT_TLE)
-                {
-                    char *ptr = result.data;
-                    char l0[256], l1[256], l2[256];
-                    while (*ptr && sat_count < MAX_SATELLITES)
+                    if (s->format == FORMAT_TLE)
                     {
-                        while (*ptr == '\r' || *ptr == '\n') ptr++;
-                        if (!*ptr) break;
-                        if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
-                        int j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
-                        l0[j] = '\0'; if (*ptr == '\n') ptr++;
-                        j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
-                        l1[j] = '\0'; if (*ptr == '\n') ptr++;
-                        j = 0;
-                        while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
-                        l2[j] = '\0'; if (*ptr == '\n') ptr++;
-                        OrbitalDataMeta meta = {0};
-                        snprintf(meta.source_name, sizeof(meta.source_name), "custom:%.31s",
-                                 cfg->custom_data_sources[i].name);
-                        meta.format = result.format;
-                        meta.fetch_time = time(NULL);
-                        add_satellite_from_tle(l0, l1, l2, &meta);
+                        char *ptr = s->paste_data;
+                        char l0[256], l1[256], l2[256];
+                        while (*ptr && sat_count < MAX_SATELLITES)
+                        {
+                            while (*ptr == '\r' || *ptr == '\n') ptr++;
+                            if (!*ptr) break;
+                            if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
+                            int j = 0;
+                            while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
+                            l0[j] = '\0'; if (*ptr == '\n') ptr++;
+                            j = 0;
+                            while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
+                            l1[j] = '\0'; if (*ptr == '\n') ptr++;
+                            j = 0;
+                            while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
+                            l2[j] = '\0'; if (*ptr == '\n') ptr++;
+                            OrbitalDataMeta meta = {0};
+                            snprintf(meta.source_name, sizeof(meta.source_name), "paste:%d", i);
+                            meta.format = s->format;
+                            meta.fetch_time = time(NULL);
+                            add_satellite_from_tle(l0, l1, l2, &meta);
+                        }
                     }
-                }
-                else if (result.format == FORMAT_OMM_JSON)
-                {
-                    ParseOMMJson(result.data, result.size, satellites, &sat_count, MAX_SATELLITES,
-                                 cfg->custom_data_sources[i].name, result.format);
-                }
-                else if (result.format == FORMAT_OMM_CSV)
-                {
-                    ParseOMMCsv(result.data, result.size, satellites, &sat_count, MAX_SATELLITES,
-                                cfg->custom_data_sources[i].name, result.format);
-                }
-                LOG_INFO("Custom URL %s: parsed %d satellites", cfg->custom_data_sources[i].url,
-                         sat_count - before);
-                FreeFetchResult(&result);
-            }
-        }
-
-        for (int i = 0; i < cfg->custom_entry_count; i++)
-        {
-            if (!cfg->custom_entries[i].selected) continue;
-
-            CustomEntry *e = &cfg->custom_entries[i];
-            int before = sat_count;
-
-            if (e->detected_format == FORMAT_TLE)
-            {
-                char *ptr = e->data;
-                char l0[256], l1[256], l2[256];
-                while (*ptr && sat_count < MAX_SATELLITES)
-                {
-                    while (*ptr == '\r' || *ptr == '\n') ptr++;
-                    if (!*ptr) break;
-                    if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
-                    int j = 0;
-                    while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
-                    l0[j] = '\0'; if (*ptr == '\n') ptr++;
-                    j = 0;
-                    while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
-                    l1[j] = '\0'; if (*ptr == '\n') ptr++;
-                    j = 0;
-                    while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
-                    l2[j] = '\0'; if (*ptr == '\n') ptr++;
-                    OrbitalDataMeta meta = {0};
-                    snprintf(meta.source_name, sizeof(meta.source_name), "paste:%d", i);
-                    meta.format = e->detected_format;
-                    meta.fetch_time = time(NULL);
-                    add_satellite_from_tle(l0, l1, l2, &meta);
+                    else if (s->format == FORMAT_OMM_JSON)
+                    {
+                        ParseOMMJson(s->paste_data, strlen(s->paste_data), satellites,
+                                     &sat_count, MAX_SATELLITES, "paste", s->format);
+                    }
+                    else if (s->format == FORMAT_OMM_CSV)
+                    {
+                        ParseOMMCsv(s->paste_data, strlen(s->paste_data), satellites,
+                                    &sat_count, MAX_SATELLITES, "paste", s->format);
+                    }
+                    LOG_INFO("Custom paste %d: parsed %d satellites", i, sat_count - before);
+                    break;
                 }
             }
-            else if (e->detected_format == FORMAT_OMM_JSON)
-            {
-                ParseOMMJson(e->data, strlen(e->data), satellites, &sat_count, MAX_SATELLITES,
-                             "paste", e->detected_format);
-            }
-            else if (e->detected_format == FORMAT_OMM_CSV)
-            {
-                ParseOMMCsv(e->data, strlen(e->data), satellites, &sat_count, MAX_SATELLITES,
-                            "paste", e->detected_format);
-            }
-
-            LOG_INFO("Custom entry %d: parsed %d satellites", i, sat_count - before);
         }
 
         SaveOrbitalData("data.json", satellites, sat_count);
         LOG_INFO("Pull complete: %d satellites total", sat_count);
     }
+
+    if (g_data_selection_count == 0)
+        ImGui::EndDisabled();
+}
+
+/* -- Layers ----------------------------------------------------------------- */
+
+void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
+{
+    (void)ctx;
+
+    /* fixed icon width so all checkboxes align vertically */
+    const float icon_w = 24.0f;
+
+    auto DrawLayerCheckbox = [&](const char *label, bool *value, const char *icon, const char *tooltip) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(*value ? g_theme.ui.ui_accent : g_theme.ui.text_secondary));
+        ImGui::TextUnformatted(icon);
+        ImGui::PopStyleColor();
+        /* pad to fixed width so next column aligns */
+        float used = ImGui::GetItemRectSize().x;
+        if (used < icon_w)
+            ImGui::SameLine(0.0f, icon_w - used);
+        else
+            ImGui::SameLine();
+        ImGui::Checkbox(label, value);
+        if (tooltip && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tooltip);
+    };
+
+    DrawLayerCheckbox("Clouds", &cfg->show_clouds, ICON_FA_CLOUD, "Show cloud layer (C)");
+    DrawLayerCheckbox("Night Lights", &cfg->show_night_lights, ICON_FA_MOON, "Show night-side city lights (N)");
+    DrawLayerCheckbox("Markers", &cfg->show_markers, ICON_FA_MAP_PIN, "Show ground markers (L)");
+    DrawLayerCheckbox("Scattering", &cfg->show_scattering, ICON_FA_SUN, "Atmospheric scattering effect");
+    DrawLayerCheckbox("Skybox", &cfg->show_skybox, ICON_FA_STAR, "Show starfield skybox");
+    DrawLayerCheckbox("Highlight Sunlit", &cfg->highlight_sunlit, ICON_FA_BOLT, "Highlight sunlit portions of orbits");
+    DrawLayerCheckbox("Slant Range", &cfg->show_slant_range, ICON_FA_RULER, "Show slant range line to home");
 }
 
 /* -- Time Control ---------------------------------------------------------- */
@@ -882,6 +959,47 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
 
 /* -- Polar Plot ------------------------------------------------------------ */
 
+static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
+{
+    /* concentric rings for 0°, 30°, 60°, 90° elevation */
+    int rings[4] = { 90, 60, 30, 0 };
+    ImU32 ring_col = IM_COL32(120, 120, 140, 80);
+    ImU32 ring_col_bold = IM_COL32(120, 120, 140, 160);
+
+    for (int r = 0; r < 4; r++)
+    {
+        float r_ratio = (90.0f - rings[r]) / 90.0f;
+        float r_px = radius * r_ratio;
+        ImU32 col = (r == 0) ? ring_col_bold : ring_col;
+        dl->AddCircle(center, r_px, col, 64, 1.0f);
+    }
+
+    /* crosshairs (N-S, E-W) */
+    dl->AddLine(ImVec2(center.x - radius, center.y), ImVec2(center.x + radius, center.y), ring_col, 1.0f);
+    dl->AddLine(ImVec2(center.x, center.y - radius), ImVec2(center.x, center.y + radius), ring_col, 1.0f);
+
+    /* cardinal labels */
+    const char *labels[] = { "N", "E", "S", "W" };
+    ImVec2 dirs[] = {
+        ImVec2(0, -1),  /* N = up */
+        ImVec2(1, 0),   /* E = right */
+        ImVec2(0, 1),   /* S = down */
+        ImVec2(-1, 0)   /* W = left */
+    };
+    ImU32 label_col = IM_COL32(180, 180, 200, 200);
+    for (int i = 0; i < 4; i++)
+    {
+        ImVec2 pos = ImVec2(center.x + dirs[i].x * (radius + 12.0f),
+                            center.y + dirs[i].y * (radius + 12.0f));
+        dl->AddText(pos, label_col, labels[i]);
+    }
+
+    /* elevation labels on the 0° ring */
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 4.0f), IM_COL32(120, 120, 140, 120), "0°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.34f + 2.0f), IM_COL32(120, 120, 140, 100), "30°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.67f + 2.0f), IM_COL32(120, 120, 140, 80), "60°");
+}
+
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
@@ -889,17 +1007,95 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 
     ImGui::Checkbox("Lunar Mode", &g_ui.polar_lunar_mode);
 
-    if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
+    /* ---- Polar plot canvas ---- */
+    float plot_size = fminf(avail_w, 360.0f);
+    ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+    ImVec2 canvas_sz = ImVec2(plot_size, plot_size);
+    ImGui::InvisibleButton("##polar_canvas", canvas_sz);
+    ImVec2 center = ImVec2(canvas_pos.x + plot_size * 0.5f, canvas_pos.y + plot_size * 0.5f);
+    float radius = plot_size * 0.5f - 20.0f;
+
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    /* background circle */
+    dl->AddCircleFilled(center, radius + 4.0f, IM_COL32(10, 10, 16, 200), 64);
+    DrawPolarPlotGrid(dl, center, radius);
+
+    /* ---- Plot satellite position ---- */
+    Satellite *sat = *ctx->selected_sat;
+    if (sat && sat->is_active)
     {
-        SatPass *pass = &passes[g_ui.selected_pass_idx];
-        ImGui::Text("Satellite: %s", pass->sat ? pass->sat->name : "N/A");
-        ImGui::Text("Max Elevation: %.1f", pass->max_el);
-        ImGui::Text("AOS: %.2f", pass->aos_epoch);
-        ImGui::Text("LOS: %.2f", pass->los_epoch);
+        double az = 0.0, el = 0.0;
+        get_az_el(sat->current_pos, ctx->gmst_deg,
+                  home_location.lat, home_location.lon, home_location.alt,
+                  &az, &el);
+
+        /* convert azimuth (degrees from North, clockwise) to canvas angle
+         * canvas: 0° = up (North), clockwise = positive screen angle */
+        float angle_rad = (float)(az * DEG2RAD);
+        float el_ratio = (90.0f - (float)el) / 90.0f;
+        float dot_r = radius * el_ratio;
+
+        ImVec2 dot_pos = ImVec2(
+            center.x + dot_r * sinf(angle_rad),
+            center.y - dot_r * cosf(angle_rad)
+        );
+
+        /* draw current position dot */
+        dl->AddCircleFilled(dot_pos, 6.0f, IM_COL32(100, 200, 255, 255), 16);
+        dl->AddCircle(dot_pos, 6.0f, IM_COL32(200, 230, 255, 200), 16, 2.0f);
+
+        /* draw path trace: compute future positions over ~90 min */
+        ImVec2 prev_pt = dot_pos;
+        int trace_steps = 60;
+        double time_step_s = 90.0; /* 90 seconds per step = 90 min total */
+        for (int j = 1; j <= trace_steps; j++)
+        {
+            double future_unix = get_unix_from_epoch(*ctx->current_epoch) + j * time_step_s;
+            Vector3 future_pos = calculate_position(sat, future_unix);
+            double faz = 0.0, fel = 0.0;
+            get_az_el(future_pos, ctx->gmst_deg,
+                      home_location.lat, home_location.lon, home_location.alt,
+                      &faz, &fel);
+
+            if (fel < 0.0) continue; /* skip below horizon */
+
+            float fa_rad = (float)(faz * DEG2RAD);
+            float fe_ratio = (90.0f - (float)fel) / 90.0f;
+            float f_r = radius * fe_ratio;
+            ImVec2 f_pos = ImVec2(
+                center.x + f_r * sinf(fa_rad),
+                center.y - f_r * cosf(fa_rad)
+            );
+
+            dl->AddLine(prev_pt, f_pos, IM_COL32(100, 200, 255, 100), 1.5f);
+            prev_pt = f_pos;
+        }
+
+        /* satellite name label */
+        char label[128];
+        snprintf(label, sizeof(label), "%s  AZ: %.1f°  EL: %.1f°", sat->name, az, el);
+        ImVec2 label_sz = ImGui::CalcTextSize(label);
+        ImVec2 label_pos = ImVec2(canvas_pos.x + 6.0f, canvas_pos.y + 4.0f);
+        dl->AddRectFilled(label_pos, ImVec2(label_pos.x + label_sz.x + 8.0f, label_pos.y + label_sz.y + 6.0f),
+                          IM_COL32(10, 10, 16, 180), 4.0f);
+        dl->AddText(ImVec2(label_pos.x + 4.0f, label_pos.y + 3.0f), IM_COL32(100, 200, 255, 255), label);
     }
     else
     {
-        ImGui::Text("Select a pass from the Passes panel");
+        const char *msg = "No satellite selected";
+        ImVec2 msg_sz = ImGui::CalcTextSize(msg);
+        dl->AddText(ImVec2(center.x - msg_sz.x * 0.5f, center.y - msg_sz.y * 0.5f),
+                    IM_COL32(120, 120, 140, 160), msg);
+    }
+
+    ImGui::Dummy(ImVec2(0, 6.0f));
+
+    /* ---- Pass info ---- */
+    if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
+    {
+        SatPass *pass = &passes[g_ui.selected_pass_idx];
+        ImGui::Text("Max Elevation: %.1f", pass->max_el);
+        ImGui::Text("AOS: %.2f  LOS: %.2f", pass->aos_epoch, pass->los_epoch);
     }
 
     ImGui::Separator();
@@ -985,15 +1181,21 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
     ImGui::TextUnformatted("|");
     ImGui::SameLine();
 
+    /* timestamp toggle (off by default) */
+    ImGui::Checkbox("TS", &log_show_timestamps);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Show/hide timestamps");
+    ImGui::SameLine();
+
     static int log_level_filter = 0;
-    ImGui::SetNextItemWidth(avail_w * 0.35f);
+    ImGui::SetNextItemWidth(avail_w * 0.25f);
     ImGui::Combo("##filter", &log_level_filter, "ALL\0INFO+\0WARN+\0ERROR\0");
     LogLevel min_level = LogLevelFilterMinLevel(log_level_filter);
 
     ImGui::Separator();
 
-    ImGui::BeginChild("LogEntries", ImVec2(0, 0), false,
-                      ImGuiWindowFlags_HorizontalScrollbar);
+    /* text-wrapped region (no horizontal scrollbar) so long lines wrap */
+    ImGui::BeginChild("##LogEntries", ImVec2(0, 0), false);
 
     int head = LogGetHeadIndex();
 
@@ -1002,6 +1204,7 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
 
     int head_for_read = (head - count + LOG_RING_CAPACITY) % LOG_RING_CAPACITY;
 
+    int display_idx = 0;
     for (int i = 0; i < count; i++)
     {
         int idx = (head_for_read + i) % LOG_RING_CAPACITY;
@@ -1020,12 +1223,33 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
             default:              color = ThemeColor(g_theme.ui.text_main);
         }
 
+        /* optionally include the timestamp prefix */
         char line_buf[576];
-        snprintf(line_buf, sizeof(line_buf), "%s %s", e->timestamp, e->message);
+        if (log_show_timestamps)
+            snprintf(line_buf, sizeof(line_buf), "%s %s", e->timestamp, e->message);
+        else
+            snprintf(line_buf, sizeof(line_buf), "%s", e->message);
+
+        /* alternating row background to visually separate log entries */
+        if (display_idx % 2 == 0)
+        {
+            ImVec2 row_min = ImGui::GetCursorScreenPos();
+            ImGui::TextUnformatted(""); /* advance cursor by one line height */
+            ImVec2 row_max = ImGui::GetCursorScreenPos();
+            row_max.x = row_min.x + ImGui::GetContentRegionAvail().x;
+            ImGui::GetWindowDrawList()->AddRectFilled(row_min, row_max,
+                IM_COL32(255, 255, 255, 12));
+            /* restore cursor to start of line */
+            ImGui::SetCursorScreenPos(row_min);
+        }
 
         ImGui::PushStyleColor(ImGuiCol_Text, color);
-        ImGui::Selectable(line_buf);
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextUnformatted(line_buf);
+        ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
+
+        display_idx++;
     }
 
     if (log_auto_scroll && count > 0)

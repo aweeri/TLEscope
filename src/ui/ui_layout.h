@@ -22,7 +22,7 @@ typedef enum
 {
     PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
     PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
-    PANEL_TIME_CTRL,        /* Time Control                 -> left  */
+    PANEL_LAYERS,           /* Layer Controls               -> left  */
     PANEL_SCOPE,            /* Scope                        -> left  */
     PANEL_ROTATOR,          /* Rotator Control              -> left  */
     PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
@@ -83,6 +83,9 @@ typedef struct
     /* open/closed state indexed by PanelId */
     bool panel_open[PANEL_COUNT];
 
+    /* panel enabled (completely shown/hidden in sidebar) indexed by PanelId */
+    bool panel_enabled[PANEL_COUNT];
+
     /* drag-reorder runtime state */
     int drag_panel;          /* PanelId currently dragged, -1 = none */
     bool drag_is_left;
@@ -93,6 +96,24 @@ typedef struct
 
     /* bottom bar visibility (View menu) */
     bool show_bottom_bar;
+
+    /* bottom bar expanded panel state */
+    bool bottom_bar_expanded;  /* whether the time-setting panel is shown */
+    int bb_year;               /* year input field */
+    int bb_day;                /* day-of-year input field (1-366) */
+    int bb_hour;               /* hour input field (0-23) */
+    int bb_min;                /* minute input field (0-59) */
+    int bb_sec;                /* second input field (0-59) */
+    float bb_speed;            /* speed multiplier input field */
+
+    /* actual rendered rect of the bottom-bar notch (ImGui display coords),
+     * captured each frame by DrawBottomBar(). The notch is centered and only
+     * spans part of the screen width, so the sidebars normally extend past it
+     * to the screen bottom; they only stop at its top edge when they
+     * horizontally overlap it (narrow windows / very wide sidebars). */
+    float bottom_bar_x;        /* left edge of the notch  */
+    float bottom_bar_w;        /* width of the notch      */
+    float bottom_bar_top;      /* top edge of the notch   */
 } UILayoutState;
 
 /* -- Globals --------------------------------------------------------------- */

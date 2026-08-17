@@ -13,12 +13,13 @@
  * chrome (header, collapse toggle, drag handle) is owned by ui_layout.cpp.
  */
 
-extern bool celestrak_sel[25];      /* celestrak selection state (data sources) */
 extern bool log_auto_scroll;        /* log auto-scroll preference               */
+extern bool log_show_timestamps;    /* show timestamps in log entries (default off) */
 
 /* panel body renderers (one per PanelId, ordered to match the registry) */
 void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg);
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg);
+void DrawPanelLayers(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg);
 void DrawPanelScope(UIContext *ctx, AppConfig *cfg);
 void DrawPanelRotator(UIContext *ctx, AppConfig *cfg);

@@ -63,29 +63,60 @@ void DrawUIText(Font font, const char *text, float x, float y, float size, Color
 
 double StepTimeMultiplier(double current, bool increase)
 {
-    /* time multiplier steps: 0, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 300, 600, 3600 */
-    const double steps[] = {0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 300.0, 600.0, 3600.0};
-    int n = sizeof(steps) / sizeof(steps[0]);
+    /* Doubling/halving time multiplier with zero-crossing:
+     *
+     * Forward  (increase=true):  double the speed
+     *   ... -4 -> -2 -> -1 -> -0.5 -> 0 -> 0.5 -> 1 -> 2 -> 4 -> ...
+     *
+     * Backward (increase=false): halve the speed
+     *   ... 4 -> 2 -> 1 -> 0.5 -> 0.25 -> 0 -> -0.5 -> -1 -> -2 -> ...
+     *
+     * When halving 0.5 -> 0.25, snap to 0 instead.
+     * Next backward from 0 -> -0.5.
+     * Same transition when coming back from negative to positive.
+     */
+    const double eps = 1e-9;
+    const double snap_threshold = 0.25;
 
     if (increase)
     {
-        for (int i = 0; i < n - 1; i++)
+        /* forward: speed up */
+        if (fabs(current) < eps)
+            return 0.5;               /* 0 -> 0.5 */
+
+        if (current < 0.0)
         {
-            if (current >= steps[i] && current < steps[i + 1] - 0.001)
-                return steps[i + 1];
+            /* negative side, moving toward zero: halve magnitude */
+            double next = current / 2.0;
+            if (fabs(next) <= snap_threshold)  /* -0.5/2=-0.25, snap to 0 */
+                return 0.0;
+            return next;
         }
-        return steps[n - 1];
+        else
+        {
+            /* positive side: double */
+            return current * 2.0;
+        }
     }
     else
     {
-        for (int i = n - 1; i > 0; i--)
+        /* backward: slow down */
+        if (fabs(current) < eps)
+            return -0.5;              /* 0 -> -0.5 */
+
+        if (current > 0.0)
         {
-            if (current <= steps[i] && current > steps[i + 1] + 0.001)
-                return steps[i - 1];
-            if (fabs(current - steps[i]) < 0.001)
-                return steps[i - 1];
+            /* positive side, moving toward zero: halve */
+            double next = current / 2.0;
+            if (next <= snap_threshold)        /* 0.5/2=0.25, snap to 0 */
+                return 0.0;
+            return next;
         }
-        return steps[0];
+        else
+        {
+            /* negative side: double magnitude in reverse */
+            return current * 2.0;
+        }
     }
 }
 
@@ -113,51 +144,209 @@ void UIOpenHelp(void) { show_help = true; }
 void UIOpenAbout(void) { show_about = true; }
 void UIRequestExit(void) { show_exit_dialog = true; }
 
-/* -- Bottom Center Time Notch ---------------------------------------------- */
+/* -- Bottom Center Time Bar ------------------------------------------------ */
 
 static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     if (!LayoutBottomBarVisible()) return;
 
-    float screen_w = (float)GetScreenWidth();
-    float screen_h = (float)GetScreenHeight();
-    float btn_sz = 30.0f;
+    /* use ImGui's display size (consistent with sidebar layout in ui_layout.cpp) */
+    float screen_w = ImGui::GetIO().DisplaySize.x;
+    float screen_h = ImGui::GetIO().DisplaySize.y;
+    float btn_sz = 24.0f;
     float spacing = 4.0f;
-    float time_text_w = 200.0f;
-    float total_w = time_text_w + 5 * (btn_sz + spacing) + spacing;
-    float x0 = (screen_w - total_w) * 0.5f;
-    float bar_h = btn_sz + 10.0f;
-    float y = screen_h - bar_h - 12.0f;
+    float time_text_w = 220.0f;
+    float speed_text_w = 56.0f;
+
+    /* collapsed bar: time + 5 buttons + expand arrow + speed label */
+    int collapsed_btns = 6; /* backward, play/pause, forward, reset, expand, (speed label inline) */
+    float collapsed_w = time_text_w + collapsed_btns * (btn_sz + spacing) + speed_text_w + spacing * 2;
+
+    /* expanded panel slides UP from behind the collapsed bar */
+    float expanded_h = 96.0f;  /* height for the time setter area */
+    float bar_h = btn_sz + 12.0f;
+    float total_h = bar_h + (g_layout.bottom_bar_expanded ? expanded_h : 0.0f);
+    float y = screen_h - total_h;
+
+    /* center the window, but ensure it doesn't clip on small screens */
+    float win_w = fmaxf(collapsed_w, 560.0f);
+    float x0 = (screen_w - win_w) * 0.5f;
+    if (x0 < 0.0f) x0 = 0.0f;
 
     ImGui::SetNextWindowPos(ImVec2(x0, y), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(total_w, bar_h));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.08f, 0.85f));
+    ImGui::SetNextWindowSize(ImVec2(win_w, total_h));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.08f, 0.92f));
     ImGui::PushStyleColor(ImGuiCol_Border,    ImVec4(0.20f, 0.20f, 0.25f, 0.70f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
+    /* sleeker frames: rounded corners + compact padding instead of big clunky buttons */
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 3.0f));
 
-    if (ImGui::Begin("##bottombar", NULL,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings))
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+    /* track whether we need to re-populate the time setter fields from sim time */
+    static bool s_needs_populate = true;
+
+    if (ImGui::Begin("##bottombar", NULL, flags))
     {
-        /* simulation time in UTC */
-        time_t now_raw = time(NULL);
-        struct tm *gmt = gmtime(&now_raw);
+        /* ---- Expanded panel (time setter) — slides up from behind the collapsed bar ---- */
+        if (g_layout.bottom_bar_expanded)
+        {
+            /* populate input fields from current simulation time when needed */
+            if (s_needs_populate)
+            {
+                double epoch = *ctx->current_epoch;
+                double unix_sec = get_unix_from_epoch(epoch);
+                time_t t = (time_t)unix_sec;
+                struct tm *gmt = gmtime(&t);
+                if (gmt)
+                {
+                    g_layout.bb_year  = gmt->tm_year + 1900;
+                    g_layout.bb_day   = gmt->tm_yday + 1;
+                    g_layout.bb_hour  = gmt->tm_hour;
+                    g_layout.bb_min   = gmt->tm_min;
+                    g_layout.bb_sec   = gmt->tm_sec;
+                }
+                g_layout.bb_speed = (float)(*ctx->time_multiplier);
+                s_needs_populate = false;
+            }
+            float avail = ImGui::GetContentRegionAvail().x;
+
+            /* ---- Time setter row: labeled inputs with clean arrow buttons ---- */
+            auto DrawTimeField = [&](const char *label, int *value, int min_v, int max_v,
+                                     float width)
+            {
+                ImGui::BeginGroup();
+                ImGui::PushID(label);
+
+                /* up arrow */
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
+                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+                {
+                    (*value)++;
+                    if (*value > max_v) *value = min_v;
+                }
+                ImGui::PopStyleVar();
+                ImGui::SameLine(0.0f, 1.0f);
+
+                /* value input */
+                ImGui::SetNextItemWidth(width);
+                if (ImGui::InputInt("##field", value, 0, 0))
+                {
+                    if (*value < min_v) *value = min_v;
+                    if (*value > max_v) *value = max_v;
+                }
+
+                /* down arrow */
+                ImGui::SameLine(0.0f, 1.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
+                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+                {
+                    (*value)--;
+                    if (*value < min_v) *value = max_v;
+                }
+                ImGui::PopStyleVar();
+
+                /* label */
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", label);
+
+                ImGui::PopID();
+                ImGui::EndGroup();
+            };
+
+            float field_w = fminf(52.0f, (avail - 280.0f) / 5.0f);
+            if (field_w < 36.0f) field_w = 36.0f;
+
+            DrawTimeField("Year", &g_layout.bb_year, 1900, 3000, field_w);
+            ImGui::SameLine(0.0f, spacing);
+            DrawTimeField("Day", &g_layout.bb_day, 1, 366, field_w);
+            ImGui::SameLine(0.0f, spacing);
+            DrawTimeField("Hour", &g_layout.bb_hour, 0, 23, field_w);
+            ImGui::SameLine(0.0f, spacing);
+            DrawTimeField("Min", &g_layout.bb_min, 0, 59, field_w);
+            ImGui::SameLine(0.0f, spacing);
+            DrawTimeField("Sec", &g_layout.bb_sec, 0, 59, field_w);
+
+            /* ---- Second row: speed + apply + reset + collapse ---- */
+            ImGui::SetNextItemWidth(84.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.ui_accent));
+            ImGui::InputFloat("##speed", &g_layout.bb_speed, 0.1f, 2.0f, "%.1fx");
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time speed multiplier");
+
+            ImGui::SameLine(0.0f, spacing * 2);
+
+            /* Apply time button */
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
+            if (ImGui::Button(ICON_FA_CHECK "##settime", ImVec2(btn_sz, btn_sz)))
+            {
+                double day_fraction = (g_layout.bb_hour +
+                                       g_layout.bb_min / 60.0 +
+                                       g_layout.bb_sec / 3600.0) / 24.0;
+                *ctx->current_epoch = g_layout.bb_year * 1000.0 +
+                                      g_layout.bb_day + day_fraction;
+                *ctx->time_multiplier = g_layout.bb_speed;
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply set time and speed");
+
+            ImGui::SameLine(0.0f, spacing);
+
+            /* Reset to Now button */
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
+            if (ImGui::Button(ICON_FA_CLOCK "##resetnow", ImVec2(btn_sz, btn_sz)))
+            {
+                *ctx->current_epoch = get_current_real_time_epoch();
+                *ctx->time_multiplier = 1.0;
+                g_layout.bb_speed = 1.0f;
+                /* repopulate fields from current time */
+                double epoch = *ctx->current_epoch;
+                double unix_sec = get_unix_from_epoch(epoch);
+                time_t t = (time_t)unix_sec;
+                struct tm *gmt = gmtime(&t);
+                if (gmt)
+                {
+                    g_layout.bb_year  = gmt->tm_year + 1900;
+                    g_layout.bb_day   = gmt->tm_yday + 1;
+                    g_layout.bb_hour  = gmt->tm_hour;
+                    g_layout.bb_min   = gmt->tm_min;
+                    g_layout.bb_sec   = gmt->tm_sec;
+                }
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current real time at 1x");
+
+            ImGui::SameLine(0.0f, spacing);
+
+            /* collapse button INSIDE the expanded panel so the setter can always be exited */
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+            if (ImGui::Button(ICON_FA_CHEVRON_DOWN "##collapse", ImVec2(btn_sz, btn_sz)))
+            {
+                g_layout.bottom_bar_expanded = false;
+                s_needs_populate = true;
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse time controls");
+
+            ImGui::Separator();
+        }
+
+        /* ---- Collapsed bar row (always visible) ---- */
+        /* simulation time display (uses simulation epoch, not wall clock) */
         char time_str[64];
-        if (gmt)
-            strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S UTC", gmt);
-        else
-            snprintf(time_str, sizeof(time_str), "---");
+        epoch_to_datetime_str(*ctx->current_epoch, time_str);
 
         ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", time_str);
-        ImGui::SameLine(0.0f, spacing);
+        ImGui::SameLine(0.0f, spacing * 2);
 
         /* slow down / reverse */
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
-        if (ImGui::Button(ICON_FA_BACKWARD, ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(ICON_FA_BACKWARD "##backward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, false);
         }
@@ -168,7 +357,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         /* play/pause */
         bool is_paused = (*ctx->time_multiplier == 0.0);
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.ui_accent));
-        if (ImGui::Button(is_paused ? ICON_FA_PLAY : ICON_FA_PAUSE, ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(is_paused ? (ICON_FA_PLAY "##playpause") : (ICON_FA_PAUSE "##playpause"), ImVec2(btn_sz, btn_sz)))
         {
             if (is_paused)
                 *ctx->time_multiplier = (*ctx->saved_multiplier != 0.0) ? *ctx->saved_multiplier : 1.0;
@@ -181,7 +370,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 
         /* accelerate */
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
-        if (ImGui::Button(ICON_FA_FORWARD, ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(ICON_FA_FORWARD "##forward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, true);
         }
@@ -191,7 +380,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 
         /* reset to now */
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
-        if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT, ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT "##reset", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->current_epoch = get_current_real_time_epoch();
             *ctx->time_multiplier = 1.0;
@@ -200,17 +389,38 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current time");
         ImGui::SameLine(0.0f, spacing);
 
-        /* open time control panel */
+        /* expand/collapse arrow — clicking makes the time setter slide UP from behind */
+        bool is_expanded = g_layout.bottom_bar_expanded;
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
-        if (ImGui::Button(ICON_FA_STOPWATCH, ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(is_expanded ? ICON_FA_CHEVRON_DOWN "##expand2" : ICON_FA_CHEVRON_UP "##expand", ImVec2(btn_sz, btn_sz)))
         {
-            LayoutTogglePanel(PANEL_TIME_CTRL);
+            g_layout.bottom_bar_expanded = !g_layout.bottom_bar_expanded;
+            /* when collapsing, mark for re-population on next expand */
+            if (!g_layout.bottom_bar_expanded)
+                s_needs_populate = true;
         }
         ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Open time control panel");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(is_expanded ? "Collapse time controls" : "Expand time controls");
+
+        /* speed indicator */
+        ImGui::SameLine(0.0f, spacing * 2);
+        char speed_str[32];
+        double mult = *ctx->time_multiplier;
+        if (fabs(mult) < 1e-9)
+            snprintf(speed_str, sizeof(speed_str), "0.0x");
+        else
+            snprintf(speed_str, sizeof(speed_str), "%.1fx", mult);
+        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", speed_str);
+
+        /* capture actual notch rect for sidebar layout (ui_layout reads this) */
+        ImVec2 bb_pos  = ImGui::GetWindowPos();
+        ImVec2 bb_size = ImGui::GetWindowSize();
+        g_layout.bottom_bar_x   = bb_pos.x;
+        g_layout.bottom_bar_w   = bb_size.x;
+        g_layout.bottom_bar_top = bb_pos.y;
     }
     ImGui::End();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(5);
     ImGui::PopStyleColor(2);
 }
 
@@ -237,7 +447,6 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::Text("Keyboard Shortcuts:");
         ImGui::BulletText("1: Satellite Manager");
         ImGui::BulletText("2: Data Sources");
-        ImGui::BulletText("3: Time Control");
         ImGui::BulletText("4: Scope");
         ImGui::BulletText("5: Satellite Passes");
         ImGui::BulletText("6: Polar Plot");
@@ -246,7 +455,6 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::BulletText("9: Log");
         ImGui::BulletText("0: Satellite Info");
         ImGui::BulletText("R: Rotator Control");
-        ImGui::BulletText("Grave: Time Control");
         ImGui::BulletText("M: Toggle 2D/3D");
         ImGui::Separator();
         if (ImGui::Button("GitHub Repository"))
@@ -499,11 +707,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     /* top navigation bar */
     DrawNavBar(ctx, cfg);
 
+    /* bottom center time notch — drawn BEFORE the sidebars so they can
+     * size themselves to its actual rendered height (g_layout.bottom_bar_top) */
+    DrawBottomBar(ctx, cfg);
+
     /* sidebar workspace (left actions / right inspector) + transparent center */
     DrawUILayout(ctx, cfg);
-
-    /* bottom center time notch */
-    DrawBottomBar(ctx, cfg);
 
     /* settings modal (centered, dimmed/blurred background) */
     DrawSettingsModal(ctx, cfg);

@@ -26,12 +26,41 @@
 /* -- Layout constants ------------------------------------------------------ */
 
 static const float HANDLE_WIDTH   = 6.0f;   /* resize strip width          */
-static const float TAB_WIDTH      = 18.0f;  /* pull-tab width              */
+static const float NOTCH_W        = 26.0f;  /* show/hide notch width       */
+static const float NOTCH_H        = 64.0f;  /* show/hide notch height      */
 static const float MIN_SIDEBAR_W  = 280.0f; /* minimum sidebar width       */
 static const float MAX_SIDEBAR_W  = 600.0f; /* maximum sidebar width       */
 static const float DEF_SIDEBAR_W  = 320.0f; /* default sidebar width       */
-static const float BOTTOM_BAR_H   = 52.0f;  /* height reserved for bottom bar (bar_h=40 + 12px margin) */
 static const float HANDLE_W       = 22.0f;  /* panel drag handle width     */
+
+/* -- Height helpers -------------------------------------------------------- */
+
+/** compute the available vertical space between the nav bar and the bottom of
+ * the screen for a sidebar occupying [x0, x1).
+ *
+ * The bottom bar is a centered notch, not a full-width bar, so a sidebar only
+ * needs to stop at the notch's top edge when it horizontally overlaps the
+ * notch (narrow windows / very wide sidebars). Otherwise it extends all the
+ * way to the bottom of the screen. Uses the notch's ACTUAL rendered rect
+ * (captured by DrawBottomBar() each frame) rather than a hardcoded height. */
+static float GetContentHeight(float x0, float x1)
+{
+    float nav_h = ImGui::GetFrameHeight();
+    float display_h = ImGui::GetIO().DisplaySize.y;
+    float bottom = display_h;
+
+    if (g_layout.show_bottom_bar && g_layout.bottom_bar_top > 0.0f)
+    {
+        /* does this sidebar horizontally overlap the notch? */
+        float notch_x0 = g_layout.bottom_bar_x;
+        float notch_x1 = g_layout.bottom_bar_x + g_layout.bottom_bar_w;
+        if (x1 > notch_x0 && x0 < notch_x1)
+            bottom = g_layout.bottom_bar_top;
+    }
+
+    float h = bottom - nav_h;
+    return (h < 50.0f) ? 50.0f : h;
+}
 
 /* -- Helper ---------------------------------------------------------------- */
 
@@ -43,16 +72,16 @@ static ImVec4 ThemeColor(const Color &c)
 /* -- Panel registry -------------------------------------------------------- */
 
 const PanelDef g_panel_defs[PANEL_COUNT] = {
-    { PANEL_SAT_MGR,      "Satellite Manager",  ICON_FA_SATELLITE,    PANEL_CAT_CORE,       SIDEBAR_LEFT,  true,  DrawPanelSatMgr },
-    { PANEL_DATA_SOURCES, "Data Sources",        ICON_FA_DATABASE,     PANEL_CAT_CORE,       SIDEBAR_LEFT,  true,  DrawPanelDataSources },
-    { PANEL_TIME_CTRL,    "Time Control",        ICON_FA_CLOCK,        PANEL_CAT_CORE,       SIDEBAR_RIGHT, false, DrawPanelTimeCtrl },
-    { PANEL_SCOPE,        "Scope",               ICON_FA_CROSSHAIRS,   PANEL_CAT_SCIENTIFIC, SIDEBAR_LEFT,  false, DrawPanelScope },
-    { PANEL_ROTATOR,      "Rotator Control",     ICON_FA_TURN_UP,      PANEL_CAT_CORE,       SIDEBAR_LEFT,  false, DrawPanelRotator },
-    { PANEL_SAT_INFO,     "Satellite Info",      ICON_FA_CIRCLE_INFO,  PANEL_CAT_INSPECTOR,  SIDEBAR_RIGHT, true,  DrawPanelSatInfo },
-    { PANEL_PASSES,       "Satellite Passes",    ICON_FA_ROUTE,        PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelPasses },
-    { PANEL_POLAR_PLOT,   "Polar Plot",          ICON_FA_COMPASS,      PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelPolarPlot },
+    { PANEL_SAT_MGR,      "Satellite Manager",  ICON_FA_SATELLITE,       PANEL_CAT_CORE,       SIDEBAR_LEFT,  true,  DrawPanelSatMgr },
+    { PANEL_DATA_SOURCES, "Data Sources",        ICON_FA_DATABASE,        PANEL_CAT_CORE,       SIDEBAR_LEFT,  true,  DrawPanelDataSources },
+    { PANEL_LAYERS,       "Layers",              ICON_FA_LAYER_GROUP,     PANEL_CAT_CORE,       SIDEBAR_LEFT,  true,  DrawPanelLayers },
+    { PANEL_SCOPE,        "Scope",               ICON_FA_CROSSHAIRS,      PANEL_CAT_SCIENTIFIC, SIDEBAR_LEFT,  false, DrawPanelScope },
+    { PANEL_ROTATOR,      "Rotator Control",     ICON_FA_TURN_UP,         PANEL_CAT_CORE,       SIDEBAR_LEFT,  false, DrawPanelRotator },
+    { PANEL_SAT_INFO,     "Satellite Info",      ICON_FA_CIRCLE_INFO,     PANEL_CAT_INSPECTOR,  SIDEBAR_RIGHT, true,  DrawPanelSatInfo },
+    { PANEL_PASSES,       "Satellite Passes",    ICON_FA_ROUTE,           PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelPasses },
+    { PANEL_POLAR_PLOT,   "Polar Plot",          ICON_FA_COMPASS,         PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelPolarPlot },
     { PANEL_DOPPLER,      "Doppler Analysis",    ICON_FA_TOWER_BROADCAST, PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelDoppler },
-    { PANEL_LOG,          "Log",                 ICON_FA_LIST,         PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelLog },
+    { PANEL_LOG,          "Log",                 ICON_FA_LIST,            PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelLog },
 };
 
 /* -- Globals --------------------------------------------------------------- */
@@ -105,6 +134,8 @@ void LayoutInitDefaults(void)
     g_layout.show_bottom_bar = true;
     g_layout.drag_panel = -1;
     g_layout.drag_target = -1;
+    g_layout.bottom_bar_expanded = false;
+    g_layout.bb_speed = 1.0f;
 
     int li = 0, ri = 0;
     for (int i = 0; i < PANEL_COUNT; i++)
@@ -115,7 +146,28 @@ void LayoutInitDefaults(void)
         else
             g_layout.right_order[ri++] = def->id;
         g_layout.panel_open[def->id] = def->default_open;
+        g_layout.panel_enabled[def->id] = true;
     }
+}
+
+/** Sanitise a panel order array: remove invalid IDs and duplicates,
+ *  filling remaining slots with -1. Returns the number of valid entries. */
+static int SanitiseOrder(int *order, int max_slots)
+{
+    bool seen[PANEL_COUNT] = {false};
+    int write = 0;
+    for (int i = 0; i < max_slots; i++)
+    {
+        int pid = order[i];
+        if (pid >= 0 && pid < PANEL_COUNT && !seen[pid])
+        {
+            seen[pid] = true;
+            order[write++] = pid;
+        }
+    }
+    for (int i = write; i < max_slots; i++)
+        order[i] = -1;
+    return write;
 }
 
 void LayoutApplyPersist(const UILayoutPersist *p)
@@ -132,15 +184,19 @@ void LayoutApplyPersist(const UILayoutPersist *p)
     for (int i = 0; i < MAX_RIGHT_PANELS; i++)
         g_layout.right_order[i] = p->right_panel_order[i];
 
+    /* sanitise: strip duplicates and invalid entries */
+    SanitiseOrder(g_layout.left_order, MAX_LEFT_PANELS);
+    SanitiseOrder(g_layout.right_order, MAX_RIGHT_PANELS);
+
     for (int i = 0; i < MAX_LEFT_PANELS; i++)
     {
-        int pid = p->left_panel_order[i];
+        int pid = g_layout.left_order[i];
         if (pid >= 0 && pid < PANEL_COUNT)
             g_layout.panel_open[pid] = p->left_panel_open[i];
     }
     for (int i = 0; i < MAX_RIGHT_PANELS; i++)
     {
-        int pid = p->right_panel_order[i];
+        int pid = g_layout.right_order[i];
         if (pid >= 0 && pid < PANEL_COUNT)
             g_layout.panel_open[pid] = p->right_panel_open[i];
     }
@@ -242,57 +298,132 @@ static int s_left_hc = 0, s_right_hc = 0;
 /*  Pull-tab                                                                  */
 /* ========================================================================== */
 
-static void DrawPullTab(bool is_left, float nav_h, float content_h)
+/* ========================================================================== */
+/*  Notch (show/hide tab)                                                     */
+/* ========================================================================== */
+
+/** Draw a small rounded notch at the edge of a hidden sidebar.
+ *  Also draws a notch on the visible sidebar edge so the user can hide it. */
+static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_visible)
 {
     float screen_w = (float)GetScreenWidth();
-    float x = is_left ? 0.0f : screen_w - TAB_WIDTH;
+    float notch_x, notch_y = nav_h + 12.0f;
+    float notch_w = NOTCH_W, notch_h = NOTCH_H;
 
-    ImGui::SetNextWindowPos(ImVec2(x, nav_h), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(TAB_WIDTH, content_h), ImGuiCond_Always);
+    if (sidebar_visible)
+    {
+        /* notch sits at the outer edge of the visible sidebar, mostly
+         * sticking out into the canvas so it never covers panel controls.
+         * Left: 4px overlap into the sidebar (the rest sticks out right).
+         * Right: fully outside the sidebar (sticks out left). */
+        float sidebar_edge = is_left ? g_layout.left_width : (screen_w - g_layout.right_width);
+        notch_x = is_left ? (sidebar_edge - 4.0f) : (sidebar_edge - notch_w + 4.0f);
+    }
+    else
+    {
+        /* notch sits at the screen edge */
+        notch_x = is_left ? 0.0f : (screen_w - notch_w);
+    }
+
+    ImGui::SetNextWindowPos(ImVec2(notch_x, notch_y), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(notch_w, notch_h), ImGuiCond_Always);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeColor(g_theme.ui.ui_primary));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
 
-    if (ImGui::Begin(is_left ? "##pull_left" : "##pull_right", NULL,
+    if (ImGui::Begin(is_left ? "##notch_left" : "##notch_right", NULL,
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_NoSavedSettings))
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground))
     {
         bool hovered = ImGui::IsWindowHovered();
-        bool clicked = ImGui::InvisibleButton("##tab", ImVec2(TAB_WIDTH, content_h));
+        bool clicked = ImGui::InvisibleButton("##notch_btn", ImVec2(notch_w, notch_h));
 
-        if (hovered || clicked)
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+
+        /* background: rounded rect with subtle border */
+        ImU32 bg_col = hovered ? IM_COL32(80, 80, 110, 230) : IM_COL32(55, 55, 75, 210);
+        ImU32 border_col = hovered ? IM_COL32(160, 160, 200, 230) : IM_COL32(110, 110, 140, 180);
+        float rounding = 4.0f;
+
+        /* clip the rounded rect on the screen-edge side so it sits flush */
+        if (is_left)
+            dl->AddRectFilled(ImVec2(0, 0), ImVec2(notch_w, notch_h), bg_col, rounding,
+                              ImDrawFlags_RoundCornersRight);
+        else
+            dl->AddRectFilled(ImVec2(0, 0), ImVec2(notch_w, notch_h), bg_col, rounding,
+                              ImDrawFlags_RoundCornersLeft);
+
+        /* border lines */
+        if (is_left)
         {
-            ImDrawList *dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled(ImVec2(0, 0), ImVec2(TAB_WIDTH, content_h),
-                              IM_COL32(255, 255, 255, 30));
+            dl->AddLine(ImVec2(notch_w - 1, 0), ImVec2(notch_w - 1, notch_h), border_col, 1.0f);
+            dl->AddLine(ImVec2(0, 0), ImVec2(notch_w - 1, 0), border_col, 1.0f);
+            dl->AddLine(ImVec2(0, notch_h - 1), ImVec2(notch_w - 1, notch_h - 1), border_col, 1.0f);
+        }
+        else
+        {
+            dl->AddLine(ImVec2(0, 0), ImVec2(0, notch_h), border_col, 1.0f);
+            dl->AddLine(ImVec2(0, 0), ImVec2(notch_w - 1, 0), border_col, 1.0f);
+            dl->AddLine(ImVec2(0, notch_h - 1), ImVec2(notch_w - 1, notch_h - 1), border_col, 1.0f);
         }
 
-        const char *icon = is_left ? ICON_FA_CHEVRON_RIGHT : ICON_FA_CHEVRON_LEFT;
+        /* chevron icon: points inward when sidebar is hidden, outward when visible */
+        const char *icon;
+        if (sidebar_visible)
+            icon = is_left ? ICON_FA_CHEVRON_LEFT : ICON_FA_CHEVRON_RIGHT;
+        else
+            icon = is_left ? ICON_FA_CHEVRON_RIGHT : ICON_FA_CHEVRON_LEFT;
+
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
-        ImGui::GetWindowDrawList()->AddText(
-            ImVec2((TAB_WIDTH - icon_sz.x) * 0.5f, (content_h - icon_sz.y) * 0.5f),
-            IM_COL32(200, 200, 200, 220), icon);
+        ImU32 icon_col = hovered ? IM_COL32(200, 200, 220, 255) : IM_COL32(160, 160, 180, 200);
+        dl->AddText(ImVec2((notch_w - icon_sz.x) * 0.5f, (notch_h - icon_sz.y) * 0.5f),
+                    icon_col, icon);
 
         if (clicked)
         {
-            if (is_left)
+            if (sidebar_visible)
             {
-                g_layout.left_width   = g_layout.left_restore_width;
-                g_layout.left_hidden  = false;
-                g_layout.left_visible = true;
+                /* hide the sidebar */
+                if (is_left)
+                {
+                    g_layout.left_restore_width = (g_layout.left_width > 100.0f) ? g_layout.left_width : 320.0f;
+                    g_layout.left_hidden = true;
+                    g_layout.left_visible = false;
+                }
+                else
+                {
+                    g_layout.right_restore_width = (g_layout.right_width > 100.0f) ? g_layout.right_width : 320.0f;
+                    g_layout.right_hidden = true;
+                    g_layout.right_visible = false;
+                }
             }
             else
             {
-                g_layout.right_width   = g_layout.right_restore_width;
-                g_layout.right_hidden  = false;
-                g_layout.right_visible = true;
+                /* show the sidebar */
+                if (is_left)
+                {
+                    g_layout.left_width   = g_layout.left_restore_width;
+                    g_layout.left_hidden  = false;
+                    g_layout.left_visible = true;
+                }
+                else
+                {
+                    g_layout.right_width   = g_layout.right_restore_width;
+                    g_layout.right_hidden  = false;
+                    g_layout.right_visible = true;
+                }
             }
         }
+
         if (hovered)
-            ImGui::SetTooltip(is_left ? "Show Left Sidebar" : "Show Right Sidebar");
+        {
+            const char *tt = sidebar_visible ? (is_left ? "Hide left sidebar" : "Hide right sidebar")
+                                             : (is_left ? "Show left sidebar" : "Show right sidebar");
+            ImGui::SetTooltip("%s", tt);
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor();
@@ -544,21 +675,28 @@ static void FinishReorder()
 
 static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
 {
-    if (is_left && g_layout.left_hidden)  { DrawPullTab(true,  ImGui::GetFrameHeight(), (float)GetScreenHeight() - ImGui::GetFrameHeight() - (g_layout.show_bottom_bar ? BOTTOM_BAR_H : 0.0f)); return; }
-    if (!is_left && g_layout.right_hidden) { DrawPullTab(false, ImGui::GetFrameHeight(), (float)GetScreenHeight() - ImGui::GetFrameHeight() - (g_layout.show_bottom_bar ? BOTTOM_BAR_H : 0.0f)); return; }
+    float display_w = ImGui::GetIO().DisplaySize.x;
+    float nav_h = ImGui::GetFrameHeight();
+
+    if (is_left && g_layout.left_hidden)
+    {
+        /* notch is drawn in DrawUILayout (on top of everything) */
+        return;
+    }
+    if (!is_left && g_layout.right_hidden)
+    {
+        /* notch is drawn in DrawUILayout (on top of everything) */
+        return;
+    }
 
     if (is_left && !g_layout.left_visible) return;
     if (!is_left && !g_layout.right_visible) return;
 
-    float screen_w = (float)GetScreenWidth();
-    float screen_h = (float)GetScreenHeight();
-    float nav_h = ImGui::GetFrameHeight();
-    float bottom_h = g_layout.show_bottom_bar ? BOTTOM_BAR_H : 0.0f;
     float width = is_left ? g_layout.left_width : g_layout.right_width;
-    float x = is_left ? 0.0f : screen_w - width;
+    float x = is_left ? 0.0f : display_w - width;
     float y = nav_h;
-    float h = screen_h - nav_h - bottom_h;
-    if (h < 50.0f) h = 50.0f;
+    float x0 = x, x1 = x + width;
+    float h = GetContentHeight(x0, x1);
 
     ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(width, h), ImGuiCond_Always);
@@ -566,7 +704,7 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,            ThemeColor(ColorAlpha(g_theme.ui.window_bg, 0.94f)));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,            ThemeColor(g_theme.ui.window_bg));
     ImGui::PushStyleColor(ImGuiCol_Border,               ThemeColor(g_theme.ui.window_border));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarBg,          ThemeColor(g_theme.ui.scrollbar_bg));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab,        ThemeColor(g_theme.ui.scrollbar_grab));
@@ -576,7 +714,8 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     const char *win_name = is_left ? "##sidebar_left" : "##sidebar_right";
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-                             ImGuiWindowFlags_NoSavedSettings;
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysVerticalScrollbar;
     if (ImGui::Begin(win_name, NULL, flags))
     {
         int *order = is_left ? g_layout.left_order : g_layout.right_order;
@@ -585,19 +724,11 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 3.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 3.0f));
 
-        /* Count open panels for fair height distribution */
-        int open_count = 0;
-        for (int i = 0; i < max; i++)
-        {
-            int pid = order[i];
-            if (pid >= 0 && pid < PANEL_COUNT && g_layout.panel_open[pid])
-                open_count++;
-        }
-
         for (int i = 0; i < max; i++)
         {
             int pid = order[i];
             if (pid < 0 || pid >= PANEL_COUNT) continue;
+            if (!g_layout.panel_enabled[pid]) continue;  /* skip disabled panels entirely */
 
             const PanelDef *def = &g_panel_defs[pid];
             bool is_open = g_layout.panel_open[pid];
@@ -608,28 +739,15 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
             {
                 ImGui::Separator();
 
-                /* Each open panel gets a fair share of the available vertical
-                 * space, distributed evenly among all open panels. This prevents
-                 * one tall panel from pushing others out of view while ensuring
-                 * every panel gets adequate room. */
-                float avail_h = ImGui::GetContentRegionAvail().y;
-                float spacing_total = (open_count > 1) ? (open_count - 1) * 4.0f : 0.0f;
-                float body_h = (avail_h - spacing_total) / (float)open_count;
-                body_h = fmaxf(body_h, 100.0f);
-                body_h = fminf(body_h, 500.0f);
-
-                char child_id[32];
-                snprintf(child_id, sizeof(child_id), "##panel_body_%d", def->id);
-
+                /* Draw panel content directly — no outer BeginChild wrapper.
+                 * The sidebar itself scrolls, so panels take only the height
+                 * their content actually needs. Panels that are extremely long
+                 * (e.g. satellite list, log) have their own internal BeginChild
+                 * with scrollbars. */
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 4.0f));
-                if (ImGui::BeginChild(child_id, ImVec2(0, body_h), false,
-                                      ImGuiWindowFlags_AlwaysUseWindowPadding))
-                {
-                    ImGui::Indent(6.0f);
-                    def->draw_content(ctx, cfg);
-                    ImGui::Unindent(6.0f);
-                }
-                ImGui::EndChild();
+                ImGui::Indent(6.0f);
+                def->draw_content(ctx, cfg);
+                ImGui::Unindent(6.0f);
                 ImGui::PopStyleVar();
             }
 
@@ -685,8 +803,15 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
                 {
                     const PanelDef *def = &g_panel_defs[i];
                     if (def->category != PANEL_CAT_CORE) continue;
-                    if (ImGui::MenuItem(def->title, NULL, &g_layout.panel_open[def->id]))
-                        EnsureSidebar(def->default_side);
+                    bool enabled = g_layout.panel_enabled[def->id];
+                    if (ImGui::MenuItem(def->title, NULL, &enabled))
+                    {
+                        g_layout.panel_enabled[def->id] = enabled;
+                        if (enabled) {
+                            g_layout.panel_open[def->id] = true;
+                            EnsureSidebar(def->default_side);
+                        }
+                    }
                 }
                 ImGui::EndMenu();
             }
@@ -697,8 +822,15 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
                 {
                     const PanelDef *def = &g_panel_defs[i];
                     if (def->category != PANEL_CAT_SCIENTIFIC) continue;
-                    if (ImGui::MenuItem(def->title, NULL, &g_layout.panel_open[def->id]))
-                        EnsureSidebar(def->default_side);
+                    bool enabled = g_layout.panel_enabled[def->id];
+                    if (ImGui::MenuItem(def->title, NULL, &enabled))
+                    {
+                        g_layout.panel_enabled[def->id] = enabled;
+                        if (enabled) {
+                            g_layout.panel_open[def->id] = true;
+                            EnsureSidebar(def->default_side);
+                        }
+                    }
                 }
                 ImGui::Separator();
                 /* inspector panels also go in Scientific Tools */
@@ -706,8 +838,15 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
                 {
                     const PanelDef *def = &g_panel_defs[i];
                     if (def->category != PANEL_CAT_INSPECTOR) continue;
-                    if (ImGui::MenuItem(def->title, NULL, &g_layout.panel_open[def->id]))
-                        EnsureSidebar(def->default_side);
+                    bool enabled = g_layout.panel_enabled[def->id];
+                    if (ImGui::MenuItem(def->title, NULL, &enabled))
+                    {
+                        g_layout.panel_enabled[def->id] = enabled;
+                        if (enabled) {
+                            g_layout.panel_open[def->id] = true;
+                            EnsureSidebar(def->default_side);
+                        }
+                    }
                 }
                 ImGui::EndMenu();
             }
@@ -725,16 +864,11 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
             ImGui::EndMenu();
         }
 
-        /* ---- Settings button (right-aligned) ----------------------------- */
-        float gear_w = ImGui::CalcTextSize(ICON_FA_GEAR "##settings").x
-                       + ImGui::GetStyle().FramePadding.x * 2.0f + 4.0f;
-        ImGui::SameLine(ImGui::GetWindowWidth() - gear_w - 8.0f);
-        if (ImGui::Button(ICON_FA_GEAR "##settings"))
+        /* ---- Settings menu item (after Help) ----------------------------- */
+        if (ImGui::MenuItem("Settings"))
         {
             LayoutOpenSettings();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Settings");
 
         ImGui::EndMainMenuBar();
     }
@@ -759,14 +893,7 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
-            ImGui::Checkbox("Show Clouds", &cfg->show_clouds);
-            ImGui::Checkbox("Night Lights", &cfg->show_night_lights);
-            ImGui::Checkbox("Show Markers", &cfg->show_markers);
-            ImGui::Checkbox("Scattering", &cfg->show_scattering);
-            ImGui::Checkbox("Skybox", &cfg->show_skybox);
             ImGui::Checkbox("VSync", &cfg->hint_vsync);
-            ImGui::Checkbox("Highlight Sunlit", &cfg->highlight_sunlit);
-            ImGui::Checkbox("Show Slant Range", &cfg->show_slant_range);
         }
 
         /* ---- Performance section ----------------------------------------- */
@@ -893,15 +1020,21 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
 
     /* resize strips (drawn after sidebars so they sit on top) */
     float nav_h = ImGui::GetFrameHeight();
-    float screen_h = (float)GetScreenHeight();
-    float bottom_h = g_layout.show_bottom_bar ? BOTTOM_BAR_H : 0.0f;
-    float content_h = screen_h - nav_h - bottom_h;
-    if (content_h < 50.0f) content_h = 50.0f;
+    float display_w = ImGui::GetIO().DisplaySize.x;
 
     if (g_layout.left_visible && !g_layout.left_hidden)
-        DrawResizeStrip(true, nav_h, content_h);
+        DrawResizeStrip(true, nav_h, GetContentHeight(0.0f, g_layout.left_width));
     if (g_layout.right_visible && !g_layout.right_hidden)
-        DrawResizeStrip(false, nav_h, content_h);
+        DrawResizeStrip(false, nav_h,
+                        GetContentHeight(display_w - g_layout.right_width, display_w));
+
+    /* show/hide notches — drawn last so they sit on top of everything.
+     * A notch appears on the visible sidebar edge (to hide it) and at the
+     * screen edge when the sidebar is hidden (to restore it). */
+    float nav_h2 = ImGui::GetFrameHeight();
+    float content_h = display_w;
+    DrawNotch(true,  nav_h2, content_h, g_layout.left_visible  && !g_layout.left_hidden);
+    DrawNotch(false, nav_h2, content_h, g_layout.right_visible && !g_layout.right_hidden);
 
     /* reorder finalisation */
     FinishReorder();

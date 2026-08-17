@@ -959,7 +959,6 @@ int main(void)
             /* panel toggle shortcuts */
             if (IsKeyPressed(KEY_ONE))   LayoutTogglePanel(PANEL_SAT_MGR);
             if (IsKeyPressed(KEY_TWO))   LayoutTogglePanel(PANEL_DATA_SOURCES);
-            if (IsKeyPressed(KEY_THREE)) LayoutTogglePanel(PANEL_TIME_CTRL);
             if (IsKeyPressed(KEY_FOUR))  LayoutTogglePanel(PANEL_SCOPE);
             if (IsKeyPressed(KEY_FIVE))  LayoutTogglePanel(PANEL_PASSES);
             if (IsKeyPressed(KEY_SIX))   LayoutTogglePanel(PANEL_POLAR_PLOT);
@@ -968,7 +967,6 @@ int main(void)
             if (IsKeyPressed(KEY_NINE))  LayoutTogglePanel(PANEL_LOG);
             if (IsKeyPressed(KEY_ZERO))  LayoutTogglePanel(PANEL_SAT_INFO);
             if (IsKeyPressed(KEY_R))     LayoutTogglePanel(PANEL_ROTATOR);
-            if (IsKeyPressed(KEY_GRAVE)) LayoutTogglePanel(PANEL_TIME_CTRL);
         }
 
         if (cfg.ui_scale < 0.5f)
@@ -2142,32 +2140,14 @@ int main(void)
             .camera2d = &Camera2DParams,
             .camera3d = &Camera3DParams
         };
-        /* blur + darken the background behind the settings modal.
-         * The screen is downscaled before the Gaussian blur for performance,
-         * then upscaled back when drawing — the low-res pass reads as a soft
-         * frosted-glass blur while keeping the CPU cost modest. */
+        /* darken the background behind the settings modal.
+         * Replaced the expensive per-frame LoadImageFromScreen + Gaussian blur
+         * with a simple dark overlay — much cheaper, no font-atlas bleed-through,
+         * and still provides clear visual separation for the modal. */
         if (LayoutSettingsOpen())
         {
-            Image screen = LoadImageFromScreen();
-            if (screen.data != NULL)
-            {
-                int dw = screen.width  / 4;
-                int dh = screen.height / 4;
-                if (dw < 16) dw = 16;
-                if (dh < 16) dh = 16;
-                ImageResize(&screen, dw, dh);
-                ImageBlurGaussian(&screen, 10);
-                Texture2D blurTex = LoadTextureFromImage(screen);
-                UnloadImage(screen);
-                DrawTexturePro(
-                    blurTex,
-                    (Rectangle){ 0, 0, (float)blurTex.width, (float)blurTex.height },
-                    (Rectangle){ 0, 0, (float)GetScreenWidth(), (float)GetScreenHeight() },
-                    (Vector2){ 0, 0 }, 0.0f, WHITE);
-                UnloadTexture(blurTex);
-            }
             DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                          (Color){ 0, 0, 0, 110 });
+                          (Color){ 0, 0, 0, 160 });
         }
 
         DrawGUI(&uiCtx, &cfg, customFont);

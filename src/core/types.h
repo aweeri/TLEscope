@@ -89,9 +89,9 @@
 #define MAX_CUSTOM_ENTRIES 20
 
 /* sidebar layout limits */
-#define MAX_LEFT_PANELS   5
+#define MAX_LEFT_PANELS   6
 #define MAX_RIGHT_PANELS  5
-#define MAX_PANELS        10   /* PANEL_COUNT */
+#define MAX_PANELS        11   /* PANEL_COUNT */
 
 /** supported orbital data formats */
 typedef enum {
@@ -176,6 +176,25 @@ typedef struct {
     OrbitalDataFormat detected_format;
     bool selected;
 } CustomEntry;
+
+// -- Data Source Selection (shopping-cart model) -----------------------------
+
+typedef enum {
+    SOURCE_RETLECTOR,
+    SOURCE_CELESTRAK,
+    SOURCE_CUSTOM_URL,
+    SOURCE_CUSTOM_PASTE
+} SourceType;
+
+typedef struct {
+    SourceType type;
+    char name[64];         // display name (group name, URL, or paste preview)
+    char identifier[64];   // group name for retlector/celestrak, URL for custom
+    char paste_data[4096]; // raw pasted data (only for SOURCE_CUSTOM_PASTE)
+    OrbitalDataFormat format; // detected format (for paste entries)
+} DataSourceSelection;
+
+#define MAX_DATA_SOURCE_SELECTIONS 64
 
 /**
  * @brief persisted UI layout state (sidebar geometry, panel order, open state)
