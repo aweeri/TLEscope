@@ -1,39 +1,51 @@
-MINGW_PREFIX   ?= /usr/x86_64-w64-mingw32
-CLANG64_PREFIX   ?= /clangarm64
-
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
 
 CC_LINUX = g++
 CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/cjson -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+
+# raylib via system package manager (pkg-config)
+RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib)
+RAYLIB_LIBS   := $(shell pkg-config --libs raylib)
+
 CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
-CXXFLAGS_WIN = $(CXXFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
+CXXFLAGS_WIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 # Sets _WIN variables for each possible architecture
 ifeq ($(MSYSTEM),CLANGARM64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = clang++
-	LIB_WIN_PATH = -Ilib/raylib_win_arm64/include -Llib/raylib_win_arm64/lib -I$(CLANG64_PREFIX)/include -L$(CLANG64_PREFIX)/lib
 	DIST_WIN_ARM64 = dist/TLEscope-Win-arm64-Portable
 else ifeq ($(MSYSTEM),UCRT64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = g++
-	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib
 else ifeq ($(MSYSTEM),MINGW64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = g++
-	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib
 else
 	PKG_CONFIG_WIN ?= x86_64-w64-mingw32-pkg-config
     CC_WIN = x86_64-w64-mingw32-g++
-	LIB_WIN_PATH = -Ilib/raylib_win/include -Llib/raylib_win/lib -I$(MINGW_PREFIX)/include -L$(MINGW_PREFIX)/lib
 endif
 
-UNAME_M := $(shell uname -m)
-ifeq ($(UNAME_M),aarch64)
-LIB_LIN_PATH = -Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib
+CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
+ifeq ($(strip $(CURL_FIX_RAW)),)
+    CURL_FIX = -lcurl -lngtcp2_crypto_ossl -lngtcp2 -lnghttp3 -lnghttp2 -lssl -lcrypto -lssh2 -lbrotlidec -lbrotlicommon -lz -lpsl -lidn2 -lunistring -liconv -lcrypt32 -lwldap32 -lws2_32 -lnormaliz -lgdi32 -ladvapi32
 else
-LIB_LIN_PATH = -Ilib/raylib_lin/include -Llib/raylib_lin/lib
+    CURL_FIX = $(shell echo "$(CURL_FIX_RAW)" | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
 endif
+
+LDFLAGS_LIN = $(RAYLIB_LIBS) -lcurl -lm -lpthread -ldl -lrt
+LDFLAGS_WIN = $(RAYLIB_LIBS) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
+DIST_LINUX = dist/TLEscope-Linux-Portable
+DIST_WIN   = dist/TLEscope-Win-Portable
+
+INSTALL_DIR ?= /opt/TLEscope
+LINK_DIR    ?= /usr/local/bin
+APP_DIR     ?= /usr/share/applications
+
+# macOS (Apple Silicon / Intel)
+CC_MACOS = clang++
+LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
+DIST_MACOS = dist/TLEscope-macOS-Portable
 
 SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/panels.cpp src/ui/imgui_theme.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
@@ -48,43 +60,7 @@ $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescop
 TOTAL_WIN_OBJ := $(words $(OBJ_WIN))
 $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp/tlescope_build_counter_win)
 
-# Linux raylib linking - prefer system raylib, fall back to bundled (wayland crap test)
-RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
-RAYLIB_LIBS_LIN ?= $(shell pkg-config --libs raylib 2>/dev/null)
-ifeq ($(strip $(RAYLIB_LIBS_LIN)),)
-    RAYLIB_LIBS_LIN = -lraylib
-    ifneq ($(shell pkg-config --exists x11 2>/dev/null || echo no),no)
-        RAYLIB_LIBS_LIN += -lX11
-    else
-        RAYLIB_LIBS_LIN += -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon
-    endif
-endif
-
-LDFLAGS_LIN = $(LIB_LIN_PATH) $(RAYLIB_LIBS_LIN) -lcurl -lGL -lm -lpthread -ldl -lrt
-
-CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
-ifeq ($(strip $(CURL_FIX_RAW)),)
-    CURL_FIX = -lcurl -lngtcp2_crypto_ossl -lngtcp2 -lnghttp3 -lnghttp2 -lssl -lcrypto -lssh2 -lbrotlidec -lbrotlicommon -lz -lpsl -lidn2 -lunistring -liconv -lcrypt32 -lwldap32 -lws2_32 -lnormaliz -lgdi32 -ladvapi32
-else
-    CURL_FIX = $(shell echo "$(CURL_FIX_RAW)" | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
-endif
-
-LDFLAGS_WIN = $(LIB_WIN_PATH) -lraylib -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -lopengl32 -lgdi32 -lwinmm -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
-DIST_LINUX = dist/TLEscope-Linux-Portable
-DIST_WIN   = dist/TLEscope-Win-Portable
-
-INSTALL_DIR ?= /opt/TLEscope
-LINK_DIR    ?= /usr/local/bin
-APP_DIR     ?= /usr/share/applications
-
-# macOS (Apple Silicon / Intel)
-CC_MACOS = clang++
-RAYLIB_CFLAGS = $(shell pkg-config --cflags raylib 2>/dev/null)
-RAYLIB_LIBS = $(shell pkg-config --libs raylib 2>/dev/null)
-LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
-DIST_MACOS = dist/TLEscope-macOS-Portable
-
-.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild test
+.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall test
 
 all: linux
 
@@ -157,35 +133,35 @@ bin/TLEscope-arm64.exe: $(OBJ_WIN) | bin
 
 build/%.o: src/%.cpp | build
 	@mkdir -p $(@D)
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -c $< -o $@
 
 build/%.o: lib/imgui/%.cpp | build
 	@mkdir -p $(@D)
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -c $< -o $@
 
 build/%.o: lib/rlImGui/%.cpp | build
 	@mkdir -p $(@D)
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -c $< -o $@
 
 build/%.o: lib/cjson/%.c | build
 	@mkdir -p $(@D)
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) $(LIB_LIN_PATH) -x c++ -c $< -o $@
+	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -x c++ -c $< -o $@
 
 build_win/%.o: src/%.cpp | build_win
 	@mkdir -p $(@D)
-	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
 
 build_win/%.o: lib/imgui/%.cpp | build_win
 	@mkdir -p $(@D)
-	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
 
 build_win/%.o: lib/rlImGui/%.cpp | build_win
 	@mkdir -p $(@D)
-	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -c $< -o $@
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
 
 build_win/%.o: lib/cjson/%.c | build_win
 	@mkdir -p $(@D)
-	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) $(LIB_WIN_PATH) -x c++ -c $< -o $@
+	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -x c++ -c $< -o $@
 
 build:
 	mkdir -p build
@@ -195,16 +171,6 @@ build_win:
 
 bin:
 	mkdir -p bin
-
-raylib:
-	./scripts/raylib-build.sh
-
-raylib-%:
-	./scripts/raylib-build.sh $*
-
-raylib-crossbuild:
-	docker build -f scripts/raylib-crossbuild.Dockerfile -t tlescope-crossbuild .
-	docker run --rm -v "$(PWD)/lib:/build/lib" tlescope-crossbuild
 
 clean:
 	rm -rf build build_win bin dist
@@ -245,4 +211,4 @@ test: tests/test_astro
 	./tests/test_astro
 
 tests/test_astro: tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp
-	$(CC_LINUX) $(CXXFLAGS) $(LIB_LIN_PATH) -DTLESCOPE_VERSION=\"test\" tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp -lm -o tests/test_astro
+	$(CC_LINUX) $(CXXFLAGS) $(RAYLIB_CFLAGS) -DTLESCOPE_VERSION=\"test\" tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp $(RAYLIB_LIBS) -lm -o tests/test_astro

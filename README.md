@@ -127,7 +127,7 @@ Install the required build tools and libraries, then clone the repository and ex
 **Debian/Ubuntu-based systems**
 ```
 sudo apt-get update
-sudo apt-get install -y g++ make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
+sudo apt-get install -y g++ make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev libraylib-dev
 # If cross-compiling for Windows:
 sudo apt-get install -y binutils-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
@@ -137,7 +137,7 @@ make linux      # Results in dist/TLEscope-Linux-Portable/
 ```
 **Arch-based systems**
 ```
-sudo pacman -Syu --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl
+sudo pacman -Syu --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl raylib
 # If cross-compiling for Windows:
 sudo pacman -S mingw-w64-gcc
 
@@ -157,7 +157,7 @@ make macos      # Results in dist/TLEscope-macOS-Portable/
 **Windows systems (MSYS2 UCRT64 / MINGW64)**
 Install [MSYS2](https://www.msys2.org/), then run the following in a **UCRT64** terminal:
 ```
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-ngtcp2 mingw-w64-ucrt-x86_64-nghttp3 mingw-w64-ucrt-x86_64-zstd mingw-w64-ucrt-x86_64-libssh2 mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-brotli mingw-w64-ucrt-x86_64-libpsl mingw-w64-ucrt-x86_64-libidn2 mingw-w64-ucrt-x86_64-libunistring mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-pkgconf make git
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-raylib mingw-w64-ucrt-x86_64-zstd mingw-w64-ucrt-x86_64-pkgconf make git
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
 make windows
@@ -167,10 +167,9 @@ make windows
 **Windows ARM64 (MSYS2 CLANGARM64)**
 Install [MSYS2](https://www.msys2.org/), then run the following in a **CLANGARM64** terminal:
 ```
-pacman -S mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-curl mingw-w64-clang-aarch64-ngtcp2 mingw-w64-clang-aarch64-nghttp3 mingw-w64-clang-aarch64-zstd mingw-w64-clang-aarch64-libssh2 mingw-w64-clang-aarch64-openssl mingw-w64-clang-aarch64-brotli mingw-w64-clang-aarch64-libpsl mingw-w64-clang-aarch64-libidn2 mingw-w64-clang-aarch64-libunistring mingw-w64-clang-aarch64-libiconv mingw-w64-clang-aarch64-pkgconf make git
+pacman -S mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-curl mingw-w64-clang-aarch64-raylib mingw-w64-clang-aarch64-zstd mingw-w64-clang-aarch64-pkgconf make git
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
-make raylib
 make windows-arm64
 ```
 
@@ -186,8 +185,6 @@ make windows-arm64
 | `make install` | System-wide install to `/opt/TLEscope` |
 | `make uninstall` | Remove system-wide installation |
 | `make test` | Build and run unit tests |
-| `make raylib` | Build raylib from source locally |
-| `make raylib-crossbuild` | Cross-build raylib via Docker |
 | `make clean` | Remove build artifacts |
 
 ### **System-wide Installation**

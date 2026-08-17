@@ -19,3 +19,6 @@ $null
 # csv exports
 *.csv
 build_win/
+
+# Prebuilt raylib binaries (use system raylib instead)
+lib/raylib_*/
