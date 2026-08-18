@@ -715,6 +715,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     else if (cfg->ui_scale != last_ui_scale)
     {
         last_ui_scale = cfg->ui_scale;
+        /* the UI scale is baked into the font atlas, so a scale change
+         * requires rebuilding the fonts (not just re-applying the style) */
+        ThemeRebuildImGuiFonts(&g_theme, cfg->ui_scale);
         ThemeApplyToImGui(&g_theme, cfg->ui_scale);
     }
 

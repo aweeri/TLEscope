@@ -128,7 +128,11 @@ style.Colors[ImGuiCol_DockingPreview]       = ColorToImVec4(t->ui.docking_previe
     /* ── scale ────────────────────────────────────────────────────── */
     style.ScaleAllSizes(ui_scale);
     applied_scale = ui_scale;
-    io.FontGlobalScale = ui_scale;
+    /* FontGlobalScale is kept at 1.0: the UI scale is baked into the font
+     * atlas size in ThemeRebuildImGuiFonts() instead. Scaling glyphs at
+     * render time (FontGlobalScale != 1.0) places them on non-pixel-aligned
+     * positions and makes text look blurry/antialiased. */
+    io.FontGlobalScale = 1.0f;
 
     LOG_DEBUG("ImGui theme applied (scale=%.2f)", (double)ui_scale);
 }
@@ -152,13 +156,15 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     /* clear existing fonts */
     io.Fonts->Clear();
 
-    /* load the theme's font file (fallback to default via ThemeAssetPath) */
+    /* load the theme's font file (fallback to default via ThemeAssetPath).
+     * The UI scale is baked into the atlas size so glyphs are rasterized at
+     * the final pixel size (crisp text) rather than scaled at render time. */
     const char *font_path = ThemeAssetPath(t->font.file);
     ImFontConfig font_cfg;
     font_cfg.FontDataOwnedByAtlas = true;
     font_cfg.MergeMode = false;
     font_cfg.PixelSnapH = true;
-    io.Fonts->AddFontFromFileTTF(font_path, t->font.size, &font_cfg, NULL);
+    io.Fonts->AddFontFromFileTTF(font_path, t->font.size * ui_scale, &font_cfg, NULL);
 
     /* merge FontAwesome icons */
     ImFontConfig icons_cfg;
@@ -169,7 +175,7 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     io.Fonts->AddFontFromMemoryCompressedTTF(
         fa_solid_900_compressed_data,
         fa_solid_900_compressed_size,
-        t->font.icon_size,
+        t->font.icon_size * ui_scale,
         &icons_cfg,
         icon_ranges);
 
