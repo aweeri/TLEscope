@@ -883,7 +883,9 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
     if (!g_layout.settings_open) return;
 
     ImGui::OpenPopup("Settings");
-    ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_FirstUseEver);
+    /* fixed width + auto height: expanding/collapsing sections changes the
+     * height but never the width, so the modal doesn't "grow" sideways. */
+    ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_Always);
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
@@ -952,7 +954,11 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             ImGui::InputFloat("Altitude", &home_location.alt);
             if (ImGui::Button("Pick on Map"))
             {
-                *ctx->picking_home = !*ctx->picking_home;
+                /* close the modal and let the user click the map directly;
+                 * clicking the earth sets the location, Esc cancels. */
+                *ctx->picking_home = true;
+                g_layout.settings_open = false;
+                ImGui::CloseCurrentPopup();
             }
         }
 

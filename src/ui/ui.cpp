@@ -570,11 +570,33 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
     if (!cfg->show_first_run_dialog) return;
 
     ImGui::OpenPopup("Welcome to TLEscope");
+    /* give the modal a minimum content width so the button pair has
+     * symmetric breathing room instead of hugging the window edge */
+    ImGui::SetNextWindowContentSize(ImVec2(360, 0));
     if (ImGui::BeginPopupModal("Welcome to TLEscope", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Please select a graphics profile for your first run:");
+        /* centered heading */
+        const char *title = ICON_FA_SATELLITE "  Welcome to TLEscope";
+        float title_w = ImGui::CalcTextSize(title).x;
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - title_w) * 0.5f);
+        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", title);
 
-        if (ImGui::Button("Performance", ImVec2(150, 60)))
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextWrapped("Pick a graphics profile to get started. You can change these settings later from the Settings menu.");
+        ImGui::Spacing();
+
+        /* two equally-sized, aligned buttons */
+        float btn_w = 150.0f;
+        float btn_h = 60.0f;
+        float avail = ImGui::GetContentRegionAvail().x;
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
+        float total = btn_w * 2.0f + spacing;
+        ImGui::SetCursorPosX((avail - total) * 0.5f);
+
+        if (ImGui::Button("Performance", ImVec2(btn_w, btn_h)))
         {
             cfg->show_clouds = false;
             cfg->show_night_lights = false;
@@ -586,7 +608,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Aesthetic", ImVec2(150, 60)))
+        if (ImGui::Button("Aesthetic", ImVec2(btn_w, btn_h)))
         {
             cfg->show_clouds = true;
             cfg->show_night_lights = true;
@@ -598,7 +620,11 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             ImGui::CloseCurrentPopup();
         }
 
-        ImGui::Text("Settings can be tweaked later in the settings menu.");
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextWrapped("Performance disables clouds, night lights, atmospheric scattering and the skybox. Aesthetic enables all of them.");
         ImGui::EndPopup();
     }
 }
@@ -719,6 +745,23 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* settings modal (centered, dimmed/blurred background) */
     DrawSettingsModal(ctx, cfg);
+
+    /* home-location picking hint: the settings modal is closed while picking,
+     * so show a small banner telling the user how to set / cancel the pick */
+    if (*ctx->picking_home)
+    {
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f,
+                                       ImGui::GetFrameHeight() + 14.0f),
+                                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowBgAlpha(0.9f);
+        ImGui::Begin("##pick_home_hint", NULL,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing |
+                         ImGuiWindowFlags_NoNav);
+        ImGui::TextUnformatted("Click on the map to set your home location    ESC to cancel");
+        ImGui::End();
+    }
 
     /* modals */
     DrawFirstRunDialog(ctx, cfg);

@@ -541,7 +541,7 @@ int main(void)
     LOG_INFO("TLEscope %s starting", short_version);
 
     char window_title[128];
-    snprintf(window_title, sizeof(window_title), "TLEscope %s - Orbital Data Platform", short_version);
+    snprintf(window_title, sizeof(window_title), "TLEscope %s", short_version);
     InitWindow(cfg.window_width, cfg.window_height, window_title);
     LOG_INFO("Window created: %dx%d, theme=%s", cfg.window_width, cfg.window_height, cfg.theme);
 
@@ -969,6 +969,13 @@ int main(void)
             if (IsKeyPressed(KEY_NINE))  LayoutTogglePanel(PANEL_LOG);
             if (IsKeyPressed(KEY_ZERO))  LayoutTogglePanel(PANEL_SAT_INFO);
             if (IsKeyPressed(KEY_R))     LayoutTogglePanel(PANEL_ROTATOR);
+
+            /* cancel home-location picking without changing the location */
+            if (IsKeyPressed(KEY_ESCAPE) && picking_home)
+            {
+                picking_home = false;
+                LOG_INFO("Home location picking cancelled");
+            }
         }
 
         if (cfg.ui_scale < 0.5f)
@@ -1288,6 +1295,7 @@ int main(void)
                         home_location.lon = lon;
                         home_location.alt = 0.0f;
                         picking_home = false; // exit pick mode after successful set
+                        LayoutOpenSettings(); // return to the settings modal
                     }
                     // if click is not on earth, do nothing
                 }
