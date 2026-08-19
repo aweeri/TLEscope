@@ -1643,17 +1643,18 @@ int main(void)
                         for (int offset_i = -1; offset_i <= 1; offset_i++)
                         {
                             float x_off = offset_i * map_w;
+                            bool is_selected = (selected_sat == &satellites[i]);
                             for (int j = 1; j <= segments; j++)
                             {
                                 if (fabs(track_pts[j].x - track_pts[j - 1].x) < map_w * 0.6f)
                                 {
-                                    Color drawCol = ApplyAlpha(g_theme.world.orbit_highlighted, sat_alpha);
+                                    Color drawCol = ApplyAlpha(is_selected ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, sat_alpha);
                                     if (cfg.highlight_sunlit)
                                     {
                                         if (is_sunlit_arr[j])
                                             drawCol = ApplyAlpha(g_theme.world.sat_highlighted, sat_alpha);
                                         else
-                                            drawCol = ApplyAlpha(g_theme.world.orbit_normal, sat_alpha);
+                                            drawCol = ApplyAlpha(is_selected ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, sat_alpha);
                                     }
                                     DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, 2.0f / Camera2DParams.zoom, drawCol);
                                 }
@@ -1911,7 +1912,7 @@ int main(void)
                 if (sat_alpha <= 0.0f)
                     continue;
 
-                bool is_hl = (active_sat == &satellites[i]);
+                bool is_hl = (selected_sat == &satellites[i]);
                 if (!(is_pov_mode && &satellites[i] == selected_sat))
                 {
                     draw_orbit_3d(&satellites[i], current_epoch, is_hl, sat_alpha, global_orbit_step);
