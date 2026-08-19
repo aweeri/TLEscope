@@ -14,7 +14,7 @@ plans/
 /compile_commands.json
 
 $null
-
+dev_thoughts.md
 
 # csv exports
 *.csv
