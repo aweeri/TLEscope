@@ -28,11 +28,13 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale)
 
     /* ui_scale can change at runtime (settings slider / +/- keys) and
      * ThemeApplyToImGui may be re-invoked on theme switches, so scaling
-     * must be idempotent: undo the previously applied scale first, then
-     * re-apply with the new factor. Otherwise ScaleAllSizes() would
-     * accumulate on every call. */
-    static float applied_scale = 1.0f;
-    style.ScaleAllSizes(1.0f / applied_scale);
+     * must be idempotent. Reset to pristine defaults first (the theme
+     * re-applies every colour/style var below), then scale once with the
+     * new factor. This avoids ScaleAllSizes() accumulating across calls:
+     * its truncation would otherwise ratchet sizes downward on every
+     * undo/redo round-trip, eventually driving WindowMinSize below 1.0
+     * and tripping ImGui's NewFrame() assertion. */
+    style = ImGuiStyle();
 
     /* ── colour palette ──────────────────────────────────────────── */
     style.Colors[ImGuiCol_Text]                 = ColorToImVec4(t->ui.text_main);
@@ -127,7 +129,6 @@ style.Colors[ImGuiCol_DockingPreview]       = ColorToImVec4(t->ui.docking_previe
 
     /* ── scale ────────────────────────────────────────────────────── */
     style.ScaleAllSizes(ui_scale);
-    applied_scale = ui_scale;
     /* FontGlobalScale is kept at 1.0: the UI scale is baked into the font
      * atlas size in ThemeRebuildImGuiFonts() instead. Scaling glyphs at
      * render time (FontGlobalScale != 1.0) places them on non-pixel-aligned
