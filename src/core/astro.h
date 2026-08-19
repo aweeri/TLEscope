@@ -59,6 +59,12 @@ void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, 
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el);
 void CalculatePasses(Satellite *sat, double start_epoch);
 void epoch_to_time_str(double epoch, char *str);
+
+// local-time display preference (backend is UTC)
+void SetUseLocalTime(bool use_local);
+bool GetUseLocalTime(void);
+void epoch_to_local_fields(double epoch, int *year, int *day, int *hour, int *min, int *sec);
+double local_fields_to_epoch(int year, int day, int hour, int min, int sec);
 void update_orbit_cache(Satellite *sat, double current_epoch);
 bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
 int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count);

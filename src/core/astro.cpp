@@ -43,6 +43,13 @@ SatPass passes[MAX_PASSES];
 int num_passes = 0;
 Satellite *last_pass_calc_sat = NULL;
 
+/* display preference: show dates/times in the system local timezone.
+ * Backend math (SGP4, GMST, sun/moon, epoch conversions) always stays UTC. */
+static bool g_use_local_time = true;
+
+void SetUseLocalTime(bool use_local) { g_use_local_time = use_local; }
+bool GetUseLocalTime(void) { return g_use_local_time; }
+
 /** simple string-to-double extraction, avoids sscanf overhead in tight loops */
 static double parse_tle_double(const char *str, int start, int len)
 {
@@ -124,37 +131,35 @@ double epoch_to_gmst(double epoch)
     return gmst;
 }
 
-/** pretty-print for the ui so humans can actually read the time */
+/** pretty-print for the ui so humans can actually read the time.
+ *  Respects the local-time display preference; the underlying epoch stays UTC. */
 void epoch_to_datetime_str(double epoch, char *buffer)
 {
-    epoch = normalize_epoch(epoch);
-    int year = (int)(epoch / 1000.0);
-    double day_of_year = fmod(epoch, 1000.0);
-
-    int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
-        days_in_month[1] = 29;
-
-    int day = (int)day_of_year;
-    double frac = day_of_year - day;
-
-    int month = 0;
-    for (int i = 0; i < 12; i++)
+    time_t t = (time_t)get_unix_from_epoch(epoch);
+    struct tm *tm_info = g_use_local_time ? localtime(&t) : gmtime(&t);
+    if (!tm_info)
     {
-        if (day <= days_in_month[i])
-        {
-            month = i + 1;
-            break;
-        }
-        day -= days_in_month[i];
+        strcpy(buffer, "----/--/-- --:--:--");
+        return;
     }
 
-    double hours = frac * 24.0;
-    int h = (int)hours;
-    double minutes = (hours - h) * 60.0;
-    int m = (int)minutes;
-    double seconds = (minutes - m) * 60.0;
-    sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02.0f UTC", year, month, day, h, m, seconds);
+    if (g_use_local_time)
+    {
+        /* compact numeric UTC offset (e.g. +0200) instead of the long
+         * Windows timezone name like "Central European Summer Time" */
+        char tz_off[16] = "";
+        strftime(tz_off, sizeof(tz_off), "%z", tm_info);
+        if (tz_off[0] == '\0') strcpy(tz_off, "+0000");
+        sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d UTC%s",
+                tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec, tz_off);
+    }
+    else
+    {
+        sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d UTC",
+                tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    }
 }
 
 /**
@@ -773,11 +778,12 @@ void CalculatePasses(Satellite *sat, double start_epoch)
     LOG_INFO("Pass calculation complete: %d passes found", num_passes);
 }
 
-/** formats the internal epoch into a HH:MM:SS string for quick glancing */
+/** formats the internal epoch into a HH:MM:SS string for quick glancing.
+ *  Respects the local-time display preference; the underlying epoch stays UTC. */
 void epoch_to_time_str(double epoch, char *str)
 {
     time_t t = (time_t)get_unix_from_epoch(epoch);
-    struct tm *tm_info = gmtime(&t);
+    struct tm *tm_info = g_use_local_time ? localtime(&t) : gmtime(&t);
     if (tm_info)
     {
         sprintf(str, "%02d:%02d:%02d", tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
@@ -786,6 +792,60 @@ void epoch_to_time_str(double epoch, char *str)
     {
         strcpy(str, "00:00:00");
     }
+}
+
+/** populate year / day-of-year / hour / min / sec fields for the time setter,
+ *  honouring the local-time display preference. */
+void epoch_to_local_fields(double epoch, int *year, int *day, int *hour, int *min, int *sec)
+{
+    time_t t = (time_t)get_unix_from_epoch(epoch);
+    struct tm *tm_info = g_use_local_time ? localtime(&t) : gmtime(&t);
+    if (!tm_info) return;
+    *year = tm_info->tm_year + 1900;
+    *day  = tm_info->tm_yday + 1;
+    *hour = tm_info->tm_hour;
+    *min  = tm_info->tm_min;
+    *sec  = tm_info->tm_sec;
+}
+
+/** convert user-entered local fields (year, day-of-year, h:m:s) back into a
+ *  UTC-based epoch. When local time is disabled the fields are already UTC. */
+double local_fields_to_epoch(int year, int day, int hour, int min, int sec)
+{
+    if (!g_use_local_time)
+    {
+        double day_fraction = (hour + min / 60.0 + sec / 3600.0) / 24.0;
+        return (year * 1000.0) + day + day_fraction;
+    }
+
+    /* convert day-of-year to month/day (leap-aware) */
+    int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
+        days_in_month[1] = 29;
+    int month = 1;
+    while (month <= 12 && day > days_in_month[month - 1])
+    {
+        day -= days_in_month[month - 1];
+        month++;
+    }
+    if (month > 12) month = 12;
+
+    /* interpret the fields in the system local timezone, then convert to UTC */
+    struct tm tm_info;
+    memset(&tm_info, 0, sizeof(tm_info));
+    tm_info.tm_year = year - 1900;
+    tm_info.tm_mon  = month - 1;
+    tm_info.tm_mday = day;
+    tm_info.tm_hour = hour;
+    tm_info.tm_min  = min;
+    tm_info.tm_sec  = sec;
+    tm_info.tm_isdst = -1;
+    time_t unix = mktime(&tm_info);
+
+    struct tm *utc = gmtime(&unix);
+    if (!utc) return (year * 1000.0) + 1.0;
+    double day_fraction = (utc->tm_hour + utc->tm_min / 60.0 + utc->tm_sec / 3600.0) / 24.0;
+    return (utc->tm_year + 1900) * 1000.0 + (utc->tm_yday + 1) + day_fraction;
 }
 
 /**

@@ -203,18 +203,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             /* populate input fields from current simulation time when needed */
             if (s_needs_populate)
             {
-                double epoch = *ctx->current_epoch;
-                double unix_sec = get_unix_from_epoch(epoch);
-                time_t t = (time_t)unix_sec;
-                struct tm *gmt = gmtime(&t);
-                if (gmt)
-                {
-                    g_layout.bb_year  = gmt->tm_year + 1900;
-                    g_layout.bb_day   = gmt->tm_yday + 1;
-                    g_layout.bb_hour  = gmt->tm_hour;
-                    g_layout.bb_min   = gmt->tm_min;
-                    g_layout.bb_sec   = gmt->tm_sec;
-                }
+                epoch_to_local_fields(*ctx->current_epoch,
+                                      &g_layout.bb_year, &g_layout.bb_day,
+                                      &g_layout.bb_hour, &g_layout.bb_min, &g_layout.bb_sec);
                 s_needs_populate = false;
             }
             float avail = ImGui::GetContentRegionAvail().x;
@@ -295,11 +286,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
             if (ImGui::Button(ICON_FA_CHECK "##settime", ImVec2(btn_sz, btn_sz)))
             {
-                double day_fraction = (g_layout.bb_hour +
-                                       g_layout.bb_min / 60.0 +
-                                       g_layout.bb_sec / 3600.0) / 24.0;
-                *ctx->current_epoch = g_layout.bb_year * 1000.0 +
-                                      g_layout.bb_day + day_fraction;
+                *ctx->current_epoch = local_fields_to_epoch(
+                    g_layout.bb_year, g_layout.bb_day,
+                    g_layout.bb_hour, g_layout.bb_min, g_layout.bb_sec);
             }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply set time");
@@ -312,18 +301,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             {
                 *ctx->current_epoch = get_current_real_time_epoch();
                 /* repopulate fields from current time */
-                double epoch = *ctx->current_epoch;
-                double unix_sec = get_unix_from_epoch(epoch);
-                time_t t = (time_t)unix_sec;
-                struct tm *gmt = gmtime(&t);
-                if (gmt)
-                {
-                    g_layout.bb_year  = gmt->tm_year + 1900;
-                    g_layout.bb_day   = gmt->tm_yday + 1;
-                    g_layout.bb_hour  = gmt->tm_hour;
-                    g_layout.bb_min   = gmt->tm_min;
-                    g_layout.bb_sec   = gmt->tm_sec;
-                }
+                epoch_to_local_fields(*ctx->current_epoch,
+                                      &g_layout.bb_year, &g_layout.bb_day,
+                                      &g_layout.bb_hour, &g_layout.bb_min, &g_layout.bb_sec);
             }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current real time");

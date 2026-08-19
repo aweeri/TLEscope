@@ -9,6 +9,7 @@
 
 #include "ui_layout.h"
 #include "panels.h"
+#include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
 #include "util/log.h"
@@ -901,6 +902,12 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         {
             ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
             ImGui::Checkbox("VSync", &cfg->hint_vsync);
+            if (ImGui::Checkbox("Use Local Time", &cfg->use_local_time))
+            {
+                SetUseLocalTime(cfg->use_local_time);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Show dates/times in your system timezone instead of UTC");
         }
 
         /* ---- Performance section ----------------------------------------- */

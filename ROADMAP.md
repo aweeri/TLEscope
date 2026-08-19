@@ -178,17 +178,27 @@ Status markers used below:
 
 ## 5. Time and local/UTC display
 
-### 5.1 [~] Local time support
+### 5.1 [x] Local time support
 
 - Problem: all time strings use `gmtime()`, so everything is UTC. Users want a
   local/UTC toggle.
 - Plan:
-  - Detect the system timezone on first run and store it as the default in
-    Settings.
   - Add a local/UTC toggle (persisted) that switches all displayed times
-    (passes, satellite info, bottom bar, log timestamps).
-  - The bottom-bar time controls should offer a temporary UTC switch while
-    keeping the user's preferred default.
+    (passes, satellite info, bottom bar, stats overlay, log timestamps).
+  - Default to the system local timezone (no per-app timezone selection).
+  - The bottom-bar time setter round-trips local fields back to a UTC epoch so
+    the simulation stays UTC.
+- Done:
+  - `use_local_time` config field (default `true`), parsed/saved in
+    `settings.json`.
+  - `SetUseLocalTime()`/`GetUseLocalTime()` + local-aware
+    `epoch_to_datetime_str()`/`epoch_to_time_str()` in `astro.cpp` (compact
+    `UTC+0200` offset label instead of the long Windows timezone name).
+  - `epoch_to_local_fields()`/`local_fields_to_epoch()` for the time-setter
+    round-trip.
+  - "Use Local Time" toggle in Settings → Display, applied live and persisted.
+  - Passes AOS/LOS now show formatted datetimes instead of raw epoch floats.
+  - Backend (SGP4, GMST, sun/moon, epoch conversions) remains UTC-only.
 - Acceptance criteria:
   - Toggling local/UTC updates every time display in the app immediately.
   - The chosen mode survives a restart.
@@ -512,7 +522,7 @@ Use this as the definition of done for the release.
 - [ ] Rotator connects, is configurable, persists settings, and auto-steers.
 - [ ] Scope view is a large window with targeting, locking, beam highlight, and
       layer toggles.
-- [ ] Local/UTC toggle works everywhere and persists.
+- [x] Local/UTC toggle works everywhere and persists.
 - [ ] Notifications appear for the key events.
 - [ ] Van Allen and magnetosphere layers render.
 - [ ] Sensor swath visualizer draws a line / square / circle footprint from a
@@ -544,9 +554,8 @@ Use this as the definition of done for the release.
 
 ---
 
-## Suggested implementation order
+## Implementation order
 
-A dependency-aware order that keeps the app shippable at every step.
 
 1. Persistence (section 11). Active satellites, data selections, rotator, time
    preference. Everything else builds on this.

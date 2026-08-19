@@ -1295,10 +1295,12 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
 
     for (int i = 0; i < num_passes; i++)
     {
-        char label[128];
-        snprintf(label, sizeof(label), "%s - El: %.1f",
+        char label[160];
+        char aos_str[64];
+        epoch_to_time_str(passes[i].aos_epoch, aos_str);
+        snprintf(label, sizeof(label), "%s - El: %.1f @ %s",
                  passes[i].sat ? passes[i].sat->name : "Unknown",
-                 passes[i].max_el);
+                 passes[i].max_el, aos_str);
 
         if (ImGui::Selectable(label, i == g_ui.selected_pass_idx))
         {
@@ -1449,8 +1451,12 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
     {
         SatPass *pass = &passes[g_ui.selected_pass_idx];
+        char aos_str[64], los_str[64];
+        epoch_to_datetime_str(pass->aos_epoch, aos_str);
+        epoch_to_datetime_str(pass->los_epoch, los_str);
         ImGui::Text("Max Elevation: %.1f", pass->max_el);
-        ImGui::Text("AOS: %.2f  LOS: %.2f", pass->aos_epoch, pass->los_epoch);
+        ImGui::Text("AOS: %s", aos_str);
+        ImGui::Text("LOS: %s", los_str);
     }
 
     ImGui::Separator();

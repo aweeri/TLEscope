@@ -49,6 +49,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_skybox = true;       // default
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
+    config->use_local_time = true;   // default: display in system local timezone
     config->custom_data_source_count = 0;
     config->retlector_group_count = 0;
     config->retlector_groups_fetched = false;
@@ -147,6 +148,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             config->show_scattering = ParseJsonBool(text, "show_scattering", config->show_scattering);
             config->hint_vsync = ParseJsonBool(text, "hint_vsync", config->hint_vsync);
             config->show_first_run_dialog = ParseJsonBool(text, "show_first_run_dialog", config->show_first_run_dialog);
+            config->use_local_time = ParseJsonBool(text, "use_local_time", config->use_local_time);
 
             // load manual orbital data entries
             char *mt_ptr = strstr(text, "\"manual_entries\"");
@@ -629,6 +631,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
+    fprintf(file, "    \"use_local_time\": %s,\n", config->use_local_time ? "true" : "false");
     fprintf(file, "    \"data_stale_threshold_seconds\": %d,\n", config->data_stale_threshold_seconds);
 
     if (config->custom_data_source_count > 0)

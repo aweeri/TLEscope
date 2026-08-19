@@ -527,6 +527,7 @@ int main(void)
     LogInit();
 
     LoadAppConfig("settings.json", &cfg);
+    SetUseLocalTime(cfg.use_local_time);
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
