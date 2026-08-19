@@ -479,6 +479,18 @@ void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double 
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
 }
 
+/** compute apogee altitude (km) from semi-major axis and eccentricity */
+double calc_apogee_km(const Satellite *sat)
+{
+    return sat->semi_major_axis * (1.0 + sat->eccentricity) - EARTH_RADIUS_KM;
+}
+
+/** compute perigee altitude (km) from semi-major axis and eccentricity */
+double calc_perigee_km(const Satellite *sat)
+{
+    return sat->semi_major_axis * (1.0 - sat->eccentricity) - EARTH_RADIUS_KM;
+}
+
 /** predicts the timestamps for the next perigee and apoapsis */
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix)
 {

@@ -260,6 +260,8 @@ typedef struct
     bool show_scattering;
     bool hint_vsync;
     bool show_skybox;
+    bool show_ground_coverage;
+    bool show_apsides;
     bool show_first_run_dialog;
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)

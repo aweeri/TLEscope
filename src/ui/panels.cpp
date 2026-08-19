@@ -755,6 +755,8 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     DrawLayerCheckbox("Skybox", &cfg->show_skybox, ICON_FA_STAR, "Show starfield skybox");
     DrawLayerCheckbox("Highlight Sunlit", &cfg->highlight_sunlit, ICON_FA_BOLT, "Highlight sunlit portions of orbits");
     DrawLayerCheckbox("Slant Range", &cfg->show_slant_range, ICON_FA_RULER, "Show slant range line to home");
+    DrawLayerCheckbox("Ground Coverage", &cfg->show_ground_coverage, ICON_FA_ROUTE, "Show the line-of-sight ground coverage footprint");
+    DrawLayerCheckbox("Apsides", &cfg->show_apsides, ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels");
 
     ImGui::PopTextWrapPos();
 }
@@ -882,18 +884,6 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg)
 }
 
 /* -- Satellite Info (inspector) -------------------------------------------- */
-
-/** compute apogee altitude (km) from semi-major axis and eccentricity */
-static double calc_apogee_km(const Satellite *sat)
-{
-    return sat->semi_major_axis * (1.0 + sat->eccentricity) - EARTH_RADIUS_KM;
-}
-
-/** compute perigee altitude (km) from semi-major axis and eccentricity */
-static double calc_perigee_km(const Satellite *sat)
-{
-    return sat->semi_major_axis * (1.0 - sat->eccentricity) - EARTH_RADIUS_KM;
-}
 
 /** observer position in ECI, same axis convention as calculate_position() */
 static Vector3 calc_observer_eci(const Marker *obs, double gmst_deg)

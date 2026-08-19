@@ -47,6 +47,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_slant_range = false; // default
     config->show_scattering = false;  // default
     config->show_skybox = true;       // default
+    config->show_ground_coverage = true; // default
+    config->show_apsides = true;      // default
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
@@ -145,6 +147,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             config->highlight_sunlit = ParseJsonBool(text, "highlight_sunlit", config->highlight_sunlit);
             config->show_slant_range = ParseJsonBool(text, "show_slant_range", config->show_slant_range);
             config->show_skybox = ParseJsonBool(text, "show_skybox", config->show_skybox);
+            config->show_ground_coverage = ParseJsonBool(text, "show_ground_coverage", config->show_ground_coverage);
+            config->show_apsides = ParseJsonBool(text, "show_apsides", config->show_apsides);
             config->show_scattering = ParseJsonBool(text, "show_scattering", config->show_scattering);
             config->hint_vsync = ParseJsonBool(text, "hint_vsync", config->hint_vsync);
             config->show_first_run_dialog = ParseJsonBool(text, "show_first_run_dialog", config->show_first_run_dialog);
@@ -577,6 +581,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_slant_range = false;
         config->show_scattering = false;
         config->show_skybox = true;
+        config->show_ground_coverage = true;
+        config->show_apsides = true;
         config->hint_vsync = true;
         sscanf("Home", "%63[^\"]", home_location.name);
         home_location.lat = 0.00;
@@ -629,6 +635,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_slant_range\": %s,\n", config->show_slant_range ? "true" : "false");
     fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
     fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
+    fprintf(file, "    \"show_ground_coverage\": %s,\n", config->show_ground_coverage ? "true" : "false");
+    fprintf(file, "    \"show_apsides\": %s,\n", config->show_apsides ? "true" : "false");
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
     fprintf(file, "    \"use_local_time\": %s,\n", config->use_local_time ? "true" : "false");

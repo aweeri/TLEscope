@@ -1545,7 +1545,7 @@ int main(void)
                 BeginScissorMode(sc_x, sc_y, sc_w, sc_h);
 
                 /* draw 2d footprint */
-                if (active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
+                if (cfg.show_ground_coverage && active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
                 {
                     for (int i = 0; i < FP_RINGS; i++)
                     {
@@ -1661,18 +1661,30 @@ int main(void)
                                 }
                             }
 
-                            Vector2 peri2d, apo2d;
-                            get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
-                            get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
+                            if (cfg.show_apsides)
+                            {
+                                Vector2 peri2d, apo2d;
+                                get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
+                                get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
 
-                            DrawTexturePro(
-                                periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d},
-                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.periapsis, sat_alpha)
-                            );
-                            DrawTexturePro(
-                                apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d},
-                                (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
-                            );
+                                DrawTexturePro(
+                                    periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d},
+                                    (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.periapsis, sat_alpha)
+                                );
+                                DrawTexturePro(
+                                    apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d},
+                                    (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
+                                );
+
+                                if (Camera2DParams.zoom > 0.1f)
+                                {
+                                    char peri_label[32], apo_label[32];
+                                    TextCopy(peri_label, TextFormat("P %.0f km", calc_perigee_km(&satellites[i])));
+                                    TextCopy(apo_label, TextFormat("A %.0f km", calc_apogee_km(&satellites[i])));
+                                    DrawUIText(customFont, peri_label, peri2d.x + x_off + (mark_size_2d / 2.f) + 4.f, peri2d.y - (mark_size_2d / 2.f), m_text_2d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
+                                    DrawUIText(customFont, apo_label, apo2d.x + x_off + (mark_size_2d / 2.f) + 4.f, apo2d.y - (mark_size_2d / 2.f), m_text_2d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
+                                }
+                            }
                         }
                     }
 
@@ -1884,7 +1896,7 @@ int main(void)
             DrawSphere(sun_pos_3d, sun_radius * 1.5f, (Color){ 255, 255, 220, 255 });
 
             /* 3d footprint triangles */
-            if (active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
+            if (cfg.show_ground_coverage && active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
             {
                 for (int i = 0; i < FP_RINGS; i++)
                 {
@@ -2017,7 +2029,7 @@ int main(void)
             }
 
             bool hide_apsis = (is_pov_mode && selected_sat != NULL && active_sat == selected_sat);
-            if (active_sat && active_sat->is_active && !hide_apsis)
+            if (cfg.show_apsides && active_sat && active_sat->is_active && !hide_apsis)
             {
                 bool is_unselected = (selected_sat != NULL && active_sat != selected_sat);
                 float sat_alpha = is_unselected ? unselected_fade : 1.0f;
@@ -2035,6 +2047,9 @@ int main(void)
                         periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.periapsis, sat_alpha)
                     );
+                    char peri_label[32];
+                    TextCopy(peri_label, TextFormat("P %.0f km", calc_perigee_km(active_sat)));
+                    DrawUIText(customFont, peri_label, sp.x + (mark_size_3d / 2.f) + 4.f, sp.y - (mark_size_3d / 2.f), m_text_3d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
                 }
                 if (!IsOccludedByEarth(Camera3DParams.position, draw_a, draw_earth_radius))
                 {
@@ -2043,6 +2058,9 @@ int main(void)
                         apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
                     );
+                    char apo_label[32];
+                    TextCopy(apo_label, TextFormat("A %.0f km", calc_apogee_km(active_sat)));
+                    DrawUIText(customFont, apo_label, sp.x + (mark_size_3d / 2.f) + 4.f, sp.y - (mark_size_3d / 2.f), m_text_3d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
                 }
             }
 
