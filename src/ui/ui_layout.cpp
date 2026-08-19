@@ -148,6 +148,12 @@ void LayoutInitDefaults(void)
         g_layout.panel_open[def->id] = def->default_open;
         g_layout.panel_enabled[def->id] = true;
     }
+
+    /* fill unused slots with -1 so no panel id is duplicated in the arrays */
+    for (int i = li; i < MAX_LEFT_PANELS; i++)
+        g_layout.left_order[i] = -1;
+    for (int i = ri; i < MAX_RIGHT_PANELS; i++)
+        g_layout.right_order[i] = -1;
 }
 
 /** Sanitise a panel order array: remove invalid IDs and duplicates,
