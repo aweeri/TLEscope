@@ -16,6 +16,7 @@
 #include "ui/ui_layout.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
+#include "imgui.h"
 
 /**
  * @brief shader for day/night transition
@@ -608,8 +609,10 @@ int main(void)
     skyboxTexture = LoadTexture(ThemeAssetPath(g_theme.textures.skybox));
 
     /* make textures not blocky when zoomed in on */
-    SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
-    SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+    GenTextureMipmaps(&earthTexture);
+    SetTextureFilter(earthTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
+    GenTextureMipmaps(&earthNightTexture);
+    SetTextureFilter(earthNightTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
     SetTextureFilter(skyboxTexture, TEXTURE_FILTER_BILINEAR);
 
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
@@ -758,8 +761,17 @@ int main(void)
     TargetLock active_lock = LOCK_EARTH;
     double last_left_click_time = 0.0;
 
-    if (!cfg.hint_vsync) SetTargetFPS(cfg.target_fps);
-    else SetTargetFPS(0);
+    /* apply vsync / fps limit at startup so the window state matches the config */
+    if (cfg.hint_vsync)
+    {
+        SetWindowState(FLAG_VSYNC_HINT);
+        SetTargetFPS(0);
+    }
+    else
+    {
+        ClearWindowState(FLAG_VSYNC_HINT);
+        SetTargetFPS(cfg.target_fps);
+    }
     
     int current_update_idx = 0;
 
@@ -801,8 +813,10 @@ int main(void)
 
             earthTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth));
             earthNightTexture = LoadTexture(ThemeAssetPath(g_theme.textures.earth_night));
-            SetTextureFilter(earthTexture, TEXTURE_FILTER_BILINEAR);
-            SetTextureFilter(earthNightTexture, TEXTURE_FILTER_BILINEAR);
+            GenTextureMipmaps(&earthTexture);
+            SetTextureFilter(earthTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
+            GenTextureMipmaps(&earthNightTexture);
+            SetTextureFilter(earthNightTexture, TEXTURE_FILTER_ANISOTROPIC_16X);
             earthModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = earthTexture;
             earthModel.materials[0].maps[MATERIAL_MAP_EMISSION].texture = earthNightTexture;
 
@@ -2161,6 +2175,39 @@ int main(void)
         }
 
         DrawGUI(&uiCtx, &cfg, customFont);
+
+        /* statistics overlay (enabled via Settings -> Show Statistics).
+         * Positioned in the top-left corner of the central 3D view: below the
+         * nav bar and to the right of the (visible) left sidebar. */
+        if (cfg.show_statistics)
+        {
+            float stat_size = 16.0f * cfg.ui_scale;
+            float pad = 8.0f * cfg.ui_scale;
+
+            float nav_h = ImGui::GetFrameHeight();
+            float left_edge = g_layout.left_visible ? g_layout.left_width : 0.0f;
+            float x = left_edge + pad;
+            float y = nav_h + pad;
+
+            char fps_str[64];
+            TextCopy(fps_str, TextFormat("FPS: %d", GetFPS()));
+            DrawUIText(customFont, fps_str, x, y, stat_size, g_theme.ui.text_main);
+            y += stat_size + 4.0f * cfg.ui_scale;
+
+            char frame_str[64];
+            TextCopy(frame_str, TextFormat("Frame time: %.2f ms", GetFrameTime() * 1000.0f));
+            DrawUIText(customFont, frame_str, x, y, stat_size, g_theme.ui.text_secondary);
+            y += stat_size + 4.0f * cfg.ui_scale;
+
+            char sat_str[64];
+            TextCopy(sat_str, TextFormat("Satellites: %d", sat_count));
+            DrawUIText(customFont, sat_str, x, y, stat_size, g_theme.ui.text_secondary);
+            y += stat_size + 4.0f * cfg.ui_scale;
+
+            char time_str[128];
+            TextCopy(time_str, TextFormat("Time: %s", datetime_str));
+            DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_secondary);
+        }
 
         EndDrawing();
     }

@@ -906,9 +906,12 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         /* ---- Performance section ----------------------------------------- */
         if (ImGui::CollapsingHeader("Performance"))
         {
-            int fps = cfg->target_fps;
+            /* dragging the slider to max (240) enables unlimited FPS (0) */
+            int fps = (cfg->target_fps == 0) ? 240 : cfg->target_fps;
             if (ImGui::SliderInt("Max FPS", &fps, 15, 240))
-                cfg->target_fps = fps;
+                cfg->target_fps = (fps >= 240) ? 0 : fps;
+            if (cfg->target_fps == 0)
+                ImGui::TextDisabled("Unlimited FPS");
             ImGui::SliderFloat("UI Scale", &cfg->ui_scale, 0.5f, 2.0f);
         }
 
