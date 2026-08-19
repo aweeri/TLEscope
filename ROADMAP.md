@@ -559,7 +559,6 @@ Use this as the definition of done for the release.
 
 1. Persistence (section 11). Active satellites, data selections, rotator, time
    preference. Everything else builds on this.
-2. Time local/UTC (section 5). Touches passes, the bottom bar, and logs.
 3. Passes (section 2). Modes, unique IDs, progress, polar handoff.
 4. Polar plot (section 3) and Doppler (section 4). Pass path, graph, CSV.
 5. Rotator (section 6). Settings UI, persistence, overlays.
