@@ -9175,18 +9175,25 @@ bool ImGui::IsKeyReleased(ImGuiKey key, ImGuiID owner_id)
     return true;
 }
 
+// safely index the mouse-button arrays. The IM_ASSERT at each call site already
+// guarantees the value is in range; clamping here also satisfies the compiler's array-bounds
+static int ImGuiMouseButtonIndex(ImGuiMouseButton button)
+{
+    return (button < 0) ? 0 : (button >= ImGuiMouseButton_COUNT ? ImGuiMouseButton_COUNT - 1 : button);
+}
+
 bool ImGui::IsMouseDown(ImGuiMouseButton button)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseDown[button] && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any); // should be same as IsKeyDown(MouseButtonToKey(button), ImGuiKeyOwner_Any), but this allows legacy code hijacking the io.Mousedown[] array.
+    return g.IO.MouseDown[ImGuiMouseButtonIndex(button)] && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any); // should be same as IsKeyDown(MouseButtonToKey(button), ImGuiKeyOwner_Any), but this allows legacy code hijacking the io.Mousedown[] array.
 }
 
 bool ImGui::IsMouseDown(ImGuiMouseButton button, ImGuiID owner_id)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseDown[button] && TestKeyOwner(MouseButtonToKey(button), owner_id); // Should be same as IsKeyDown(MouseButtonToKey(button), owner_id), but this allows legacy code hijacking the io.Mousedown[] array.
+    return g.IO.MouseDown[ImGuiMouseButtonIndex(button)] && TestKeyOwner(MouseButtonToKey(button), owner_id); // Should be same as IsKeyDown(MouseButtonToKey(button), owner_id), but this allows legacy code hijacking the io.Mousedown[] array.
 }
 
 bool ImGui::IsMouseClicked(ImGuiMouseButton button, bool repeat)
@@ -9198,9 +9205,9 @@ bool ImGui::IsMouseClicked(ImGuiMouseButton button, ImGuiInputFlags flags, ImGui
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    if (!g.IO.MouseDown[button]) // In theory this should already be encoded as (DownDuration < 0.0f), but testing this facilitates eating mechanism (until we finish work on key ownership)
+    if (!g.IO.MouseDown[ImGuiMouseButtonIndex(button)]) // In theory this should already be encoded as (DownDuration < 0.0f), but testing this facilitates eating mechanism (until we finish work on key ownership)
         return false;
-    const float t = g.IO.MouseDownDuration[button];
+    const float t = g.IO.MouseDownDuration[ImGuiMouseButtonIndex(button)];
     if (t < 0.0f)
         return false;
     IM_ASSERT((flags & ~ImGuiInputFlags_SupportedByIsMouseClicked) == 0); // Passing flags not supported by this function! // FIXME: Could support RepeatRate and RepeatUntil flags here.
@@ -9220,14 +9227,14 @@ bool ImGui::IsMouseReleased(ImGuiMouseButton button)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseReleased[button] && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any); // Should be same as IsKeyReleased(MouseButtonToKey(button), ImGuiKeyOwner_Any)
+    return g.IO.MouseReleased[ImGuiMouseButtonIndex(button)] && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any); // Should be same as IsKeyReleased(MouseButtonToKey(button), ImGuiKeyOwner_Any)
 }
 
 bool ImGui::IsMouseReleased(ImGuiMouseButton button, ImGuiID owner_id)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseReleased[button] && TestKeyOwner(MouseButtonToKey(button), owner_id); // Should be same as IsKeyReleased(MouseButtonToKey(button), owner_id)
+    return g.IO.MouseReleased[ImGuiMouseButtonIndex(button)] && TestKeyOwner(MouseButtonToKey(button), owner_id); // Should be same as IsKeyReleased(MouseButtonToKey(button), owner_id)
 }
 
 // Use if you absolutely need to distinguish single-click from double-click by introducing a delay.
@@ -9237,7 +9244,7 @@ bool ImGui::IsMouseReleasedWithDelay(ImGuiMouseButton button, float delay)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    const float time_since_release = (float)(g.Time - g.IO.MouseReleasedTime[button]);
+    const float time_since_release = (float)(g.Time - g.IO.MouseReleasedTime[ImGuiMouseButtonIndex(button)]);
     return !IsMouseDown(button) && (time_since_release - g.IO.DeltaTime < delay) && (time_since_release >= delay);
 }
 
@@ -9245,21 +9252,21 @@ bool ImGui::IsMouseDoubleClicked(ImGuiMouseButton button)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseClickedCount[button] == 2 && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any);
+    return g.IO.MouseClickedCount[ImGuiMouseButtonIndex(button)] == 2 && TestKeyOwner(MouseButtonToKey(button), ImGuiKeyOwner_Any);
 }
 
 bool ImGui::IsMouseDoubleClicked(ImGuiMouseButton button, ImGuiID owner_id)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseClickedCount[button] == 2 && TestKeyOwner(MouseButtonToKey(button), owner_id);
+    return g.IO.MouseClickedCount[ImGuiMouseButtonIndex(button)] == 2 && TestKeyOwner(MouseButtonToKey(button), owner_id);
 }
 
 int ImGui::GetMouseClickedCount(ImGuiMouseButton button)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseClickedCount[button];
+    return g.IO.MouseClickedCount[ImGuiMouseButtonIndex(button)];
 }
 
 // Test if mouse cursor is hovering given rectangle
@@ -9288,14 +9295,14 @@ bool ImGui::IsMouseDragPastThreshold(ImGuiMouseButton button, float lock_thresho
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
     if (lock_threshold < 0.0f)
         lock_threshold = g.IO.MouseDragThreshold;
-    return g.IO.MouseDragMaxDistanceSqr[button] >= lock_threshold * lock_threshold;
+    return g.IO.MouseDragMaxDistanceSqr[ImGuiMouseButtonIndex(button)] >= lock_threshold * lock_threshold;
 }
 
 bool ImGui::IsMouseDragging(ImGuiMouseButton button, float lock_threshold)
 {
     ImGuiContext& g = *GImGui;
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    if (!g.IO.MouseDown[button])
+    if (!g.IO.MouseDown[ImGuiMouseButtonIndex(button)])
         return false;
     return IsMouseDragPastThreshold(button, lock_threshold);
 }
@@ -9356,10 +9363,10 @@ ImVec2 ImGui::GetMouseDragDelta(ImGuiMouseButton button, float lock_threshold)
     IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
     if (lock_threshold < 0.0f)
         lock_threshold = g.IO.MouseDragThreshold;
-    if (g.IO.MouseDown[button] || g.IO.MouseReleased[button])
-        if (g.IO.MouseDragMaxDistanceSqr[button] >= lock_threshold * lock_threshold)
-            if (IsMousePosValid(&g.IO.MousePos) && IsMousePosValid(&g.IO.MouseClickedPos[button]))
-                return g.IO.MousePos - g.IO.MouseClickedPos[button];
+    if (g.IO.MouseDown[ImGuiMouseButtonIndex(button)] || g.IO.MouseReleased[ImGuiMouseButtonIndex(button)])
+        if (g.IO.MouseDragMaxDistanceSqr[ImGuiMouseButtonIndex(button)] >= lock_threshold * lock_threshold)
+            if (IsMousePosValid(&g.IO.MousePos) && IsMousePosValid(&g.IO.MouseClickedPos[ImGuiMouseButtonIndex(button)]))
+                return g.IO.MousePos - g.IO.MouseClickedPos[ImGuiMouseButtonIndex(button)];
     return ImVec2(0.0f, 0.0f);
 }
 
@@ -9779,7 +9786,7 @@ void ImGui::UpdateInputEvents(bool trickle_fast_inputs)
                 break;
             if (trickle_fast_inputs && e->MouseButton.MouseSource == ImGuiMouseSource_TouchScreen && mouse_moved) // #2702: TouchScreen have no initial hover.
                 break;
-            io.MouseDown[button] = e->MouseButton.Down;
+            io.MouseDown[ImGuiMouseButtonIndex(button)] = e->MouseButton.Down;
             io.MouseSource = e->MouseButton.MouseSource;
             mouse_button_changed |= (1 << button);
         }
