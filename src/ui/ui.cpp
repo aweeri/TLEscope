@@ -167,7 +167,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
     float collapsed_w = time_text_w + collapsed_btns * (btn_sz + spacing) + speed_text_w + spacing * 2;
 
     /* expanded panel slides UP from behind the collapsed bar */
-    float expanded_h = 96.0f;  /* height for the time setter area */
+    float expanded_h = 112.0f;  /* height for the time setter area */
     float bar_h = btn_sz + 12.0f;
     float total_h = bar_h + (g_layout.bottom_bar_expanded ? expanded_h : 0.0f);
     float y = screen_h - total_h;
@@ -215,17 +215,26 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                     g_layout.bb_min   = gmt->tm_min;
                     g_layout.bb_sec   = gmt->tm_sec;
                 }
-                g_layout.bb_speed = (float)(*ctx->time_multiplier);
                 s_needs_populate = false;
             }
             float avail = ImGui::GetContentRegionAvail().x;
 
-            /* ---- Time setter row: labeled inputs with clean arrow buttons ---- */
+            /* ---- Time setter: labeled inputs in a single aligned row ---- */
             auto DrawTimeField = [&](const char *label, int *value, int min_v, int max_v,
                                      float width)
             {
                 ImGui::BeginGroup();
                 ImGui::PushID(label);
+
+                /* label centered above the field */
+                float label_w = ImGui::CalcTextSize(label).x;
+                float arrow_w = ImGui::GetFrameHeight();
+                float group_w = width + 2.0f * arrow_w + 2.0f;  /* up + input + down */
+                float label_x = (group_w - label_w) * 0.5f;
+                if (label_x > 0.0f) ImGui::Dummy(ImVec2(label_x, 0.0f));
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", label);
+                if (label_x > 0.0f) ImGui::SameLine(0.0f, 0.0f);
+                ImGui::Dummy(ImVec2(group_w - label_x - label_w, 0.0f));
 
                 /* up arrow */
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
@@ -255,9 +264,6 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                 }
                 ImGui::PopStyleVar();
 
-                /* label */
-                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", label);
-
                 ImGui::PopID();
                 ImGui::EndGroup();
             };
@@ -275,14 +281,15 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             ImGui::SameLine(0.0f, spacing);
             DrawTimeField("Sec", &g_layout.bb_sec, 0, 59, field_w);
 
-            /* ---- Second row: speed + apply + reset + collapse ---- */
-            ImGui::SetNextItemWidth(84.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.ui_accent));
-            ImGui::InputFloat("##speed", &g_layout.bb_speed, 0.1f, 2.0f, "%.1fx");
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time speed multiplier");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
 
-            ImGui::SameLine(0.0f, spacing * 2);
+            /* ---- Action row: Apply / Reset to Now / Collapse ---- */
+            float action_w = (btn_sz + spacing) * 3.0f;
+            float action_x = avail - action_w;
+            if (action_x < 0.0f) action_x = 0.0f;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + action_x);
 
             /* Apply time button */
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
@@ -293,10 +300,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                                        g_layout.bb_sec / 3600.0) / 24.0;
                 *ctx->current_epoch = g_layout.bb_year * 1000.0 +
                                       g_layout.bb_day + day_fraction;
-                *ctx->time_multiplier = g_layout.bb_speed;
             }
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply set time and speed");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply set time");
 
             ImGui::SameLine(0.0f, spacing);
 
@@ -305,8 +311,6 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             if (ImGui::Button(ICON_FA_CLOCK "##resetnow", ImVec2(btn_sz, btn_sz)))
             {
                 *ctx->current_epoch = get_current_real_time_epoch();
-                *ctx->time_multiplier = 1.0;
-                g_layout.bb_speed = 1.0f;
                 /* repopulate fields from current time */
                 double epoch = *ctx->current_epoch;
                 double unix_sec = get_unix_from_epoch(epoch);
@@ -322,7 +326,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                 }
             }
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current real time at 1x");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current real time");
 
             ImGui::SameLine(0.0f, spacing);
 
@@ -344,6 +348,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         char time_str[64];
         epoch_to_datetime_str(*ctx->current_epoch, time_str);
 
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", time_str);
         ImGui::SameLine(0.0f, spacing * 2);
 

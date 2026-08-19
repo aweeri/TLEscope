@@ -135,7 +135,6 @@ void LayoutInitDefaults(void)
     g_layout.drag_panel = -1;
     g_layout.drag_target = -1;
     g_layout.bottom_bar_expanded = false;
-    g_layout.bb_speed = 1.0f;
 
     int li = 0, ri = 0;
     for (int i = 0; i < PANEL_COUNT; i++)

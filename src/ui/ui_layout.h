@@ -104,7 +104,6 @@ typedef struct
     int bb_hour;               /* hour input field (0-23) */
     int bb_min;                /* minute input field (0-59) */
     int bb_sec;                /* second input field (0-59) */
-    float bb_speed;            /* speed multiplier input field */
 
     /* actual rendered rect of the bottom-bar notch (ImGui display coords),
      * captured each frame by DrawBottomBar(). The notch is centered and only
