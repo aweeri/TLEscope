@@ -314,10 +314,33 @@ Status markers used below:
 
 - Add a magnetosphere layer, a simplified dipole field visualization.
 
-### 9.4 [ ] Layer panel polish
+### 9.4 [ ] Sensor swath visualizer
+
+- A tool that draws the ground footprint of a selected satellite's sensor on
+  the map, driven by a user-entered field of view (FOV).
+- The swath can be shown as a scan line, a square, or a circle, depending on
+  the sensor shape the user picks.
+- Plan:
+  - Add a compact "Sensor Swath" block in the Layers panel: a FOV input (in
+    degrees), a shape selector (line / square / circle), and a toggle.
+  - Keep it to a few controls so it does not take much space. The FOV input and
+    shape combo fit on one or two rows, and the toggle reuses the existing
+    checkbox row pattern.
+  - Render the swath as a translucent overlay on the ground track (2D) and on
+    the globe (3D), centered on the selected satellite's sub-satellite point.
+  - The footprint math can reuse the existing line-of-sight / coverage helpers
+    and the `footprint_bg` / `footprint_border` theme colors.
+- Acceptance criteria:
+  - Entering a FOV and picking a shape draws the swath around the selected
+    satellite.
+  - The swath updates as the satellite moves and as the FOV changes.
+  - The whole control fits comfortably in the Layers panel without crowding it.
+
+### 9.5 [ ] Layer panel polish
 
 - The Layers panel currently lists toggles. Add the new layers (Van Allen,
-  magnetosphere) with icons and tooltips, consistent with the existing rows.
+  magnetosphere, sensor swath) with icons and tooltips, consistent with the
+  existing rows.
 
 ---
 
@@ -430,6 +453,13 @@ scoped to be self-contained and to reuse existing infrastructure.
   `footprint_border`) but not exposed. Add a Layers toggle and render it in 2D
   and 3D.
 
+### 14.2 [ ] Sensor swath visualizer refinement
+
+- The basic sensor swath is in section 9.4. Follow-ons: let the swath follow a
+  selected pass (so users can plan a pass and watch the scanned area sweep
+  across the map), and allow a configurable sensor look angle / off-nadir
+  offset.
+
 ### 14.2 [ ] Next pass strip
 
 - A compact "Next Pass" readout (next AOS, satellite, max elevation) pinned near
@@ -485,6 +515,8 @@ Use this as the definition of done for the release.
 - [ ] Local/UTC toggle works everywhere and persists.
 - [ ] Notifications appear for the key events.
 - [ ] Van Allen and magnetosphere layers render.
+- [ ] Sensor swath visualizer draws a line / square / circle footprint from a
+      user FOV around the selected satellite.
 - [ ] Apoapsis and periapsis show altitude labels.
 - [ ] Markers are manageable (add, remove, persist) and Cape Canaveral is gone.
 - [ ] Persistence restores active satellites, source selections, rotator, and
@@ -523,7 +555,7 @@ A dependency-aware order that keeps the app shippable at every step.
 4. Polar plot (section 3) and Doppler (section 4). Pass path, graph, CSV.
 5. Rotator (section 6). Settings UI, persistence, overlays.
 6. Scope (section 7). The big window, targeting, beam, layers.
-7. Layers (section 9). Apsis labels, Van Allen, magnetosphere.
+7. Layers (section 9). Apsis labels, Van Allen, magnetosphere, sensor swath.
 8. Notifications (section 8). Wire into the events from steps 1 through 7.
 9. Markers (section 10). Management UI.
 10. Theming polish (section 12). Notch visibility, color audit.
