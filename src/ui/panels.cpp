@@ -1190,10 +1190,10 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         ImGui::EndTable();
     }
 
-    /* -- Advanced (hidden by default) ------------------------------------- */
+    /* -- Advanced Orbital Data -------------------------------------------- */
     ImGui::Separator();
     ImGui::PushID("sat_adv");
-    if (ImGui::TreeNodeEx(ICON_FA_GEAR " Advanced Orbital Data", ImGuiTreeNodeFlags_Framed))
+    if (ImGui::CollapsingHeader(ICON_FA_GEAR " Advanced Orbital Data"))
     {
         if (ImGui::BeginTable("##advanced", 2, ImGuiTableFlags_SizingFixedFit))
         {
@@ -1212,11 +1212,12 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         }
 
         ImGui::Separator();
-        ImGui::Text("ECI Position:");
+        ImGui::Text("%s ECI Position:", ICON_FA_CUBE);
         if (ImGui::BeginTable("##eci_pos", 2, ImGuiTableFlags_SizingFixedFit))
         {
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 40.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+
             InfoRow("X", "%.2f km", sat->current_pos.x);
             InfoRow("Y", "%.2f km", sat->current_pos.y);
             InfoRow("Z", "%.2f km", sat->current_pos.z);
@@ -1224,15 +1225,16 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         }
 
         ImGui::Separator();
-        ImGui::Text("Epoch:");
+        ImGui::Text("%s Epoch:", ICON_FA_CALENDAR_DAYS);
+        ImGui::SameLine();
         char epoch_str[64];
         epoch_to_datetime_str(sat->epoch_days, epoch_str);
-        ImGui::SameLine();
         ImGui::TextWrapped("%s", epoch_str);
 
         if (sat->data_meta.format != FORMAT_UNKNOWN)
         {
             ImGui::Separator();
+            ImGui::Text("%s Data Source", ICON_FA_DATABASE);
             if (ImGui::BeginTable("##data_source", 2, ImGuiTableFlags_SizingFixedFit))
             {
                 ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
@@ -1255,8 +1257,6 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
                 ImGui::EndTable();
             }
         }
-
-        ImGui::TreePop();
     }
     ImGui::PopID();
 

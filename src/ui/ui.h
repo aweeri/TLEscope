@@ -118,8 +118,8 @@ typedef struct
     bool theme_dropdown_edit;
 
     /* RA/Dec display format state */
-    int ra_format;      /* 0 = decimal degrees, 1 = hours:minutes:seconds */
-    int dec_format;     /* 0 = decimal degrees, 1 = degrees:arcminutes:arcseconds */
+    int ra_format;      /* 0 = decimal degrees (default), 1 = hours:minutes:seconds */
+    int dec_format;     /* 0 = decimal degrees (default), 1 = degrees:arcminutes:arcseconds */
 
     /* scope state */
     bool scope_drag_active;

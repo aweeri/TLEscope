@@ -46,8 +46,8 @@ static ImVec4 ThemeColor(const Color &c)
 /* -- UIState instance ------------------------------------------------------ */
 
 UIState g_ui = {
-    .ra_format = 1,   /* default: hours:minutes:seconds */
-    .dec_format = 1,  /* default: degrees:arcminutes:arcseconds */
+    .ra_format = 0,   /* default: decimal degrees (compact) */
+    .dec_format = 0,  /* default: decimal degrees (compact) */
 };
 
 /* -- Helpers --------------------------------------------------------------- */
