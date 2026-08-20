@@ -308,12 +308,12 @@ Status markers used below:
 
 ## 9. Layers
 
-### 9.1 [~] Apoapsis and periapsis text labels
+### 9.1 [x] Apoapsis and periapsis text labels
 
-- Problem: the apoapsis and periapsis markers currently show only an icon.
-- Plan: add a small text label showing the altitude above sea level (km) next
-  to each marker. The `calc_apogee_km` and `calc_perigee_km` helpers already
-  exist in `panels.cpp`.
+- The apoapsis and periapsis markers now show a small text label with the
+  altitude above sea level (km) next to each marker (for example `A 35786 km`
+  and `P 200 km`), drawn in `main.cpp` using the `calc_apogee_km` and
+  `calc_perigee_km` helpers.
 
 ### 9.2 [ ] Van Allen belts layer
 
@@ -356,38 +356,29 @@ Status markers used below:
 
 ## 10. Markers and home location
 
-### 10.1 [~] Unified locations system
+### 10.1 [x] Unified locations system
 
-- Problem: markers and the home location are two separate systems, the default
-  Cape Canaveral marker is confusing, and there is no way to add, edit, or
-  remove locations.
-- Plan: merge both into one unified, persisting "Locations" dropdown:
-  - A single named list of locations (name + lat/lon), persisted to
-    `settings.json` via the existing save/load path in `config.cpp`.
-  - Add a location two ways:
-    - Manual entry: type a name and lat/lon directly.
-    - Pick on map: the existing home picker now adds (or updates) a location
-      instead of only setting home.
-  - Every entry can be renamed, have its lat/lon edited, and be removed easily
-    (edit and delete affordances on each row).
-  - Users can add any markers they want with any names they want; nothing is
-    hardcoded.
-  - Remove the hardcoded Cape Canaveral default entirely (no forced example).
-- Acceptance criteria:
-  - The Locations dropdown is the single source of truth for both markers and
-    home; there is no separate Markers list or Home Location section.
-  - Locations survive a restart.
+- Markers and the home location are now one unified, persisting "Locations"
+  list in `settings.json` (loaded/saved in `config.cpp`).
+- The Settings modal has a Locations section with add, edit (name, lat, lon,
+  alt), and remove affordances on every row, plus a "Pick on Map" flow that
+  updates the location being edited.
+- The hardcoded Cape Canaveral default is gone; first run creates a single
+  neutral "Home" location at 0,0.
+- Legacy `home_location` and `markers` entries from older settings files are
+  migrated into the unified list on load.
+- Acceptance criteria met: the Locations list is the single source of truth
+  for both markers and home, and locations survive a restart.
 
-### 10.2 [ ] Home designation
+### 10.2 [x] Home designation
 
-- "Home" is just a flag on one entry in the unified Locations list.
-- Set home by:
-  - Selecting a location from the dropdown and marking it as home.
-  - Picking on the map, which sets the picked location as home (adding it to
-    the list first if it is new).
-- Exactly one location is home at a time; changing home moves the flag.
+- "Home" is a flag (`is_home`) on one entry in the unified Locations list
+  (`location.cpp`).
+- Set home by clicking the house button on a location row in Settings →
+  Locations; exactly one location is home at a time (`SetHomeLocation` moves
+  the flag).
 - All consumers (passes, scope, polar plot, ground tracks, rotator) read the
-  home location from the unified list, so there is only one source of truth.
+  home location from the unified list via `GetHomeLocation()`.
 
 ---
 
@@ -397,8 +388,8 @@ Status markers used below:
 
 - Goal: whatever the user sets should survive a restart, minimizing setup time.
 - Already persisted: theme, window size, FPS, UI scale, display toggles, custom
-  sources, retlector groups, custom entries, stale threshold, home location,
-  markers, and sidebar/panel layout.
+  sources, retlector groups, custom entries, stale threshold, unified locations
+  (markers + home), local/UTC preference, and sidebar/panel layout.
 - Gaps to close:
   - Active satellite selection. `SaveSatSelection()` and `LoadSatSelection()`
     are currently empty stubs. Persist which satellites are active or inactive
@@ -406,7 +397,6 @@ Status markers used below:
   - Data source selections. The shopping-cart selections in the Data Sources
     panel (`g_data_selections`) are not persisted.
   - Rotator settings (see section 6).
-  - Local/UTC preference (see section 5).
   - Pass settings (min elevation, time span, mode).
 - Acceptance criteria:
   - Restarting the app restores the user's active satellites, data-source
@@ -541,8 +531,8 @@ Use this as the definition of done for the release.
 - [ ] Van Allen and magnetosphere layers render.
 - [ ] Sensor swath visualizer draws a line / square / circle footprint from a
       user FOV around the selected satellite.
-- [ ] Apoapsis and periapsis show altitude labels.
-- [ ] Markers are manageable (add, remove, persist) and Cape Canaveral is gone.
+- [x] Apoapsis and periapsis show altitude labels.
+- [x] Markers are manageable (add, remove, persist) and Cape Canaveral is gone.
 - [ ] Persistence restores active satellites, source selections, rotator, and
       time preference.
 
@@ -573,15 +563,15 @@ Use this as the definition of done for the release.
 
 1. Persistence (section 11). Active satellites, data selections, rotator, time
    preference. Everything else builds on this.
-3. Passes (section 2). Modes, unique IDs, progress, polar handoff.
-4. Polar plot (section 3) and Doppler (section 4). Pass path, graph, CSV.
-5. Rotator (section 6). Settings UI, persistence, overlays.
-6. Scope (section 7). The big window, targeting, beam, layers.
-7. Layers (section 9). Apsis labels, Van Allen, magnetosphere, sensor swath.
-8. Notifications (section 8). Wire into the events from steps 1 through 7.
-9. Markers (section 10). Management UI.
-10. Theming polish (section 12). Notch visibility, color audit.
-11. TRXDB (section 13). Opt-out transponder info.
-12. Extra tools (section 14). Each independently shippable.
-13. Backend performance (section 1.3). Keplerian fast path, can be done in
+2. Passes (section 2). Modes, unique IDs, progress, polar handoff.
+3. Polar plot (section 3) and Doppler (section 4). Pass path, graph, CSV.
+4. Rotator (section 6). Settings UI, persistence, overlays.
+5. Scope (section 7). The big window, targeting, beam, layers.
+6. Layers (section 9). Van Allen, magnetosphere, sensor swath (apsis labels
+   are done).
+7. Notifications (section 8). Wire into the events from steps 1 through 6.
+8. Theming polish (section 12). Notch visibility, color audit.
+9. TRXDB (section 13). Opt-out transponder info.
+10. Extra tools (section 14). Each independently shippable.
+11. Backend performance (section 1.3). Keplerian fast path, can be done in
     parallel with the UI work.
