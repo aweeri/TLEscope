@@ -356,24 +356,38 @@ Status markers used below:
 
 ## 10. Markers and home location
 
-### 10.1 [~] Marker management
+### 10.1 [~] Unified locations system
 
-- Problem: the default Cape Canaveral marker is confusing, and there is no way
-  to add or remove markers.
-- Plan:
-  - Add a Markers list in Settings (like the Home Location section) where
-    markers can be added, renamed, and removed.
-  - Remove the hardcoded Cape Canaveral default, or keep it only as an optional
-    example, never forced.
-  - Markers should persist to `settings.json`. The save/load path already exists
-    in `config.cpp`.
+- Problem: markers and the home location are two separate systems, the default
+  Cape Canaveral marker is confusing, and there is no way to add, edit, or
+  remove locations.
+- Plan: merge both into one unified, persisting "Locations" dropdown:
+  - A single named list of locations (name + lat/lon), persisted to
+    `settings.json` via the existing save/load path in `config.cpp`.
+  - Add a location two ways:
+    - Manual entry: type a name and lat/lon directly.
+    - Pick on map: the existing home picker now adds (or updates) a location
+      instead of only setting home.
+  - Every entry can be renamed, have its lat/lon edited, and be removed easily
+    (edit and delete affordances on each row).
+  - Users can add any markers they want with any names they want; nothing is
+    hardcoded.
+  - Remove the hardcoded Cape Canaveral default entirely (no forced example).
+- Acceptance criteria:
+  - The Locations dropdown is the single source of truth for both markers and
+    home; there is no separate Markers list or Home Location section.
+  - Locations survive a restart.
 
-### 10.2 [ ] Home location management
+### 10.2 [ ] Home designation
 
-- The Home Location section already exists in Settings. Add:
-  - Multiple saved locations (a list), with one designated home.
-  - Pick on map already works. Keep it, and let users pick a marker from the
-    list to set as home.
+- "Home" is just a flag on one entry in the unified Locations list.
+- Set home by:
+  - Selecting a location from the dropdown and marking it as home.
+  - Picking on the map, which sets the picked location as home (adding it to
+    the list first if it is new).
+- Exactly one location is home at a time; changing home moves the flag.
+- All consumers (passes, scope, polar plot, ground tracks, rotator) read the
+  home location from the unified list, so there is only one source of truth.
 
 ---
 

@@ -77,7 +77,7 @@
 
 // basic limits and math constants
 #define MAX_SATELLITES 15000
-#define MAX_MARKERS 100
+#define MAX_LOCATIONS 256
 #define EARTH_RADIUS_KM 6371.0f
 #define MOON_RADIUS_KM 1737.4f
 #define MU 398600.4418f
@@ -148,7 +148,8 @@ typedef struct
     float lat;
     float lon;
     float alt;
-} Marker;
+    bool is_home;   // exactly one location is home at a time
+} Location;
 
 typedef struct
 {
@@ -224,9 +225,8 @@ typedef struct {
 extern Satellite satellites[MAX_SATELLITES];
 extern int sat_count;
 
-extern Marker home_location;
-extern Marker markers[MAX_MARKERS];
-extern int marker_count;
+extern Location locations[MAX_LOCATIONS];
+extern int location_count;
 
 #define MAX_MANUAL_ENTRIES 20
 

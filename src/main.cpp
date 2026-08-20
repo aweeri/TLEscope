@@ -10,6 +10,7 @@
 #include "core/astro.h"
 #include "core/config.h"
 #include "core/theme.h"
+#include "core/location.h"
 #include "util/log.h"
 #include "core/types.h"
 #include "ui/ui.h"
@@ -989,6 +990,7 @@ int main(void)
             if (IsKeyPressed(KEY_ESCAPE) && picking_home)
             {
                 picking_home = false;
+                pick_location_index = -1;
                 LOG_INFO("Home location picking cancelled");
             }
         }
@@ -1306,10 +1308,28 @@ int main(void)
                     float lat, lon;
                     if (GetMouseEarthIntersection(GetMousePosition(), is_2d_view, Camera2DParams, Camera3DParams, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &lat, &lon))
                     {
-                        home_location.lat = lat;
-                        home_location.lon = lon;
-                        home_location.alt = 0.0f;
-                        picking_home = false; // exit pick mode after successful set
+                        /* picking on the map updates the location the picker was
+                         * activated from, or the home location if none was targeted */
+                        if (pick_location_index >= 0 && pick_location_index < location_count)
+                        {
+                            UpdateLocation(pick_location_index, NULL, lat, lon, 0.0f);
+                        }
+                        else
+                        {
+                            int home_idx = GetHomeLocationIndex();
+                            if (home_idx >= 0)
+                            {
+                                UpdateLocation(home_idx, NULL, lat, lon, 0.0f);
+                            }
+                            else
+                            {
+                                home_idx = AddLocation("Home", lat, lon, 0.0f);
+                                if (home_idx >= 0)
+                                    SetHomeLocation(home_idx);
+                            }
+                        }
+                        pick_location_index = -1;
+                        picking_home = false; // exit picking after successful set
                         LayoutOpenSettings(); // return to the settings modal
                     }
                     // if click is not on earth, do nothing
@@ -1707,19 +1727,23 @@ int main(void)
                     }
                 }
 
-                /* ground station markers */
-                float hx = (home_location.lon / 360.0f) * map_w;
-                float hy = -(home_location.lat / 180.0f) * map_h;
-                for (int offset_i = -1; offset_i <= 1; offset_i++)
+                /* ground station markers (home location) */
+                Location *home = GetHomeLocation();
+                float hx = home ? (home->lon / 360.0f) * map_w : 0.0f;
+                float hy = home ? -(home->lat / 180.0f) * map_h : 0.0f;
+                if (home)
                 {
-                    float x_off = offset_i * map_w;
-                    DrawTexturePro(
-                        markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){hx + x_off, hy, m_size_2d, m_size_2d}, (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, WHITE
-                    );
-
-                    if (Camera2DParams.zoom > 0.1f)
+                    for (int offset_i = -1; offset_i <= 1; offset_i++)
                     {
-                        DrawUIText(customFont, home_location.name, hx + x_off + (m_size_2d / 2.f) + 4.f, hy - (m_size_2d / 2.f), m_text_2d, WHITE);
+                        float x_off = offset_i * map_w;
+                        DrawTexturePro(
+                            markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){hx + x_off, hy, m_size_2d, m_size_2d}, (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, WHITE
+                        );
+
+                        if (Camera2DParams.zoom > 0.1f)
+                        {
+                            DrawUIText(customFont, home->name, hx + x_off + (m_size_2d / 2.f) + 4.f, hy - (m_size_2d / 2.f), m_text_2d, WHITE);
+                        }
                     }
                 }
 
@@ -1734,7 +1758,7 @@ int main(void)
                     else if (hx - sx > map_w / 2.0f)
                         sx += map_w;
 
-                    double range = get_sat_range(active_sat, current_epoch, home_location);
+                    double range = get_sat_range(active_sat, current_epoch, *home);
 
                     for (int offset_i = -1; offset_i <= 1; offset_i++)
                     {
@@ -1761,10 +1785,12 @@ int main(void)
 
                 if (cfg.show_markers)
                 {
-                    for (int m = 0; m < marker_count; m++)
+                    for (int i = 0; i < location_count; i++)
                     {
-                        float mx = (markers[m].lon / 360.0f) * map_w;
-                        float my = -(markers[m].lat / 180.0f) * map_h;
+                        if (locations[i].is_home)
+                            continue; /* home is drawn separately above */
+                        float mx = (locations[i].lon / 360.0f) * map_w;
+                        float my = -(locations[i].lat / 180.0f) * map_h;
                         for (int offset_i = -1; offset_i <= 1; offset_i++)
                         {
                             float x_off = offset_i * map_w;
@@ -1775,7 +1801,7 @@ int main(void)
 
                             if (Camera2DParams.zoom > 0.1f)
                             {
-                                DrawUIText(customFont, markers[m].name, mx + x_off + (m_size_2d / 2.f) + 4.f, my - (m_size_2d / 2.f), m_text_2d, WHITE);
+                                DrawUIText(customFont, locations[i].name, mx + x_off + (m_size_2d / 2.f) + 4.f, my - (m_size_2d / 2.f), m_text_2d, WHITE);
                             }
                         }
                     }
@@ -1939,10 +1965,11 @@ int main(void)
             }
 
             /* slant range overlay 3d line */
+            Location *home = GetHomeLocation();
             if (cfg.show_slant_range && active_sat && active_sat->is_active)
             {
-                float h_lat_rad = home_location.lat * DEG2RAD;
-                float h_lon_rad = (home_location.lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                float h_lat_rad = home->lat * DEG2RAD;
+                float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                 Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
                 Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
                 DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(g_theme.ui.ui_accent, 0.6f));
@@ -1950,8 +1977,8 @@ int main(void)
 
             if (show_scope)
             {
-                float h_lat_rad = home_location.lat * DEG2RAD;
-                float h_lon_rad = (home_location.lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                float h_lat_rad = home->lat * DEG2RAD;
+                float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                 
                 Vector3 h_pos3d = {
                     cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, 
@@ -2007,8 +2034,8 @@ int main(void)
             /* slant range text overlay 3d */
             if (cfg.show_slant_range && active_sat && active_sat->is_active)
             {
-                float h_lat_rad = home_location.lat * DEG2RAD;
-                float h_lon_rad = (home_location.lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                float h_lat_rad = home->lat * DEG2RAD;
+                float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                 Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
                 Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
 
@@ -2018,7 +2045,7 @@ int main(void)
                 if (Vector3DotProduct(Vector3Normalize(toMid), camForward) > 0.0f)
                 {
                     Vector2 mid_screen = GetWorldToScreen(mid_pos, Camera3DParams);
-                    double range = get_sat_range(active_sat, current_epoch, home_location);
+                    double range = get_sat_range(active_sat, current_epoch, *home);
                     char rng_str[32];
                     TextCopy(rng_str, TextFormat("%.1f km", range));
                     Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_3d, 1.0f);
@@ -2094,7 +2121,7 @@ int main(void)
                 }
             }
 
-            float h_lat_rad = home_location.lat * DEG2RAD, h_lon_rad = (home_location.lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+            float h_lat_rad = home->lat * DEG2RAD, h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
             Vector3 h_pos = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
             Vector3 h_normal = Vector3Normalize(h_pos);
             Vector3 h_viewDir = Vector3Normalize(Vector3Subtract(Camera3DParams.position, h_pos));
@@ -2109,15 +2136,17 @@ int main(void)
 
                 if (camDistance < 50.0f)
                 {
-                    DrawUIText(customFont, home_location.name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
+                    DrawUIText(customFont, home->name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
                 }
             }
 
             if (cfg.show_markers)
             {
-                for (int m = 0; m < marker_count; m++)
+                for (int i = 0; i < location_count; i++)
                 {
-                    float lat_rad = markers[m].lat * DEG2RAD, lon_rad = (markers[m].lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                    if (locations[i].is_home)
+                        continue; /* home is drawn separately above */
+                    float lat_rad = locations[i].lat * DEG2RAD, lon_rad = (locations[i].lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                     Vector3 m_pos = {cosf(lat_rad) * cosf(lon_rad) * draw_earth_radius, sinf(lat_rad) * draw_earth_radius, -cosf(lat_rad) * sinf(lon_rad) * draw_earth_radius};
                     Vector3 normal = Vector3Normalize(m_pos);
                     Vector3 viewDir = Vector3Normalize(Vector3Subtract(Camera3DParams.position, m_pos));
@@ -2132,7 +2161,7 @@ int main(void)
 
                         if (camDistance < 50.0f)
                         {
-                            DrawUIText(customFont, markers[m].name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
+                            DrawUIText(customFont, locations[i].name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
                         }
                     }
                 }

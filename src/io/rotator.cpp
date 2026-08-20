@@ -7,6 +7,7 @@ typedef struct tagMSG *LPMSG;
 #endif
 #include "rotator.h"
 #include "core/astro.h"
+#include "core/location.h"
 #include "util/log.h"
 #include <math.h>
 #include <stdio.h>
@@ -342,7 +343,7 @@ void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_pola
                 double gmst_use = (t_use == p->aos_epoch) ? epoch_to_gmst(p->aos_epoch) : ctx->gmst_deg;
                 Vector3 sat_pos = calculate_position(p->sat, get_unix_from_epoch(t_use));
                 double az = 0.0, el = 0.0;
-                get_az_el(sat_pos, gmst_use, home_location.lat, home_location.lon, home_location.alt, &az, &el);
+                get_az_el(sat_pos, gmst_use, GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt, &az, &el);
                 target_az = (float)az;
                 target_el = (float)el;
                 has_target = true;

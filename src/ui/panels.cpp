@@ -12,6 +12,7 @@
 #include "core/astro.h"
 #include "io/rotator.h"
 #include "core/config.h"
+#include "core/location.h"
 #include "core/theme.h"
 #include "imgui_theme.h"
 #include "data/provider.h"
@@ -735,14 +736,14 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
     auto DrawLayerCheckbox = [&](const char *label, bool *value, const char *icon, const char *tooltip) {
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(*value ? g_theme.ui.ui_accent : g_theme.ui.text_secondary));
-        ImGui::TextUnformatted(icon);
+        ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+        /* center the icon within a fixed-width cell so all rows align */
+        ImVec2 icon_sz = ImGui::CalcTextSize(icon);
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + (icon_w - icon_sz.x) * 0.5f, pos.y), col, icon);
         ImGui::PopStyleColor();
-        /* pad to fixed width so next column aligns */
-        float used = ImGui::GetItemRectSize().x;
-        if (used < icon_w)
-            ImGui::SameLine(0.0f, icon_w - used);
-        else
-            ImGui::SameLine();
+        ImGui::Dummy(ImVec2(icon_w, ImGui::GetFrameHeight()));
+        ImGui::SameLine();
         ImGui::Checkbox(label, value);
         if (tooltip && ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", tooltip);
@@ -886,7 +887,7 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg)
 /* -- Satellite Info (inspector) -------------------------------------------- */
 
 /** observer position in ECI, same axis convention as calculate_position() */
-static Vector3 calc_observer_eci(const Marker *obs, double gmst_deg)
+static Vector3 calc_observer_eci(const Location *obs, double gmst_deg)
 {
     double ox, oy, oz;
     geodetic_to_ecef(obs->lat, obs->lon + gmst_deg, obs->alt, &ox, &oy, &oz);
@@ -1069,7 +1070,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     Satellite *sat = *ctx->selected_sat;
 
     /* -- Observer geometry (home location) --------------------------------- */
-    Vector3 obs_eci = calc_observer_eci(&home_location, ctx->gmst_deg);
+    Vector3 obs_eci = calc_observer_eci(GetHomeLocation(), ctx->gmst_deg);
     double current_unix = get_unix_from_epoch(*ctx->current_epoch);
 
     double topo_dec = 0.0, topo_ra = 0.0;
@@ -1169,12 +1170,12 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 
         double az = 0.0, el = 0.0;
         get_az_el(sat->current_pos, ctx->gmst_deg,
-                  home_location.lat, home_location.lon, home_location.alt,
+                  GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt,
                   &az, &el);
         InfoRow("Azimuth", "%.2f\xc2\xb0", az);
         InfoRow("Elevation", "%.2f\xc2\xb0", el);
 
-        double range = get_sat_range(sat, *ctx->current_epoch, home_location);
+        double range = get_sat_range(sat, *ctx->current_epoch, *GetHomeLocation());
         InfoRow("Range", "%.1f km", range);
 
         ImGui::EndTable();
@@ -1373,7 +1374,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     {
         double az = 0.0, el = 0.0;
         get_az_el(sat->current_pos, ctx->gmst_deg,
-                  home_location.lat, home_location.lon, home_location.alt,
+                  GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt,
                   &az, &el);
 
         /* convert azimuth (degrees from North, clockwise) to canvas angle
@@ -1401,7 +1402,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
             Vector3 future_pos = calculate_position(sat, future_unix);
             double faz = 0.0, fel = 0.0;
             get_az_el(future_pos, ctx->gmst_deg,
-                      home_location.lat, home_location.lon, home_location.alt,
+                      GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt,
                       &faz, &fel);
 
             if (fel < 0.0) continue; /* skip below horizon */

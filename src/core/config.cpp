@@ -1,13 +1,12 @@
 #include "config.h"
 #include "types.h"
 #include "theme.h"
+#include "location.h"
 #include "util/log.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-Marker home_location;
 
 static bool ParseJsonBool(const char *text, const char *key, bool defaultValue)
 {
@@ -371,97 +370,168 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
 
-            // load home location
-            char *hl_ptr = strstr(text, "\"home_location\"");
-            if (hl_ptr)
+            // load unified locations (markers + home merged into one list)
+            location_count = 0;
+            char *loc_ptr = strstr(text, "\"locations\"");
+            if (loc_ptr)
             {
-                char *name_ptr = strstr(hl_ptr, "\"name\"");
-                char *lat_ptr = strstr(hl_ptr, "\"lat\"");
-                char *lon_ptr = strstr(hl_ptr, "\"lon\"");
-                char *alt_ptr = strstr(hl_ptr, "\"alt\"");
-                char *obj_end = strchr(hl_ptr, '}');
-
-                if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end)
-                {
-                    char *colon_name = strchr(name_ptr, ':');
-                    if (colon_name)
-                    {
-                        char *quote_start = strchr(colon_name, '"');
-                        if (quote_start)
-                            sscanf(quote_start + 1, "%63[^\"]", home_location.name);
-                    }
-                    char *colon_lat = strchr(lat_ptr, ':');
-                    if (colon_lat)
-                        sscanf(colon_lat + 1, "%f", &home_location.lat);
-
-                    char *colon_lon = strchr(lon_ptr, ':');
-                    if (colon_lon)
-                        sscanf(colon_lon + 1, "%f", &home_location.lon);
-
-                    home_location.alt = 0.0f;
-                    if (alt_ptr && alt_ptr < obj_end)
-                    {
-                        char *colon_alt = strchr(alt_ptr, ':');
-                        if (colon_alt)
-                            sscanf(colon_alt + 1, "%f", &home_location.alt);
-                    }
-                }
-            }
-
-            // load the map markers safely to avoid silent parsing failures
-            marker_count = 0;
-            char *m_ptr = strstr(text, "\"markers\"");
-            if (m_ptr)
-            {
-                char *block_end = strchr(m_ptr, ']');
+                char *block_end = strchr(loc_ptr, ']');
                 if (!block_end)
                     block_end = text + strlen(text);
 
-                while ((m_ptr = strstr(m_ptr, "{")) && m_ptr < block_end)
+                while ((loc_ptr = strstr(loc_ptr, "{")) && loc_ptr < block_end)
                 {
-                    if (marker_count >= MAX_MARKERS)
+                    if (location_count >= MAX_LOCATIONS)
                         break;
 
-                    char *obj_end = strchr(m_ptr, '}');
+                    char *obj_end = strchr(loc_ptr, '}');
                     if (!obj_end || obj_end > block_end)
                         obj_end = block_end;
 
-                    char *name_ptr = strstr(m_ptr, "\"name\"");
-                    char *lat_ptr = strstr(m_ptr, "\"lat\"");
-                    char *lon_ptr = strstr(m_ptr, "\"lon\"");
-                    char *alt_ptr = strstr(m_ptr, "\"alt\"");
+                    char *name_ptr = strstr(loc_ptr, "\"name\"");
+                    char *lat_ptr = strstr(loc_ptr, "\"lat\"");
+                    char *lon_ptr = strstr(loc_ptr, "\"lon\"");
+                    char *alt_ptr = strstr(loc_ptr, "\"alt\"");
+                    char *home_ptr = strstr(loc_ptr, "\"is_home\"");
 
-                    // alt_ptr is optional now
                     if (name_ptr && name_ptr < obj_end && lat_ptr && lat_ptr < obj_end && lon_ptr && lon_ptr < obj_end)
                     {
+                        Location *loc = &locations[location_count];
+                        memset(loc, 0, sizeof(Location));
 
                         char *colon_name = strchr(name_ptr, ':');
                         if (colon_name && colon_name < obj_end)
                         {
                             char *quote_start = strchr(colon_name, '"');
                             if (quote_start && quote_start < obj_end)
-                                sscanf(quote_start + 1, "%63[^\"]", markers[marker_count].name);
+                                sscanf(quote_start + 1, "%63[^\"]", loc->name);
                         }
 
                         char *colon_lat = strchr(lat_ptr, ':');
                         if (colon_lat && colon_lat < obj_end)
-                            sscanf(colon_lat + 1, "%f", &markers[marker_count].lat);
+                            sscanf(colon_lat + 1, "%f", &loc->lat);
 
                         char *colon_lon = strchr(lon_ptr, ':');
                         if (colon_lon && colon_lon < obj_end)
-                            sscanf(colon_lon + 1, "%f", &markers[marker_count].lon);
+                            sscanf(colon_lon + 1, "%f", &loc->lon);
 
-                        markers[marker_count].alt = 0.0f;
+                        loc->alt = 0.0f;
                         if (alt_ptr && alt_ptr < obj_end)
                         {
                             char *colon_alt = strchr(alt_ptr, ':');
                             if (colon_alt && colon_alt < obj_end)
-                                sscanf(colon_alt + 1, "%f", &markers[marker_count].alt);
+                                sscanf(colon_alt + 1, "%f", &loc->alt);
                         }
 
-                        marker_count++;
+                        loc->is_home = false;
+                        if (home_ptr && home_ptr < obj_end)
+                        {
+                            char *colon_home = strchr(home_ptr, ':');
+                            if (colon_home && colon_home < obj_end)
+                            {
+                                colon_home++;
+                                while (*colon_home == ' ') colon_home++;
+                                loc->is_home = (strncmp(colon_home, "true", 4) == 0);
+                            }
+                        }
+
+                        location_count++;
                     }
-                    m_ptr = obj_end + 1;
+                    loc_ptr = obj_end + 1;
+                }
+            }
+
+            // migrate legacy home_location + markers into the unified list
+            if (location_count == 0)
+            {
+                char *hl_ptr = strstr(text, "\"home_location\"");
+                if (hl_ptr)
+                {
+                    char *name_ptr = strstr(hl_ptr, "\"name\"");
+                    char *lat_ptr = strstr(hl_ptr, "\"lat\"");
+                    char *lon_ptr = strstr(hl_ptr, "\"lon\"");
+                    char *alt_ptr = strstr(hl_ptr, "\"alt\"");
+                    char *obj_end = strchr(hl_ptr, '}');
+
+                    if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end)
+                    {
+                        char name[64] = "Home";
+                        float lat = 0.0f, lon = 0.0f, alt = 0.0f;
+
+                        char *colon_name = strchr(name_ptr, ':');
+                        if (colon_name)
+                        {
+                            char *quote_start = strchr(colon_name, '"');
+                            if (quote_start)
+                                sscanf(quote_start + 1, "%63[^\"]", name);
+                        }
+                        char *colon_lat = strchr(lat_ptr, ':');
+                        if (colon_lat)
+                            sscanf(colon_lat + 1, "%f", &lat);
+                        char *colon_lon = strchr(lon_ptr, ':');
+                        if (colon_lon)
+                            sscanf(colon_lon + 1, "%f", &lon);
+                        if (alt_ptr && alt_ptr < obj_end)
+                        {
+                            char *colon_alt = strchr(alt_ptr, ':');
+                            if (colon_alt)
+                                sscanf(colon_alt + 1, "%f", &alt);
+                        }
+
+                        int idx = AddLocation(name, lat, lon, alt);
+                        if (idx >= 0)
+                            SetHomeLocation(idx);
+                    }
+                }
+
+                // migrate legacy markers (non-home) into the list
+                char *m_ptr = strstr(text, "\"markers\"");
+                if (m_ptr)
+                {
+                    char *block_end = strchr(m_ptr, ']');
+                    if (!block_end)
+                        block_end = text + strlen(text);
+
+                    while ((m_ptr = strstr(m_ptr, "{")) && m_ptr < block_end)
+                    {
+                        char *obj_end = strchr(m_ptr, '}');
+                        if (!obj_end || obj_end > block_end)
+                            obj_end = block_end;
+
+                        char *name_ptr = strstr(m_ptr, "\"name\"");
+                        char *lat_ptr = strstr(m_ptr, "\"lat\"");
+                        char *lon_ptr = strstr(m_ptr, "\"lon\"");
+                        char *alt_ptr = strstr(m_ptr, "\"alt\"");
+
+                        if (name_ptr && name_ptr < obj_end && lat_ptr && lat_ptr < obj_end && lon_ptr && lon_ptr < obj_end)
+                        {
+                            char name[64] = "";
+                            float lat = 0.0f, lon = 0.0f, alt = 0.0f;
+
+                            char *colon_name = strchr(name_ptr, ':');
+                            if (colon_name && colon_name < obj_end)
+                            {
+                                char *quote_start = strchr(colon_name, '"');
+                                if (quote_start && quote_start < obj_end)
+                                    sscanf(quote_start + 1, "%63[^\"]", name);
+                            }
+                            char *colon_lat = strchr(lat_ptr, ':');
+                            if (colon_lat && colon_lat < obj_end)
+                                sscanf(colon_lat + 1, "%f", &lat);
+                            char *colon_lon = strchr(lon_ptr, ':');
+                            if (colon_lon && colon_lon < obj_end)
+                                sscanf(colon_lon + 1, "%f", &lon);
+                            if (alt_ptr && alt_ptr < obj_end)
+                            {
+                                char *colon_alt = strchr(alt_ptr, ':');
+                                if (colon_alt && colon_alt < obj_end)
+                                    sscanf(colon_alt + 1, "%f", &alt);
+                            }
+
+                            AddLocation(name, lat, lon, alt);
+                        }
+                        m_ptr = obj_end + 1;
+                    }
                 }
             }
 
@@ -557,9 +627,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             }
 
             UnloadFileText(text);
-            LOG_INFO("Config loaded: theme=%s, %dx%d, %d markers, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
+            LOG_INFO("Config loaded: theme=%s, %dx%d, %d locations, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
                      config->theme, config->window_width, config->window_height,
-                     marker_count, config->custom_data_source_count,
+                     location_count, config->custom_data_source_count,
                      config->retlector_group_count, config->custom_entry_count,
                      config->data_stale_threshold_seconds);
         }
@@ -584,15 +654,11 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_ground_coverage = true;
         config->show_apsides = true;
         config->hint_vsync = true;
-        sscanf("Home", "%63[^\"]", home_location.name);
-        home_location.lat = 0.00;
-        home_location.lon = 0.00;
-
-        marker_count = 1;
-        sscanf("Cape Canaveral", "%63[^\"]", markers[0].name);
-        markers[0].lat = 28.3922f;
-        markers[0].lon = -80.6077f;
-        markers[0].alt = 0.0f;
+        /* first run: a single default home location, no forced example marker */
+        location_count = 0;
+        int home_idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);
+        if (home_idx >= 0)
+            SetHomeLocation(home_idx);
 
         config->show_first_run_dialog = true;
 
@@ -697,12 +763,13 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         fprintf(file, "    ],\n");
     }
 
-    fprintf(file, "    \"home_location\": {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f},\n", home_location.name, home_location.lat, home_location.lon, home_location.alt);
-
-    fprintf(file, "    \"markers\": [\n");
-    for (int i = 0; i < marker_count; i++)
+    fprintf(file, "    \"locations\": [\n");
+    for (int i = 0; i < location_count; i++)
     {
-        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f}%s\n", markers[i].name, markers[i].lat, markers[i].lon, markers[i].alt, (i == marker_count - 1) ? "" : ",");
+        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f, \"is_home\": %s}%s\n",
+                locations[i].name, locations[i].lat, locations[i].lon, locations[i].alt,
+                locations[i].is_home ? "true" : "false",
+                (i == location_count - 1) ? "" : ",");
     }
     fprintf(file, "    ],\n");
 

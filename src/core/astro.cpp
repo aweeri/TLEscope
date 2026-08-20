@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "astro.h"
 #include "types.h"
+#include "location.h"
 #include "data/storage.h"
 
 #include <math.h>
@@ -35,9 +36,6 @@ void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, 
 
 Satellite satellites[MAX_SATELLITES];
 int sat_count = 0;
-
-Marker markers[MAX_MARKERS];
-int marker_count = 0;
 
 SatPass passes[MAX_PASSES];
 int num_passes = 0;
@@ -637,6 +635,10 @@ void CalculatePasses(Satellite *sat, double start_epoch)
     int max_days = sat ? 3 : 1;
     double coarse_step = sat ? (1.0 / 1440.0) : (4.0 / 1440.0);
 
+    Location *home = GetHomeLocation();
+    if (!home)
+        return;
+
     for (int s = 0; s < target_count; s++)
     {
         Satellite *current_sat = sat ? sat : &satellites[s];
@@ -648,7 +650,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
         double gmst = epoch_to_gmst(t);
         double az, el;
 
-        get_az_el(calculate_position(current_sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
+        get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
 
         /* back up if we're already in a pass to catch the true start */
         if (el > 0)
@@ -658,7 +660,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                 t -= (1.0 / 1440.0);
                 t_unix = get_unix_from_epoch(t);
                 gmst = epoch_to_gmst(t);
-                get_az_el(calculate_position(current_sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
+                get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
             }
         }
 
@@ -671,7 +673,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
         {
             t_unix = get_unix_from_epoch(t);
             gmst = epoch_to_gmst(t);
-            get_az_el(calculate_position(current_sat, t_unix), gmst, home_location.lat, home_location.lon, home_location.alt, &az, &el);
+            get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
 
             if (el >= 0.0)
             {
@@ -687,7 +689,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                         double mid_unix = get_unix_from_epoch(t_mid);
                         double mid_gmst = epoch_to_gmst(t_mid);
                         double mid_az, mid_el;
-                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, home_location.alt, &mid_az, &mid_el);
+                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
                         if (mid_el >= 0.0)
                             t_high = t_mid;
                         else
@@ -718,7 +720,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                         double mid_unix = get_unix_from_epoch(t_mid);
                         double mid_gmst = epoch_to_gmst(t_mid);
                         double mid_az, mid_el;
-                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home_location.lat, home_location.lon, home_location.alt, &mid_az, &mid_el);
+                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
                         if (mid_el < 0.0)
                             t_high = t_mid;
                         else
@@ -738,7 +740,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                             double pt_unix = get_unix_from_epoch(pt);
                             double p_gmst = epoch_to_gmst(pt);
                             double p_az, p_el;
-                            get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home_location.lat, home_location.lon, home_location.alt, &p_az, &p_el);
+                            get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
                             current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
                             
                             /* make sure we pinpoint the max elevation */
@@ -771,7 +773,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                     double pt_unix = get_unix_from_epoch(pt);
                     double p_gmst = epoch_to_gmst(pt);
                     double p_az, p_el;
-                    get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home_location.lat, home_location.lon, home_location.alt, &p_az, &p_el);
+                    get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
                     current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
                     
                     if (p_el > current_pass.max_el)
@@ -958,7 +960,7 @@ Vector3 calculate_moon_position(double current_time_days)
 }
 
 /** internal helper to figure out straight-line distance to a satellite */
-double get_sat_range(Satellite *sat, double epoch, Marker obs)
+double get_sat_range(Satellite *sat, double epoch, Location obs)
 {
     double t_unix = get_unix_from_epoch(epoch);
     double theta = epoch_to_gmst(epoch) * DEG2RAD;
@@ -986,7 +988,7 @@ double get_sat_range(Satellite *sat, double epoch, Marker obs)
 }
 
 /** shifts the frequency based on velocity relative to the observer; essential for tuning */
-double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq)
+double calculate_doppler_freq(Satellite *sat, double epoch, Location obs, double base_freq)
 {
     /* line-of-sight range */
     double dt = 0.1 / 86400.0; /* 0.1 seconds step */
@@ -999,7 +1001,7 @@ double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double b
 }
 
 /** draws the satellite's orbital path as an arc on the radar scope */
-void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs, 
+void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Location obs,
                                Vector2 scope_center, float scope_radius, float scope_az, float scope_el, 
                                float scope_beam, Color orbit_color)
 {

@@ -12,6 +12,7 @@
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
+#include "core/location.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -960,20 +961,103 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* ---- Home Location section --------------------------------------- */
-        if (ImGui::CollapsingHeader("Home Location"))
+        /* ---- Locations section (single source of truth for markers + home) */
+        if (ImGui::CollapsingHeader("Locations"))
         {
-            ImGui::InputText("Name", home_location.name, sizeof(home_location.name));
-            ImGui::InputFloat("Latitude", &home_location.lat);
-            ImGui::InputFloat("Longitude", &home_location.lon);
-            ImGui::InputFloat("Altitude", &home_location.alt);
-            if (ImGui::Button("Pick on Map"))
+            static int editing = -1;   /* index of the location being edited, -1 = none */
+            if (editing >= location_count) editing = -1;
+
+            if (location_count == 0)
             {
-                /* close the modal and let the user click the map directly;
-                 * clicking the earth sets the location, Esc cancels. */
-                *ctx->picking_home = true;
-                g_layout.settings_open = false;
-                ImGui::CloseCurrentPopup();
+                ImGui::TextDisabled("No locations yet. Add one below.");
+            }
+            else
+            {
+                /* aligned columns: name | home | edit | remove */
+                float btn_w = ImGui::GetFrameHeight();
+                float spacing = ImGui::GetStyle().ItemSpacing.x;
+                float row_w = ImGui::GetContentRegionAvail().x;
+                float btn_start = row_w - 3.0f * btn_w - 2.0f * spacing;
+
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 2.0f));
+                /* pull the FontAwesome glyphs down and left so they sit centered in the square buttons */
+                ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.45f, 0.6f));
+
+                for (int i = 0; i < location_count; i++)
+                {
+                    Location *loc = &locations[i];
+                    char btn_id[48];
+
+                    ImGui::Text("%s%s", loc->name, loc->is_home ? "  (Home)" : "");
+
+                    ImGui::SameLine(btn_start);
+                    snprintf(btn_id, sizeof(btn_id), "%s##home_%d", ICON_FA_HOUSE, i);
+                    bool was_home = loc->is_home;
+                    if (was_home)
+                        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 200, 0, 255));
+                    if (ImGui::Button(btn_id, ImVec2(btn_w, btn_w)))
+                    {
+                        if (!loc->is_home)
+                            SetHomeLocation(i);
+                    }
+                    if (was_home)
+                        ImGui::PopStyleColor(1);
+
+                    ImGui::SameLine();
+                    snprintf(btn_id, sizeof(btn_id), "%s##edit_%d", ICON_FA_PEN, i);
+                    if (ImGui::Button(btn_id, ImVec2(btn_w, btn_w)))
+                        editing = i;
+
+                    ImGui::SameLine();
+                    snprintf(btn_id, sizeof(btn_id), "%s##remove_%d", ICON_FA_XMARK, i);
+                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 60, 60, 255));
+                    if (ImGui::Button(btn_id, ImVec2(btn_w, btn_w)))
+                    {
+                        RemoveLocation(i);
+                        if (editing == i) editing = -1;
+                        if (editing > i) editing--;
+                        i--; /* re-check the shifted row */
+                    }
+                    ImGui::PopStyleColor(1);
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleVar();
+            }
+
+            /* inline edit fields for the row being edited */
+            if (editing >= 0 && editing < location_count)
+            {
+                Location *loc = &locations[editing];
+                ImGui::Separator();
+                ImGui::Text("Edit: %s", loc->name);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+                ImGui::InputText("Name", loc->name, sizeof(loc->name));
+                ImGui::InputFloat("Latitude", &loc->lat);
+                ImGui::InputFloat("Longitude", &loc->lon);
+                ImGui::InputFloat("Altitude", &loc->alt);
+                ImGui::PopStyleVar();
+
+                ImGui::Spacing();
+                if (ImGui::Button("Done"))
+                    editing = -1;
+                ImGui::SameLine();
+                if (ImGui::Button("Pick on Map"))
+                {
+                    /* picking on the map updates the location being edited */
+                    pick_location_index = editing;
+                    *ctx->picking_home = true;
+                    g_layout.settings_open = false;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::Separator();
+            if (ImGui::Button("Add Location"))
+            {
+                const int idx = AddLocation("New Location", 0.0f, 0.0f, 0.0f);
+                if (idx >= 0)
+                    editing = idx;
             }
         }
 

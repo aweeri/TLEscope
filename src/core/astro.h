@@ -71,9 +71,9 @@ void update_orbit_cache(Satellite *sat, double current_epoch);
 bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
 int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count);
 
-double get_sat_range(Satellite *sat, double epoch, Marker obs);
-double calculate_doppler_freq(Satellite *sat, double epoch, Marker obs, double base_freq);
-void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Marker obs,
+double get_sat_range(Satellite *sat, double epoch, Location obs);
+double calculate_doppler_freq(Satellite *sat, double epoch, Location obs, double base_freq);
+void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Location obs,
                                Vector2 scope_center, float scope_radius, float scope_az, float scope_el,
                                float scope_beam, Color orbit_color);
 
