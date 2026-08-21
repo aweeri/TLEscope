@@ -80,7 +80,7 @@ Status markers used below:
 
 ## 2. Satellite passes
 
-### 2.1 [~] Two pass modes
+### 2.1 [x] Two pass modes
 
 - Single-satellite mode: compute passes for the currently selected and active
   satellite.
@@ -89,9 +89,9 @@ Status markers used below:
 - `CalculatePasses(sat, start_epoch)` already supports both a single sat
   (`sat != NULL`) and all-active (`sat == NULL`) path, but the UI only exposes
   the "Calculate Passes" button and hardcodes the window. Wire the mode and
-  duration into the panel.
+  duration into the panel, make the listings actively update to stay current.
 
-### 2.2 [~] Richer pass entries
+### 2.2 [x] Richer pass entries
 
 - Problem: entries currently show only `name - El: X`. When two passes share
   the same max elevation, ImGui sees duplicate IDs, which causes selection bugs. Additionally, the calculate button is not the intended way for it to work; the passes should update in real time. 
@@ -104,7 +104,7 @@ Status markers used below:
   from the pass index plus the AOS epoch), and clicking a pass always selects
   the intended one.
 
-### 2.3 [ ] Pass progress bar
+### 2.3 [x] Pass progress bar
 
 - For each pass, show a progress bar that reflects where we are in the AOS to
   LOS window right now.
@@ -112,17 +112,17 @@ Status markers used below:
   the home location.
 - Show start time, end time, and elevation alongside the bar.
 
-### 2.4 [ ] Click to open in Polar Plot
+### 2.4 [x] Click to open in Polar Plot
 
 - Clicking a pass opens that pass's sky path in the Polar Plot view. The
   `path_pts` are already computed and stored on `SatPass`.
 
-### 2.5 [ ] Pass to Doppler handoff
+### 2.5 [x] Pass to Doppler handoff
 
 - A pass row offers an "Analyze in Doppler" action that preloads the Doppler
   panel with that satellite and pass window.
 
-### 2.6 [ ] Pass list height
+### 2.6 [x] Pass list height
 
 - The passes panel currently takes over the whole sidebar. Cap it to roughly
   one-third to one-fourth of the sidebar height (same approach as the Satellite
@@ -558,10 +558,10 @@ Use this as the definition of done for the release.
 
 - [ ] Data sources pull correctly from all four source types.
 - [ ] Staleness is enforced and surfaced per source.
-- [ ] Pass prediction works in both single-sat and all-active modes, with a
+- [x] Pass prediction works in both single-sat and all-active modes, with a
       configurable time span and correct unique IDs.
-- [ ] Pass progress bar shows ongoing passes over the home location.
-- [ ] Clicking a pass opens it in the polar plot.
+- [x] Pass progress bar shows ongoing passes over the home location.
+- [x] Clicking a pass opens it in the polar plot.
 - [ ] Doppler shows a frequency graph and exports a valid CSV.
 - [ ] Rotator connects, is configurable, persists settings, and auto-steers.
 - [ ] Scope view is a large window with targeting, locking, beam highlight, and
