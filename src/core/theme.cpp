@@ -375,7 +375,10 @@ bool ThemeDiscover(ThemeList *list)
     list->names[0] = '\0';
     list->names[1] = '\0';
 
-    FilePathList dirs = LoadDirectoryFilesEx("themes", "DIR", false);
+    /* LoadDirectoryFiles returns both files and directories (no filter).
+     * NOTE: LoadDirectoryFilesEx's filter is a file-extension filter, not a
+     * directory-type filter, so it cannot be used to select directories. */
+    FilePathList dirs = LoadDirectoryFiles("themes");
     if (dirs.count == 0)
     {
         UnloadDirectoryFiles(dirs);
@@ -394,6 +397,8 @@ bool ThemeDiscover(ThemeList *list)
         if (!path)
             continue;
         /* only directories that contain a theme.json are themes */
+        if (!DirectoryExists(path))
+            continue;
         char check[256];
         snprintf(check, sizeof(check), "%s/theme.json", path);
         if (!FileExists(check))
