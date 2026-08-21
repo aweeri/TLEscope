@@ -3,7 +3,7 @@
  *
  * To add a new tool:
  *   1. Write a draw function (see the tool_*.cpp files for examples).
- *   2. Add a PanelId entry in tools_registry.h.
+ *   2. Add a PanelId entry in core/types.h.
  *   3. Add one row to g_panel_defs below.
  *
  * The Tools modal, enable/disable persistence, left/right placement, and the

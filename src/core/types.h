@@ -91,7 +91,31 @@
 /* sidebar layout limits */
 #define MAX_LEFT_PANELS   6
 #define MAX_RIGHT_PANELS  5
-#define MAX_PANELS        11   /* PANEL_COUNT */
+
+/* -- Panel identity -------------------------------------------------------- */
+
+/**
+ * Numeric identity of every tool panel. The sentinel PANEL_COUNT is the number
+ * of panels and is used to size the layout arrays, so adding a panel here
+ * automatically grows MAX_PANELS — no manual capacity bump required.
+ */
+typedef enum
+{
+    PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
+    PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
+    PANEL_LAYERS,           /* Layer Controls               -> left  */
+    PANEL_SCOPE,            /* Scope                        -> left  */
+    PANEL_ROTATOR,          /* Rotator Control              -> left  */
+    PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
+    PANEL_PASSES,           /* Satellite Passes             -> right */
+    PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
+    PANEL_DOPPLER,          /* Doppler Analysis             -> right */
+    PANEL_LOG,              /* Log                          -> right */
+    PANEL_COUNT
+} PanelId;
+
+/* derived from the PanelId enum so adding a panel never requires a bump */
+#define MAX_PANELS PANEL_COUNT
 
 /** supported orbital data formats */
 typedef enum {
@@ -258,6 +282,28 @@ typedef struct
     int steer_mode;
 } RotatorSettings;
 
+/* -- Tool-owned settings (generic key-value store) -------------------------- */
+
+#define MAX_TOOL_SETTINGS 64
+
+/** a single persisted tool setting (key/value string pair) */
+typedef struct
+{
+    char key[64];
+    char value[256];
+} ToolSetting;
+
+/**
+ * Generic persisted key-value map owned by tools. Tools read/write their own
+ * namespaced keys (e.g. "cubeifier.enabled") via tools_settings.h, so adding a
+ * toggle never requires a new AppConfig field or a config.cpp edit.
+ */
+typedef struct
+{
+    ToolSetting entries[MAX_TOOL_SETTINGS];
+    int count;
+} ToolSettings;
+
 /* application settings (theme/appearance is managed by Theme in theme.h) */
 typedef struct
 {
@@ -307,6 +353,8 @@ typedef struct
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
 
     UILayoutPersist ui_layout;  // sidebar/panel layout persistence
+
+    ToolSettings tool_settings;  // generic persisted key-value store for tools
 } AppConfig;
 
 #endif // TYPES_H

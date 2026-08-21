@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "location.h"
 #include "util/log.h"
+#include "ui/tools/tools_settings.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +59,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
+    config->tool_settings.count = 0;  /* tool-owned settings start empty */
 
     /* default rotator settings (mirror the static defaults in rotator.cpp) */
     {
@@ -85,8 +87,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->right_sidebar_hidden = false;
 
         /* left sidebar: core functions */
-        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
-        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false, false};
+        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
+        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
             L->left_panel_order[i] = left_defaults[i];
@@ -94,8 +96,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         }
 
         /* right sidebar: inspector + scientific tools */
-        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
-        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false, false};
+        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
+        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
             L->right_panel_order[i] = right_defaults[i];
@@ -665,6 +667,65 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
 
+            // load tool-owned settings (generic key-value store)
+            {
+                char *ts_ptr = strstr(text, "\"tool_settings\"");
+                if (ts_ptr)
+                {
+                    char *block_end = strchr(ts_ptr, ']');
+                    if (!block_end) block_end = text + strlen(text);
+
+                    config->tool_settings.count = 0;
+                    char *cur = ts_ptr;
+                    while ((cur = strstr(cur, "{")) && cur < block_end)
+                    {
+                        if (config->tool_settings.count >= MAX_TOOL_SETTINGS)
+                            break;
+
+                        char *obj_end = strchr(cur, '}');
+                        if (!obj_end || obj_end > block_end) obj_end = block_end;
+
+                        char *key_ptr = strstr(cur, "\"key\"");
+                        char *val_ptr = strstr(cur, "\"value\"");
+                        if (key_ptr && key_ptr < obj_end && val_ptr && val_ptr < obj_end)
+                        {
+                            ToolSetting *s = &config->tool_settings.entries[config->tool_settings.count];
+
+                            char *colon = strchr(key_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                char *q = strchr(colon, '"');
+                                if (q && q < obj_end)
+                                {
+                                    q++;
+                                    int i = 0;
+                                    while (*q && *q != '"' && i < (int)sizeof(s->key) - 1)
+                                        s->key[i++] = *q++;
+                                    s->key[i] = '\0';
+                                }
+                            }
+
+                            colon = strchr(val_ptr, ':');
+                            if (colon && colon < obj_end)
+                            {
+                                char *q = strchr(colon, '"');
+                                if (q && q < obj_end)
+                                {
+                                    q++;
+                                    int i = 0;
+                                    while (*q && *q != '"' && i < (int)sizeof(s->value) - 1)
+                                        s->value[i++] = *q++;
+                                    s->value[i] = '\0';
+                                }
+                            }
+
+                            config->tool_settings.count++;
+                        }
+                        cur = obj_end + 1;
+                    }
+                }
+            }
+
             // load rotator settings
             {
                 RotatorSettings *R = &config->rotator_settings;
@@ -923,6 +984,20 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         fprintf(file, "        \"auto_steer\": %s,\n", R->auto_steer ? "true" : "false");
         fprintf(file, "        \"steer_mode\": %d\n", R->steer_mode);
         fprintf(file, "    }\n");
+    }
+
+    /* -- tool-owned settings (generic key-value store) -------------------- */
+    if (config->tool_settings.count > 0)
+    {
+        fprintf(file, "    \"tool_settings\": [\n");
+        for (int i = 0; i < config->tool_settings.count; i++)
+        {
+            ToolSetting *s = &config->tool_settings.entries[i];
+            fprintf(file, "    {\"key\": \"%s\", \"value\": \"%s\"}%s\n",
+                    s->key, s->value,
+                    (i == config->tool_settings.count - 1) ? "" : ",");
+        }
+        fprintf(file, "    ],\n");
     }
 
     /* -- active satellite selection (NORAD ids) --------------------------- */

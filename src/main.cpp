@@ -16,6 +16,7 @@
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_common.h"
+#include "ui/tools/tools_scene.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 #include "imgui.h"
@@ -1515,6 +1516,24 @@ int main(void)
         BeginDrawing();
         ClearBackground(g_theme.world.bg);
 
+        /* scene context for tool draw_scene hooks (see tools_scene.h) */
+        SceneContext sctx = {
+            .is_2d_view = is_2d_view,
+            .camera2d = &Camera2DParams,
+            .camera3d = &Camera3DParams,
+            .current_epoch = current_epoch,
+            .gmst_deg = gmst_deg,
+            .earth_rotation_offset = cfg.earth_rotation_offset,
+            .draw_earth_radius = draw_earth_radius,
+            .map_w = map_w,
+            .map_h = map_h,
+            .sun_dir_world = Vector3Normalize(calculate_sun_position(current_epoch)),
+            .moon_pos_world = draw_moon_pos,
+            .active_sat = active_sat,
+            .selected_sat = selected_sat,
+            .is_pov_mode = is_pov_mode
+        };
+
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
         float m_text_2d = 16.0f * cfg.ui_scale / Camera2DParams.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
@@ -1832,6 +1851,9 @@ int main(void)
                 }
             }
 
+            /* tool scene hooks (2D overlays) */
+            DrawSceneHooks(&sctx, &cfg);
+
             EndMode2D();
         }
         else
@@ -2025,6 +2047,9 @@ int main(void)
                     DrawLine3D(h_pos3d, pt, lineCol);
                 }
             }
+
+            /* tool scene hooks (3D overlays) */
+            DrawSceneHooks(&sctx, &cfg);
 
             EndMode3D();
 

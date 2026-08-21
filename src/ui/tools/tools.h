@@ -10,7 +10,7 @@
  *
  * Each tool lives in its own tool_*.cpp file. To add a new tool, create a
  * tool_my_tool.cpp with a DrawPanelMyTool() function, declare it here, add a
- * PanelId in tools_registry.h, and register it in tools_registry.cpp.
+ * PanelId in core/types.h, and register it in tools_registry.cpp.
  */
 
 void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg);

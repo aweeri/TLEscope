@@ -3,6 +3,7 @@
 
 #include "core/config.h"
 #include "ui/ui.h"
+#include "tools_scene.h"
 
 /**
  * @file tools_registry.h
@@ -11,29 +12,16 @@
  * A "tool" is a sidebar panel. To add a new tool you:
  *   1. Write a draw function:  void DrawPanelMyTool(UIContext *ctx, AppConfig *cfg)
  *   2. Add one row to g_panel_defs in tools_registry.cpp and one entry to the
- *      PanelId enum below.
+ *      PanelId enum in core/types.h.
  *
  * The Tools modal, enable/disable persistence, left/right placement, and the
  * sidebar renderer all pick the tool up automatically because they iterate
  * g_panel_defs.
+ *
+ * A tool may optionally also provide a draw_scene callback (see tools_scene.h)
+ * to draw into the 3D world / 2D map. The render loop calls every registered
+ * draw_scene hook each frame.
  */
-
-/* -- Panel identity -------------------------------------------------------- */
-
-typedef enum
-{
-    PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
-    PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
-    PANEL_LAYERS,           /* Layer Controls               -> left  */
-    PANEL_SCOPE,            /* Scope                        -> left  */
-    PANEL_ROTATOR,          /* Rotator Control              -> left  */
-    PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
-    PANEL_PASSES,           /* Satellite Passes             -> right */
-    PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
-    PANEL_DOPPLER,          /* Doppler Analysis             -> right */
-    PANEL_LOG,              /* Log                          -> right */
-    PANEL_COUNT
-} PanelId;
 
 /* panel categories used by the Tools modal */
 typedef enum
@@ -62,6 +50,7 @@ typedef struct
     SidebarSide default_side; /* default sidebar assignment   */
     bool default_open;       /* open on first run             */
     void (*draw_content)(UIContext *ctx, AppConfig *cfg); /* body renderer */
+    void (*draw_scene)(SceneContext *sctx, AppConfig *cfg); /* optional scene hook */
 } PanelDef;
 
 /* the single registry table (defined in tools_registry.cpp) */
