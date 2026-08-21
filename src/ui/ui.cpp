@@ -841,15 +841,18 @@ bool IsUITyping(void) { return ImGui::GetCurrentContext() ? ImGui::IsAnyItemActi
 void ToggleTLEWarning(void) { show_tle_warning = !show_tle_warning; }
 bool IsMouseOverUI(AppConfig *cfg) { (void)cfg; return ImGui::GetCurrentContext() ? (ImGui::IsWindowHovered(ImGuiFocusedFlags_AnyWindow) || ImGui::IsAnyItemHovered()) : false; }
 
-/** simple earth occlusion test using dot product */
+/** earth occlusion test: true if the line segment from the camera to the target
+ * passes through the earth sphere (i.e. the globe blocks the view of the target) */
 bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius)
 {
     Vector3 camToTarget = Vector3Subtract(targetPos, camPos);
-    float dist = Vector3Length(camToTarget);
-    if (dist <= 0.0f) return false;
-    float camDist = Vector3Length(camPos);
-    if (camDist <= 0.0f) return false;
-    float angle = acosf(Vector3DotProduct(camPos, camToTarget) / (camDist * dist));
-    float horizonAngle = asinf(earthRadius / camDist);
-    return angle < horizonAngle;
+    float segLenSq = Vector3DotProduct(camToTarget, camToTarget);
+    if (segLenSq <= 0.0f) return false;
+    /* parameter of the closest point on the segment to the earth center (origin) */
+    float t = -Vector3DotProduct(camPos, camToTarget) / segLenSq;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    Vector3 closest = Vector3Add(camPos, Vector3Scale(camToTarget, t));
+    float closestDist = Vector3Length(closest);
+    return closestDist < earthRadius;
 }

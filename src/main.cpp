@@ -1294,6 +1294,9 @@ int main(void)
                     Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                     if (Vector3DistanceSqr(Camera3DParams.target, draw_pos) > (camDistance * camDistance * 16.0f))
                         continue;
+                    /* cull satellites behind the globe so they cannot be hovered/clicked */
+                    if (IsOccludedByEarth(Camera3DParams.position, draw_pos, draw_earth_radius))
+                        continue;
 
                     Vector3 to_sat = Vector3Subtract(draw_pos, Camera3DParams.position);
                     float distToCamSqr = Vector3LengthSqr(to_sat);
