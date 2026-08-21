@@ -4,6 +4,7 @@
 #include "core/config.h"
 #include "core/types.h"
 #include "ui.h"
+#include "tools/tools_registry.h"
 
 /**
  * @file ui_layout.h
@@ -14,53 +15,10 @@
  * Sidebars are resizable, snap-hide to the screen edge (pull-tab to
  * restore), and contain reorderable accordion panels whose arrangement and
  * open/closed state are persisted to settings.json.
+ *
+ * Panel identity (PanelId, PanelDef, the g_panel_defs registry) lives in
+ * tools/tools_registry.h — see that file to add a new tool.
  */
-
-/* -- Panel identity -------------------------------------------------------- */
-
-typedef enum
-{
-    PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
-    PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
-    PANEL_LAYERS,           /* Layer Controls               -> left  */
-    PANEL_SCOPE,            /* Scope                        -> left  */
-    PANEL_ROTATOR,          /* Rotator Control              -> left  */
-    PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
-    PANEL_PASSES,           /* Satellite Passes             -> right */
-    PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
-    PANEL_DOPPLER,          /* Doppler Analysis             -> right */
-    PANEL_LOG,              /* Log                          -> right */
-    PANEL_COUNT
-} PanelId;
-
-/* panel categories used by the Tools dropdown */
-typedef enum
-{
-    PANEL_CAT_CORE = 0,     /* core functions                */
-    PANEL_CAT_SCIENTIFIC,   /* scientific tools              */
-    PANEL_CAT_INSPECTOR     /* inspector / information       */
-} PanelCategory;
-
-/* which sidebar a panel lives in */
-typedef enum
-{
-    SIDEBAR_NONE = 0,
-    SIDEBAR_LEFT,
-    SIDEBAR_RIGHT
-} SidebarSide;
-
-/* -- Panel registry -------------------------------------------------------- */
-
-typedef struct
-{
-    PanelId id;
-    const char *title;       /* display title                 */
-    const char *icon;        /* FontAwesome icon              */
-    PanelCategory category;
-    SidebarSide default_side; /* default sidebar assignment   */
-    bool default_open;       /* open on first run             */
-    void (*draw_content)(UIContext *ctx, AppConfig *cfg); /* body renderer */
-} PanelDef;
 
 /* -- Runtime layout state -------------------------------------------------- */
 

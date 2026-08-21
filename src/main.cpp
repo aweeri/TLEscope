@@ -15,7 +15,7 @@
 #include "core/types.h"
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
-#include "ui/panels.h"
+#include "ui/tools/tools_common.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 #include "imgui.h"
