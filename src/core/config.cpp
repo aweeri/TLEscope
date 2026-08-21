@@ -85,6 +85,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->right_sidebar_visible = true;
         L->left_sidebar_hidden = false;
         L->right_sidebar_hidden = false;
+        L->left_restore_width = 300.0f;
+        L->right_restore_width = 300.0f;
 
         /* left sidebar: core functions */
         int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
@@ -104,9 +106,17 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             L->right_panel_open[i] = right_open_defaults[i];
         }
 
-        /* all panels enabled by default (Tools dropdown) */
+        /* all panels disabled by default (Tools dropdown); only the
+         * essential core/inspector tools are turned on for first run.
+         * New tools added to the enum stay off automatically. */
         for (int i = 0; i < MAX_PANELS; i++)
-            L->panel_enabled[i] = true;
+            L->panel_enabled[i] = false;
+        L->panel_enabled[PANEL_SAT_MGR]      = true;
+        L->panel_enabled[PANEL_DATA_SOURCES] = true;
+        L->panel_enabled[PANEL_LAYERS]       = true;
+        L->panel_enabled[PANEL_SAT_INFO]     = true;
+        L->panel_enabled[PANEL_PASSES]       = true;
+        L->panel_enabled[PANEL_POLAR_PLOT]   = true;
     }
 
     if (FileExists(filename))
@@ -579,6 +589,12 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     L->left_sidebar_hidden = ParseJsonBool(ul_ptr, "left_sidebar_hidden", L->left_sidebar_hidden);
                     L->right_sidebar_hidden = ParseJsonBool(ul_ptr, "right_sidebar_hidden", L->right_sidebar_hidden);
 
+                    // restore widths (used when un-hiding a snap-hidden sidebar)
+                    w = strstr(ul_ptr, "\"left_restore_width\"");
+                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->left_restore_width); }
+                    w = strstr(ul_ptr, "\"right_restore_width\"");
+                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->right_restore_width); }
+
                     // panel order arrays
                     char *po = strstr(ul_ptr, "\"left_panel_order\"");
                     if (po && po < block_end)
@@ -940,6 +956,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         fprintf(file, "        \"right_sidebar_visible\": %s,\n", L->right_sidebar_visible ? "true" : "false");
         fprintf(file, "        \"left_sidebar_hidden\": %s,\n", L->left_sidebar_hidden ? "true" : "false");
         fprintf(file, "        \"right_sidebar_hidden\": %s,\n", L->right_sidebar_hidden ? "true" : "false");
+        fprintf(file, "        \"left_restore_width\": %.1f,\n", L->left_restore_width);
+        fprintf(file, "        \"right_restore_width\": %.1f,\n", L->right_restore_width);
 
         fprintf(file, "        \"left_panel_order\": [");
         for (int i = 0; i < MAX_PANELS; i++)

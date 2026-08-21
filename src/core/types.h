@@ -236,6 +236,8 @@ typedef struct {
     bool right_sidebar_visible;
     bool left_sidebar_hidden;   /* snap-hidden: pull-tab shown instead */
     bool right_sidebar_hidden;
+    float left_restore_width;   /* width to restore after un-hiding */
+    float right_restore_width;
 
     /* panel order (PanelId values in display order, -1 = unused slot) */
     int left_panel_order[MAX_PANELS];

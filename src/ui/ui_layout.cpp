@@ -132,7 +132,7 @@ void LayoutInitDefaults(void)
         else
             g_layout.right_order[ri++] = def->id;
         g_layout.panel_open[def->id] = def->default_open;
-        g_layout.panel_enabled[def->id] = true;
+        g_layout.panel_enabled[def->id] = def->default_enabled;
     }
 
     /* fill unused slots with -1 so no panel id is duplicated in the arrays */
@@ -170,6 +170,8 @@ void LayoutApplyPersist(const UILayoutPersist *p)
     g_layout.right_visible = p->right_sidebar_visible;
     g_layout.left_hidden   = p->left_sidebar_hidden;
     g_layout.right_hidden  = p->right_sidebar_hidden;
+    g_layout.left_restore_width  = p->left_restore_width;
+    g_layout.right_restore_width = p->right_restore_width;
 
     for (int i = 0; i < MAX_PANELS; i++)
         g_layout.left_order[i] = p->left_panel_order[i];
@@ -206,6 +208,8 @@ void LayoutFillPersist(UILayoutPersist *p)
     p->right_sidebar_visible = g_layout.right_visible;
     p->left_sidebar_hidden   = g_layout.left_hidden;
     p->right_sidebar_hidden  = g_layout.right_hidden;
+    p->left_restore_width  = g_layout.left_restore_width;
+    p->right_restore_width = g_layout.right_restore_width;
 
     for (int i = 0; i < MAX_PANELS; i++)
         p->left_panel_order[i] = g_layout.left_order[i];
@@ -605,6 +609,10 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     ImVec2 h1 = ImGui::GetItemRectMax();
     ImVec2 grip_sz = ImGui::CalcTextSize(ICON_FA_GRIP_VERTICAL);
 
+    /* cursor feedback: grab hand on hover / while dragging */
+    if (handle_hovered || handle_active)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
     /* draw grip dots */
     if (handle_hovered || handle_active)
         ImGui::GetWindowDrawList()->AddRectFilled(
@@ -648,81 +656,158 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
 /*  Reorder finalisation                                                      */
 /* ========================================================================== */
 
-static void FinishReorder()
+/** Map a "visible target" (a count of enabled, non-dragged header slots above
+ *  the mouse) to a full-array insertion index. The order[] arrays contain both
+ *  enabled and disabled panels (disabled ones are skipped at render time but
+ *  still occupy a slot), so the visible count must be translated back into a
+ *  real array position. Pass dragged = -1 when the panel is not in this array
+ *  (e.g. when moving it into the other sidebar). */
+static int FindInsertIndex(int *order, int dragged, int visible_target)
+{
+    int seen = 0;
+    for (int i = 0; i < MAX_PANELS; i++)
+    {
+        int pid = order[i];
+        if (pid < 0) break;              /* used slots are contiguous at the front */
+        if (pid == dragged) continue;
+        if (seen == visible_target) return i;
+        seen++;
+    }
+    /* insert after the last used slot */
+    int end = 0;
+    while (end < MAX_PANELS && order[end] >= 0) end++;
+    return end;
+}
+
+/** Draw the blue insertion line in the given sidebar at the visible target. */
+static void DrawInsertionLine(bool is_left, HeaderSlot *slots, int sc, int visible_target)
+{
+    float line_y = 0.0f;
+    int nd = 0;
+    for (int i = 0; i < sc; i++)
+    {
+        if (slots[i].id == g_layout.drag_panel) continue;
+        if (nd == visible_target) { line_y = slots[i].y0; break; }
+        nd++;
+    }
+    if (nd == visible_target && line_y == 0.0f && sc > 0)
+    {
+        /* after the last visible slot */
+        for (int i = sc - 1; i >= 0; i--)
+            if (slots[i].id != g_layout.drag_panel) { line_y = slots[i].y1; break; }
+    }
+
+    if (line_y > 0.0f)
+    {
+        float sidebar_x = is_left ? 0.0f : (float)GetScreenWidth() - g_layout.right_width;
+        float sidebar_w = is_left ? g_layout.left_width : g_layout.right_width;
+        ImGui::GetForegroundDrawList()->AddLine(
+            ImVec2(sidebar_x, line_y), ImVec2(sidebar_x + sidebar_w, line_y),
+            IM_COL32(100, 180, 255, 220), 2.0f);
+    }
+}
+
+static void FinishReorder(AppConfig *cfg)
 {
     if (g_layout.drag_panel < 0) return;
 
-    bool is_left = g_layout.drag_is_left;
-    int *order = is_left ? g_layout.left_order : g_layout.right_order;
-    int count = MAX_PANELS;
-    HeaderSlot *slots = is_left ? s_left_headers : s_right_headers;
-    int sc = is_left ? s_left_hc : s_right_hc;
-
+    bool src_is_left = g_layout.drag_is_left;
+    float mouse_x = ImGui::GetIO().MousePos.x;
     float mouse_y = ImGui::GetIO().MousePos.y;
+    float display_w = ImGui::GetIO().DisplaySize.x;
 
-    /* compute insertion target: count how many non-dragged slot midpoints are above mouse_y */
-    int target = 0;
+    /* which sidebar is the mouse currently over? */
+    bool over_left  = (mouse_x >= 0.0f && mouse_x < g_layout.left_width);
+    bool over_right = (mouse_x > display_w - g_layout.right_width && mouse_x <= display_w);
+
+    /* target sidebar: follow the mouse into the other sidebar, else stay put */
+    bool target_is_left;
+    if (over_left && !src_is_left)      target_is_left = true;
+    else if (over_right && src_is_left) target_is_left = false;
+    else                                target_is_left = src_is_left;
+
+    HeaderSlot *slots = target_is_left ? s_left_headers : s_right_headers;
+    int sc = target_is_left ? s_left_hc : s_right_hc;
+
+    /* visible target: count of enabled (non-dragged) slot midpoints above mouse_y */
+    int visible_target = 0;
     for (int i = 0; i < sc; i++)
     {
         if (slots[i].id == g_layout.drag_panel) continue;
         float mid = (slots[i].y0 + slots[i].y1) * 0.5f;
-        if (mouse_y > mid) target++;
+        if (mouse_y > mid) visible_target++;
     }
-    g_layout.drag_target = target;
+    g_layout.drag_target = visible_target;
 
-    /* draw insertion line */
-    {
-        float line_y = 0.0f;
-        int nd = 0;
-        for (int i = 0; i < sc; i++)
-        {
-            if (slots[i].id == g_layout.drag_panel) continue;
-            if (nd == target) { line_y = slots[i].y0; break; }
-            nd++;
-        }
-        if (nd == target && line_y == 0.0f && sc > 0)
-        {
-            /* after the last */
-            for (int i = sc - 1; i >= 0; i--)
-                if (slots[i].id != g_layout.drag_panel) { line_y = slots[i].y1; break; }
-        }
-
-        if (line_y > 0.0f)
-        {
-            float sidebar_x = is_left ? 0.0f : (float)GetScreenWidth() - g_layout.right_width;
-            float sidebar_w = is_left ? g_layout.left_width : g_layout.right_width;
-            ImGui::GetForegroundDrawList()->AddLine(
-                ImVec2(sidebar_x, line_y), ImVec2(sidebar_x + sidebar_w, line_y),
-                IM_COL32(100, 180, 255, 220), 2.0f);
-        }
-    }
+    /* draw the insertion line in the target sidebar */
+    DrawInsertionLine(target_is_left, slots, sc, visible_target);
 
     /* commit on mouse release */
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
-        int src = -1;
-        for (int i = 0; i < count; i++)
-            if (order[i] == g_layout.drag_panel) { src = i; break; }
-
-        if (src >= 0)
+        if (target_is_left != src_is_left)
         {
-            /* remove dragged panel */
-            int dragged = order[src];
-            for (int i = src; i < count - 1; i++) order[i] = order[i + 1];
-            order[count - 1] = -1;
+            /* ---- move the panel to the other sidebar -------------------- */
+            int *src_order = src_is_left ? g_layout.left_order : g_layout.right_order;
+            int *dst_order = target_is_left ? g_layout.left_order : g_layout.right_order;
 
-            /* adjust target */
-            if (src < target) target--;
-            if (target < 0) target = 0;
-            if (target >= count) target = count - 1;
+            int src = -1;
+            for (int i = 0; i < MAX_PANELS; i++)
+                if (src_order[i] == g_layout.drag_panel) { src = i; break; }
 
-            /* insert at target */
-            for (int i = count - 1; i > target; i--) order[i] = order[i - 1];
-            order[target] = dragged;
+            if (src >= 0)
+            {
+                /* remove from source */
+                for (int i = src; i < MAX_PANELS - 1; i++) src_order[i] = src_order[i + 1];
+                src_order[MAX_PANELS - 1] = -1;
+                /* compact source (shift -1s to the end) */
+                int w = 0;
+                for (int i = 0; i < MAX_PANELS; i++)
+                    if (src_order[i] >= 0) src_order[w++] = src_order[i];
+                for (int i = w; i < MAX_PANELS; i++) src_order[i] = -1;
+
+                /* insert into destination at the visible target */
+                int target = FindInsertIndex(dst_order, -1, visible_target);
+                for (int i = MAX_PANELS - 1; i > target; i--) dst_order[i] = dst_order[i - 1];
+                dst_order[target] = g_layout.drag_panel;
+            }
+        }
+        else
+        {
+            /* ---- same-sidebar reorder ---------------------------------- */
+            int *order = src_is_left ? g_layout.left_order : g_layout.right_order;
+
+            int src = -1;
+            for (int i = 0; i < MAX_PANELS; i++)
+                if (order[i] == g_layout.drag_panel) { src = i; break; }
+
+            if (src >= 0)
+            {
+                int target = FindInsertIndex(order, g_layout.drag_panel, visible_target);
+                int dragged = order[src];
+
+                /* remove dragged panel */
+                for (int i = src; i < MAX_PANELS - 1; i++) order[i] = order[i + 1];
+                order[MAX_PANELS - 1] = -1;
+
+                /* adjust target if the source was before it */
+                if (src < target) target--;
+
+                /* insert at target */
+                for (int i = MAX_PANELS - 1; i > target; i--) order[i] = order[i - 1];
+                order[target] = dragged;
+            }
         }
 
         g_layout.drag_panel = -1;
         g_layout.drag_target = -1;
+
+        /* persist the new arrangement immediately */
+        if (cfg)
+        {
+            LayoutFillPersist(&cfg->ui_layout);
+            SaveAppConfig("settings.json", cfg);
+        }
     }
 }
 
@@ -847,6 +932,8 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
             if (ImGui::MenuItem("Reset Layout"))
             {
                 LayoutInitDefaults();
+                LayoutFillPersist(&cfg->ui_layout);
+                SaveAppConfig("settings.json", cfg);
             }
             ImGui::EndMenu();
         }
@@ -1192,24 +1279,24 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* ---- Scientific Tools ------------------------------------------- */
-        if (ImGui::CollapsingHeader("Scientific Tools", ImGuiTreeNodeFlags_DefaultOpen))
+        /* ---- Extra Tools ------------------------------------------------ */
+        if (ImGui::CollapsingHeader("Extra Tools", ImGuiTreeNodeFlags_DefaultOpen))
         {
             for (int i = 0; i < PANEL_COUNT; i++)
             {
                 const PanelDef *def = &g_panel_defs[i];
-                if (def->category != PANEL_CAT_SCIENTIFIC) continue;
+                if (def->category != PANEL_CAT_EXTRA) continue;
                 DrawToolRow(def, cfg);
             }
         }
 
-        /* ---- Inspector --------------------------------------------------- */
-        if (ImGui::CollapsingHeader("Inspector", ImGuiTreeNodeFlags_DefaultOpen))
+        /* ---- Debug ------------------------------------------------------- */
+        if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
         {
             for (int i = 0; i < PANEL_COUNT; i++)
             {
                 const PanelDef *def = &g_panel_defs[i];
-                if (def->category != PANEL_CAT_INSPECTOR) continue;
+                if (def->category != PANEL_CAT_DEBUG) continue;
                 DrawToolRow(def, cfg);
             }
         }
@@ -1258,5 +1345,5 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
     DrawNotch(false, nav_h2, content_h, g_layout.right_visible && !g_layout.right_hidden);
 
     /* reorder finalisation */
-    FinishReorder();
+    FinishReorder(cfg);
 }

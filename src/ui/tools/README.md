@@ -60,8 +60,12 @@ PANEL_MY_TOOL,   /* add before PANEL_COUNT */
 Then add one row to the registry table in `tools_registry.cpp`:
 
 ```cpp
-{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelMyTool },
+{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, false, DrawPanelMyTool },
 ```
+
+New tools are **disabled by default** (the `default_enabled` field is `false`),
+so they stay hidden from the sidebar until the user enables them in the Tools
+modal. Only the essential core/inspector tools ship enabled on first run.
 
 Finally, add your new file to the `SRC` list in the root `Makefile`.
 
@@ -73,17 +77,38 @@ because they iterate the `g_panel_defs` registry.
 > adding a `PanelId` entry automatically grows the layout arrays. You never
 > touch a hardcoded panel limit.
 
+## Reordering panels (drag)
+
+Panels can be reordered by dragging the **grip handle** (the vertical-dots icon
+on the right edge of a panel header). While dragging:
+
+- A blue insertion line shows where the panel will land.
+- You can drag a panel **across sidebars** (left ↔ right) by moving the mouse
+  into the other sidebar before releasing.
+- The new arrangement is **saved to `settings.json` immediately on drop**, so
+  it survives a crash or a forced quit — you don't need to open Settings and
+  press Save.
+
+The reorder logic lives in `ui_layout.cpp` (`DrawAccordionHeader` +
+`FinishReorder`). It maps the mouse position to a *visible* slot index (only
+enabled panels are rendered) and translates that back into a real position in
+the full order array, so disabled panels never throw the drop position off.
+
 ## Registry fields
+
+Each row in `g_panel_defs` (in `tools_registry.cpp`) is a `PanelDef` with these
+fields, in order:
 
 | Field          | Meaning                                                        |
 |----------------|----------------------------------------------------------------|
-| `id`           | The `PanelId` enum value (must be unique).                     |
-| `title`        | Display name shown in the sidebar and Tools modal.             |
-| `icon`         | A FontAwesome icon constant, e.g. `ICON_FA_WRENCH`.            |
-| `category`     | `PANEL_CAT_CORE`, `PANEL_CAT_SCIENTIFIC`, or `PANEL_CAT_INSPECTOR`. |
-| `default_side` | `SIDEBAR_LEFT` or `SIDEBAR_RIGHT` (default placement).         |
-| `default_open` | Whether the panel is open on first run.                        |
-| `draw_content` | Your draw function.                                            |
+| `id`           | The `PanelId` enum value (must be unique, matches `core/types.h`). |
+| `title`        | Display name shown in the sidebar header and Tools modal.      |
+| `icon`         | A FontAwesome icon constant, e.g. `ICON_FA_WRENCH`. Pick one that matches the tool. |
+| `category`     | `PANEL_CAT_CORE`, `PANEL_CAT_EXTRA`, or `PANEL_CAT_DEBUG`. Controls which section the tool appears under in the Tools modal (Core Functions / Extra Tools / Debug). |
+| `default_side` | `SIDEBAR_LEFT` or `SIDEBAR_RIGHT` — where the panel lives on first run. The user can move it later (drag the grip, or the Tools modal arrows). |
+| `default_open` | `true` = panel is expanded (content visible) on first run; `false` = collapsed to just its header. |
+| `default_enabled` | `true` = panel is shown in the sidebar on first run; `false` = hidden until the user enables it in the Tools modal. **New tools should set this to `false`** so they don't crowd the sidebar until the user opts in. |
+| `draw_content` | Your panel body renderer: `void f(UIContext*, AppConfig*)`.    |
 | `draw_scene`   | Optional scene hook (see below). `NULL` if the tool has none.  |
 
 ## Drawing into the 3D world / 2D map (scene hooks)
@@ -136,7 +161,7 @@ scene state:
 Add the `draw_scene` callback to your registry row in `tools_registry.cpp`:
 
 ```cpp
-{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelMyTool, DrawSceneMyTool },
+{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, DrawPanelMyTool, DrawSceneMyTool },
 ```
 
 Declare it in `tools.h`:
@@ -213,7 +238,7 @@ void DrawSceneCubeifier(SceneContext *s, AppConfig *cfg)
 Register it in `tools_registry.cpp`:
 
 ```cpp
-{ PANEL_CUBEIFIER, "Cubeifier", ICON_FA_CUBE, PANEL_CAT_SCIENTIFIC, SIDEBAR_RIGHT, false, DrawPanelCubeifier, DrawSceneCubeifier },
+{ PANEL_CUBEIFIER, "Cubeifier", ICON_FA_CUBE, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, DrawPanelCubeifier, DrawSceneCubeifier },
 ```
 
 Add `PANEL_CUBEIFIER` to the `PanelId` enum in `core/types.h`, declare both
