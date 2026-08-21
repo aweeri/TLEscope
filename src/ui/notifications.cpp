@@ -193,7 +193,9 @@ void DrawNotifications(void)
 
         float x = right_edge - w;
 
-        /* toast window: no decoration, no focus, no input -> never blocks */
+        /* toast window: no decoration, no focus, no input -> never blocks.
+        char win_id[32];
+        snprintf(win_id, sizeof(win_id), "##notif_%d", i);
         ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(alpha);
@@ -204,7 +206,7 @@ void DrawNotifications(void)
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad_x, pad_y));
 
-        ImGui::Begin("##notif", NULL,
+        ImGui::Begin(win_id, NULL,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings |
                          ImGuiWindowFlags_NoFocusOnAppearing |

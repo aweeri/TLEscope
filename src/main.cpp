@@ -22,6 +22,7 @@
 #include "io/rotator.h"
 #include "data/async_fetch.h"
 #include "imgui.h"
+#include "IconsFontAwesome6.h"
 
 /**
  * @brief shader for day/night transition
@@ -873,10 +874,12 @@ int main(void)
                 {
                     saved_multiplier = time_multiplier;
                     time_multiplier = 0.0;
+                    NotifyPush(NOTIFY_INFO, ICON_FA_PAUSE, "Time paused");
                 }
                 else
                 {
                     time_multiplier = saved_multiplier != 0.0 ? saved_multiplier : 1.0;
+                    NotifyPush(NOTIFY_INFO, ICON_FA_PLAY, "Time resumed");
                 }
             }
             
@@ -919,11 +922,16 @@ int main(void)
             {
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, true);
+                /* only toast on the initial press, not on hold-repeat */
+                if (IsKeyPressed(KEY_PERIOD))
+                    NotifyPush(NOTIFY_INFO, ICON_FA_FORWARD, "Time sped up");
             }
             if (step_bwd)
             {
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, false);
+                if (IsKeyPressed(KEY_COMMA))
+                    NotifyPush(NOTIFY_INFO, ICON_FA_BACKWARD, "Time slowed");
             }
             if (IsKeyPressed(KEY_M)) {
                 is_2d_view = !is_2d_view;
@@ -962,11 +970,15 @@ int main(void)
             {
                 is_auto_warping = false;
                 if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+                {
                     current_epoch = get_current_real_time_epoch();
+                    NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time reset to now");
+                }
                 else
                 {
                     time_multiplier = 1.0;
                     saved_multiplier = 1.0;
+                    NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time speed reset to 1x");
                 }
             }
 
