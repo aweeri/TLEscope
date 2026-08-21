@@ -2156,7 +2156,11 @@ int main(void)
                         Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
-                        DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, sCol);
+                        /* rotate the icon so its bottom-right corner points toward the earth
+                         * (origin) in the current viewport (raylib rotation is in degrees) */
+                        Vector2 earthScreen = GetWorldToScreen(Vector3Zero(), Camera3DParams);
+                        float sat_angle = (atan2f(earthScreen.y - sp.y, earthScreen.x - sp.x) * RAD2DEG) - 45.0f;
+                        DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, sat_angle, sCol);
 
                         if (is_hl)
                         {
