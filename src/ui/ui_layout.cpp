@@ -9,6 +9,7 @@
 
 #include "ui_layout.h"
 #include "tools/tools.h"
+#include "notifications.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
@@ -404,9 +405,14 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
-        /* background: rounded rect with subtle border */
-        ImU32 bg_col = hovered ? IM_COL32(80, 80, 110, 230) : IM_COL32(55, 55, 75, 210);
-        ImU32 border_col = hovered ? IM_COL32(160, 160, 200, 230) : IM_COL32(110, 110, 140, 180);
+        /* background: rounded rect with subtle border - theme-aware (12.1) */
+        Color bg_theme = g_theme.ui.ui_primary;
+        Color border_theme = g_theme.ui.window_border;
+        Color icon_theme = g_theme.ui.text_secondary;
+        ImU32 bg_col = hovered ? IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 230)
+                               : IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 210);
+        ImU32 border_col = hovered ? IM_COL32(border_theme.r, border_theme.g, border_theme.b, 230)
+                                   : IM_COL32(border_theme.r, border_theme.g, border_theme.b, 180);
         float rounding = 4.0f;
 
         /* clip the rounded rect on the screen-edge side so it sits flush */
@@ -439,7 +445,8 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
             icon = is_left ? ICON_FA_CHEVRON_RIGHT : ICON_FA_CHEVRON_LEFT;
 
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
-        ImU32 icon_col = hovered ? IM_COL32(200, 200, 220, 255) : IM_COL32(160, 160, 180, 200);
+        ImU32 icon_col = hovered ? IM_COL32(icon_theme.r, icon_theme.g, icon_theme.b, 255)
+                                 : IM_COL32(icon_theme.r, icon_theme.g, icon_theme.b, 200);
         dl->AddText(ImVec2((notch_w - icon_sz.x) * 0.5f, (notch_h - icon_sz.y) * 0.5f),
                     icon_col, icon);
 
@@ -528,15 +535,19 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
         float boundary_x = is_left ? *width : (screen_w - *width);
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
+        Color line_theme = g_theme.ui.window_border;
+        Color drag_theme = g_theme.ui.ui_accent;
+
         if (dragging)
         {
             /* bright highlight during drag */
             dl->AddRectFilled(ImVec2(strip_x, nav_h),
                               ImVec2(strip_x + HANDLE_WIDTH, nav_h + content_h),
-                              IM_COL32(255, 255, 255, 40));
+                              IM_COL32(drag_theme.r, drag_theme.g, drag_theme.b, 40));
         }
         dl->AddLine(ImVec2(boundary_x, nav_h), ImVec2(boundary_x, nav_h + content_h),
-                    hovered || dragging ? IM_COL32(200, 200, 200, 180) : IM_COL32(120, 120, 120, 80),
+                    hovered || dragging ? IM_COL32(line_theme.r, line_theme.g, line_theme.b, 180)
+                                        : IM_COL32(line_theme.r, line_theme.g, line_theme.b, 80),
                     hovered ? 2.0f : 1.0f);
 
         if (dragging)
@@ -546,12 +557,14 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
             if (is_left)
             {
                 *width = fmaxf(MIN_SIDEBAR_W, fminf(MAX_SIDEBAR_W, mouse_x));
-                if (mouse_x <= 8.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
+                /* deliberate snap-hide: only when the cursor is dragged fully
+                 * past the screen edge (12.1) - not merely near it */
+                if (mouse_x <= 0.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
             }
             else
             {
                 *width = fmaxf(MIN_SIDEBAR_W, fminf(MAX_SIDEBAR_W, screen_w - mouse_x));
-                if (mouse_x >= screen_w - 8.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
+                if (mouse_x >= screen_w) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
             }
         }
     }
@@ -613,15 +626,16 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     if (handle_hovered || handle_active)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-    /* draw grip dots */
+    /* draw grip dots - theme-aware (12.1) */
+    Color grip_theme = g_theme.ui.text_secondary;
     if (handle_hovered || handle_active)
         ImGui::GetWindowDrawList()->AddRectFilled(
             ImVec2(h0.x + 1, h0.y + 2), ImVec2(h1.x - 1, h1.y - 2),
-            IM_COL32(80, 80, 90, 200), 2.0f);
+            IM_COL32(grip_theme.r, grip_theme.g, grip_theme.b, 200), 2.0f);
 
     ImGui::GetWindowDrawList()->AddText(
         ImVec2(h0.x + (HANDLE_W - grip_sz.x) * 0.5f, h0.y + (frame_h - grip_sz.y) * 0.5f),
-        IM_COL32(160, 160, 160, 200), ICON_FA_GRIP_VERTICAL);
+        IM_COL32(grip_theme.r, grip_theme.g, grip_theme.b, 200), ICON_FA_GRIP_VERTICAL);
 
     /* ---- reorder drag logic -------------------------------------------- */
     if (handle_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
@@ -701,9 +715,10 @@ static void DrawInsertionLine(bool is_left, HeaderSlot *slots, int sc, int visib
     {
         float sidebar_x = is_left ? 0.0f : (float)GetScreenWidth() - g_layout.right_width;
         float sidebar_w = is_left ? g_layout.left_width : g_layout.right_width;
+        Color drop_theme = g_theme.ui.ui_accent;
         ImGui::GetForegroundDrawList()->AddLine(
             ImVec2(sidebar_x, line_y), ImVec2(sidebar_x + sidebar_w, line_y),
-            IM_COL32(100, 180, 255, 220), 2.0f);
+            IM_COL32(drop_theme.r, drop_theme.g, drop_theme.b, 220), 2.0f);
     }
 }
 
@@ -1100,7 +1115,9 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 
                     ImGui::SameLine();
                     snprintf(btn_id, sizeof(btn_id), "%s##remove_%d", ICON_FA_XMARK, i);
-                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 60, 60, 255));
+                    Color err_theme = g_theme.ui.notif_error;
+                    ImGui::PushStyleColor(ImGuiCol_Text,
+                        IM_COL32(err_theme.r, err_theme.g, err_theme.b, 255));
                     if (ImGui::Button(btn_id, ImVec2(btn_w, btn_w)))
                     {
                         RemoveLocation(i);
@@ -1180,13 +1197,42 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
         }
 
+        /* ---- Notifications section (ROADMAP section 8.1) ---------------- */
+        if (ImGui::CollapsingHeader("Notifications"))
+        {
+            bool enabled = NotifyEnabled();
+            if (ImGui::Checkbox("Enable Notifications", &enabled))
+                NotifySetEnabled(enabled);
+
+            ImGui::Separator();
+            ImGui::TextDisabled("Show toasts for:");
+
+            bool cat_info = NotifyCategoryEnabled(NOTIFY_INFO);
+            if (ImGui::Checkbox("Info (data, sources)", &cat_info))
+                NotifySetCategoryEnabled(NOTIFY_INFO, cat_info);
+
+            bool cat_ok = NotifyCategoryEnabled(NOTIFY_SUCCESS);
+            if (ImGui::Checkbox("Success (saved, connected)", &cat_ok))
+                NotifySetCategoryEnabled(NOTIFY_SUCCESS, cat_ok);
+
+            bool cat_warn = NotifyCategoryEnabled(NOTIFY_WARNING);
+            if (ImGui::Checkbox("Warnings (stale data)", &cat_warn))
+                NotifySetCategoryEnabled(NOTIFY_WARNING, cat_warn);
+
+            bool cat_err = NotifyCategoryEnabled(NOTIFY_ERROR);
+            if (ImGui::Checkbox("Errors", &cat_err))
+                NotifySetCategoryEnabled(NOTIFY_ERROR, cat_err);
+        }
+
         /* ---- Buttons ----------------------------------------------------- */
         ImGui::Separator();
 
         if (ImGui::Button("Save Settings", ImVec2(140, 0)))
         {
+            NotifySaveSettings(cfg);
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);
+            NotifyPush(NOTIFY_SUCCESS, ICON_FA_CHECK, "Settings saved");
         }
 
         ImGui::SameLine();

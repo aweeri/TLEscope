@@ -69,6 +69,14 @@ typedef struct
     Color resize_grip;
     Color docking_bg;
     Color docking_preview;
+
+    /* notification toast colors (ROADMAP section 8.1) */
+    Color notif_info;
+    Color notif_success;
+    Color notif_warning;
+    Color notif_error;
+    Color notif_bg;
+    Color notif_border;
 } ThemeUIColors;
 
 /** ImGui style variables */

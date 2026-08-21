@@ -63,7 +63,13 @@
         "plot_lines": "#F59E0BFF",
         "resize_grip": "#F59E0B33",
         "docking_bg": "#000000BB",
-        "docking_preview": "#F59E0B88"
+        "docking_preview": "#F59E0B88",
+        "notif_info": "#66CCFFFF",
+        "notif_success": "#34D399FF",
+        "notif_warning": "#F59E0BFF",
+        "notif_error": "#FF5555FF",
+        "notif_bg": "#1A140DCC",
+        "notif_border": "#4A3A24FF"
     },
     "style": {
         "window_rounding": 6.0,

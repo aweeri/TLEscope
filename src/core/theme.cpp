@@ -143,6 +143,14 @@ void ThemeInitDefaults(Theme *t)
     t->ui.docking_bg          = ParseHexColor("#000000BB", BLACK);
     t->ui.docking_preview     = ParseHexColor("#66FF6688", GREEN);
 
+    /* notification toast colors (ROADMAP section 8.1) */
+    t->ui.notif_info          = ParseHexColor("#66CCFFFF", SKYBLUE);
+    t->ui.notif_success       = ParseHexColor("#66FF66FF", GREEN);
+    t->ui.notif_warning       = ParseHexColor("#FFAA00FF", ORANGE);
+    t->ui.notif_error         = ParseHexColor("#FF5555FF", RED);
+    t->ui.notif_bg            = ParseHexColor("#1E1E1ECC", DARKGRAY);
+    t->ui.notif_border        = ParseHexColor("#4A4A4AFF", GRAY);
+
     /* style (mirrors the previous hardcoded ImGui style) */
     t->style.window_rounding    = 3.0f;
     t->style.frame_rounding     = 2.0f;
@@ -292,6 +300,14 @@ bool ThemeLoad(const char *theme_name, Theme *t)
     ParseColorField(ui, NULL, "resize_grip", &t->ui.resize_grip, t->ui.resize_grip);
     ParseColorField(ui, NULL, "docking_bg", &t->ui.docking_bg, t->ui.docking_bg);
     ParseColorField(ui, NULL, "docking_preview", &t->ui.docking_preview, t->ui.docking_preview);
+
+    /* notification toast colors (ROADMAP section 8.1) */
+    ParseColorField(ui, NULL, "notif_info", &t->ui.notif_info, t->ui.notif_info);
+    ParseColorField(ui, NULL, "notif_success", &t->ui.notif_success, t->ui.notif_success);
+    ParseColorField(ui, NULL, "notif_warning", &t->ui.notif_warning, t->ui.notif_warning);
+    ParseColorField(ui, NULL, "notif_error", &t->ui.notif_error, t->ui.notif_error);
+    ParseColorField(ui, NULL, "notif_bg", &t->ui.notif_bg, t->ui.notif_bg);
+    ParseColorField(ui, NULL, "notif_border", &t->ui.notif_border, t->ui.notif_border);
 
     /* style */
     ParseFloatField(style, "window_rounding", &t->style.window_rounding, t->style.window_rounding);

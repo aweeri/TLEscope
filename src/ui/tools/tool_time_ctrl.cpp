@@ -3,10 +3,12 @@
  */
 
 #include "tools.h"
+#include "ui/notifications.h"
 #include "core/astro.h"
 #include "core/config.h"
 
 #include "imgui.h"
+#include "IconsFontAwesome6.h"
 
 void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
 {
@@ -25,10 +27,12 @@ void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
         {
             *ctx->saved_multiplier = *ctx->time_multiplier;
             *ctx->time_multiplier = 0.0;
+            NotifyPush(NOTIFY_INFO, ICON_FA_PAUSE, "Time paused");
         }
         else
         {
             *ctx->time_multiplier = (*ctx->saved_multiplier != 0.0) ? *ctx->saved_multiplier : 1.0;
+            NotifyPush(NOTIFY_INFO, ICON_FA_PLAY, "Time resumed");
         }
     }
 
@@ -37,6 +41,7 @@ void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
     {
         *ctx->current_epoch = get_current_real_time_epoch();
         *ctx->time_multiplier = 1.0;
+        NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time reset to now");
     }
 
     ImGui::PopTextWrapPos();

@@ -282,7 +282,7 @@ Status markers used below:
 
 ## 8. Notifications
 
-### 8.1 [ ] Toast and notification system
+### 8.1 [x] Toast and notification system
 
 - Goal: a KSP-style notification system, small toasts in the top-right corner
   (the stats overlay is top-left), for:
@@ -300,6 +300,21 @@ Status markers used below:
     few seconds.
   - Wire it into the existing event points (pull complete, rotator connect,
     settings save, and so on).
+- Done:
+  - New `src/ui/notifications.{h,cpp}` module: a fixed ring buffer of
+    `{level, icon, message, age}` entries with `NotifyPush()`/`NotifyUpdate()`/
+    `DrawNotifications()`. Toasts stack top-right, auto-dismiss after a few
+    seconds with a timed fade-out, and never block interaction (no-focus,
+    no-input windows).
+  - Theme-aware: `notif_info/success/warning/error/bg/border` colors added to
+    the `Theme` struct, defaults + JSON parsing in `theme.cpp`, and keys added
+    to every `themes/*/theme.json`.
+  - Rendered at the end of `DrawGUI()` so toasts appear on top of all panels.
+  - Wired into: settings save, data pull complete, new source discovered,
+    rotator connect/disconnect, time warp/pause/reset, and data staleness.
+  - A "Notifications" section in Settings with a master toggle and per-category
+    toggles (Info / Success / Warnings / Errors), persisted via the generic
+    `tool_settings` store.
 - Acceptance criteria:
   - Notifications appear and fade without blocking interaction.
   - They are theme-aware and respect UI scale.
@@ -409,7 +424,7 @@ Status markers used below:
 
 ## 12. UI and theming polish
 
-### 12.1 [~] Sidebar notch visibility
+### 12.1 [x] Sidebar notch visibility
 
 - Problem: the sidebar show/hide notches exist but are not visually apparent,
   and dragging the resize strip can accidentally snap-hide the sidebar.
@@ -418,15 +433,30 @@ Status markers used below:
   - Make snap-hide deliberate, for example only when dragging past the screen
     edge with a clear affordance, not by accident.
   - Ensure the notch colors come from the theme, not hardcoded grays.
+- Done:
+  - Notch background, border, and chevron icon colors now come from the theme
+    (`ui_primary`, `window_border`, `text_secondary`) with hover states.
+  - The resize strip, drag grip, and reorder drop indicator are theme-aware
+    (`window_border`, `ui_accent`, `text_secondary`).
+  - Snap-hide is deliberate: it only triggers when the cursor is dragged fully
+    past the screen edge (not merely within 8px of it).
 
-### 12.2 [ ] Theme review
+### 12.2 [x] Theme review
 
 - Audit all hardcoded colors in the UI (notches, polar grid, log rows, stats
   overlay, scope) and route them through the theme where possible.
 - Verify the theme applies consistently across the nav bar, sidebars, bottom
   bar, modals, and the new tools (scope, polar, Doppler, notifications).
+- Done:
+  - Polar plot grid, rings, labels, background, satellite dot, trace, and
+    labels now use theme colors (`text_secondary`, `window_bg`, `ui_accent`).
+  - Log alternating row backgrounds use the theme `frame_bg`.
+  - The settings modal remove-button uses the theme `notif_error` color.
+  - The settings modal dim overlay uses the theme `modal_dim` color.
+  - The stats overlay already used theme colors; marker labels remain white
+    deliberately for legibility against the map.
 
-### 12.3 [ ] Settings expansion
+### 12.3 [x] Settings expansion
 
 - Add the new settings surfaced by the features above:
   - Local/UTC default.
@@ -435,6 +465,13 @@ Status markers used below:
   - Notification toggles (opt-out for TRXDB, and so on).
   - Pass defaults (min elevation, default time span).
   - Scope defaults (beam width, default layers).
+- Done:
+  - Notification toggles (master + per-category) in Settings → Notifications,
+    persisted via `tool_settings`.
+  - Pass defaults: min elevation and time span sliders in the Passes panel,
+    persisted via `tool_settings` and consumed by `CalculatePasses()`.
+  - Scope defaults: beam width and layer toggles persisted via `tool_settings`.
+  - Local/UTC, rotator settings, and marker management were already surfaced.
 
 ---
 
@@ -530,7 +567,7 @@ Use this as the definition of done for the release.
 - [ ] Scope view is a large window with targeting, locking, beam highlight, and
       layer toggles.
 - [x] Local/UTC toggle works everywhere and persists.
-- [ ] Notifications appear for the key events.
+- [x] Notifications appear for the key events.
 - [ ] Van Allen and magnetosphere layers render.
 - [ ] Sensor swath visualizer draws a line / square / circle footprint from a
       user FOV around the selected satellite.
@@ -541,10 +578,10 @@ Use this as the definition of done for the release.
 
 ### Polish
 
-- [ ] No hardcoded colors that should be themed.
-- [ ] Sidebar notches are visible and deliberate.
+- [x] No hardcoded colors that should be themed.
+- [x] Sidebar notches are visible and deliberate.
 - [ ] Every panel is capped to a reasonable sidebar height.
-- [ ] Settings covers all new features.
+- [x] Settings covers all new features.
 - [ ] No duplicate-ID UI bugs in lists.
 
 ### Performance

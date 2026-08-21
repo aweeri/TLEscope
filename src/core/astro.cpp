@@ -41,6 +41,10 @@ SatPass passes[MAX_PASSES];
 int num_passes = 0;
 Satellite *last_pass_calc_sat = NULL;
 
+/* pass prediction settings (ROADMAP 12.3) */
+float pass_min_elev = 0.0f;        /* minimum elevation (deg) for a pass to count */
+float pass_time_span_hours = 24.0f; /* prediction window in hours (default 24) */
+
 /* display preference: show dates/times in the system local timezone.
  * Backend math (SGP4, GMST, sun/moon, epoch conversions) always stays UTC. */
 static bool g_use_local_time = true;
@@ -658,7 +662,10 @@ void CalculatePasses(Satellite *sat, double start_epoch)
              sat ? sat->name : "ALL satellites", start_epoch);
 
     int target_count = sat ? 1 : sat_count;
-    int max_days = sat ? 3 : 1;
+    /* prediction window from the configurable time span (ROADMAP 12.3) */
+    double span_days = (double)pass_time_span_hours / 24.0;
+    if (span_days < 0.1) span_days = 0.1;
+    int max_days = (int)ceil(span_days);
     double coarse_step = sat ? (1.0 / 1440.0) : (4.0 / 1440.0);
 
     Location *home = GetHomeLocation();
@@ -679,9 +686,9 @@ void CalculatePasses(Satellite *sat, double start_epoch)
         get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
 
         /* back up if we're already in a pass to catch the true start */
-        if (el > 0)
+        if (el >= pass_min_elev)
         {
-            for (int i = 0; i < 30 && el > 0; i++)
+            for (int i = 0; i < 30 && el >= pass_min_elev; i++)
             {
                 t -= (1.0 / 1440.0);
                 t_unix = get_unix_from_epoch(t);
@@ -701,12 +708,12 @@ void CalculatePasses(Satellite *sat, double start_epoch)
             gmst = epoch_to_gmst(t);
             get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
 
-            if (el >= 0.0)
+            if (el >= pass_min_elev)
             {
                 if (!in_pass)
                 {
                     in_pass = true;
-                    /* binary search to find exact AOS, 1min stepping is too coarse for radio work */
+                    /* binary search to find exact AOS, 1min stepping is too coarse for radio */
                     double t_low = t - coarse_step;
                     double t_high = t;
                     for (int b = 0; b < 10; b++)
@@ -716,7 +723,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                         double mid_gmst = epoch_to_gmst(t_mid);
                         double mid_az, mid_el;
                         get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
-                        if (mid_el >= 0.0)
+                        if (mid_el >= pass_min_elev)
                             t_high = t_mid;
                         else
                             t_low = t_mid;
@@ -747,7 +754,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
                         double mid_gmst = epoch_to_gmst(t_mid);
                         double mid_az, mid_el;
                         get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
-                        if (mid_el < 0.0)
+                        if (mid_el < pass_min_elev)
                             t_high = t_mid;
                         else
                             t_low = t_mid;

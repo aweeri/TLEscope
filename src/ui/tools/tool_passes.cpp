@@ -3,6 +3,7 @@
  */
 
 #include "tools.h"
+#include "tools_settings.h"
 #include "ui/ui.h"
 #include "core/astro.h"
 #include "core/config.h"
@@ -13,13 +14,25 @@
 
 void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
 {
-    (void)cfg;
     float avail_w = ImGui::GetContentRegionAvail().x;
     ImGui::PushTextWrapPos(0.0f);
 
+    /* pass settings (ROADMAP 12.3) - persisted via tool_settings */
+    static bool s_loaded = false;
+    if (!s_loaded)
+    {
+        pass_min_elev = ToolSettingGetFloat(cfg, "passes.min_elev", 0.0f);
+        pass_time_span_hours = ToolSettingGetFloat(cfg, "passes.time_span_hours", 24.0f);
+        s_loaded = true;
+    }
+
     ImGui::SetNextItemWidth(avail_w);
-    static char min_el_buf[8] = "0";
-    ImGui::InputText("Min Elevation", min_el_buf, sizeof(min_el_buf));
+    if (ImGui::SliderFloat("Min Elevation", &pass_min_elev, 0.0f, 90.0f, "%.0f°"))
+        ToolSettingSetFloat(cfg, "passes.min_elev", pass_min_elev);
+
+    ImGui::SetNextItemWidth(avail_w);
+    if (ImGui::SliderFloat("Time Span", &pass_time_span_hours, 1.0f, 72.0f, "%.0f h"))
+        ToolSettingSetFloat(cfg, "passes.time_span_hours", pass_time_span_hours);
 
     if (ImGui::Button("Calculate Passes", ImVec2(avail_w, 0)))
     {

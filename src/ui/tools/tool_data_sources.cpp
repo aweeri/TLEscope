@@ -6,6 +6,7 @@
 #include "tools_common.h"
 #include "tools_registry.h"
 #include "ui/ui_layout.h"
+#include "ui/notifications.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
@@ -67,6 +68,8 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                     cfg->retlector_group_count = s_pending_count;
                     cfg->retlector_groups_fetched = true;
                     LOG_INFO("Loaded %d retlector groups", s_pending_count);
+                    NotifyPush(NOTIFY_INFO, ICON_FA_SATELLITE_DISH,
+                               "Discovered %d new data sources", s_pending_count);
                 }
                 else
                 {
@@ -368,6 +371,8 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         {
             s_pull_running = false;
             s_pull_total = 0;
+            NotifyPush(NOTIFY_SUCCESS, ICON_FA_DOWNLOAD,
+                       "Data sources refreshed (%d satellites)", sat_count);
         }
         else
         {

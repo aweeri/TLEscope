@@ -9,6 +9,7 @@
 #include "core/astro.h"
 #include "core/location.h"
 #include "core/config.h"
+#include "core/theme.h"
 
 #include <cstdio>
 #include <cmath>
@@ -20,10 +21,12 @@
 
 static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
 {
-    /* concentric rings for 0°, 30°, 60°, 90° elevation */
+    /* concentric rings for 0°, 30°, 60°, 90° elevation — theme-aware (12.2) */
+    Color grid_theme = g_theme.ui.text_secondary;
+    Color label_theme = g_theme.ui.text_secondary;
     int rings[4] = { 90, 60, 30, 0 };
-    ImU32 ring_col = IM_COL32(120, 120, 140, 80);
-    ImU32 ring_col_bold = IM_COL32(120, 120, 140, 160);
+    ImU32 ring_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80);
+    ImU32 ring_col_bold = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 160);
 
     for (int r = 0; r < 4; r++)
     {
@@ -45,7 +48,7 @@ static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
         ImVec2(0, 1),   /* S = down */
         ImVec2(-1, 0)   /* W = left */
     };
-    ImU32 label_col = IM_COL32(180, 180, 200, 200);
+    ImU32 label_col = IM_COL32(label_theme.r, label_theme.g, label_theme.b, 200);
     for (int i = 0; i < 4; i++)
     {
         ImVec2 pos = ImVec2(center.x + dirs[i].x * (radius + 12.0f),
@@ -54,9 +57,9 @@ static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
     }
 
     /* elevation labels on the 0° ring */
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 4.0f), IM_COL32(120, 120, 140, 120), "0°");
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.34f + 2.0f), IM_COL32(120, 120, 140, 100), "30°");
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.67f + 2.0f), IM_COL32(120, 120, 140, 80), "60°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 4.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 120), "0°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.34f + 2.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 100), "30°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.67f + 2.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80), "60°");
 }
 
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
@@ -76,8 +79,11 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     float radius = plot_size * 0.5f - 20.0f;
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
-    /* background circle */
-    dl->AddCircleFilled(center, radius + 4.0f, IM_COL32(10, 10, 16, 200), 64);
+    /* background circle - theme-aware (12.2) */
+    Color bg_theme = g_theme.ui.window_bg;
+    Color accent_theme = g_theme.ui.ui_accent;
+    dl->AddCircleFilled(center, radius + 4.0f,
+                        IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 200), 64);
     DrawPolarPlotGrid(dl, center, radius);
 
     /* ---- Plot satellite position ---- */
@@ -100,9 +106,11 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
             center.y - dot_r * cosf(angle_rad)
         );
 
-        /* draw current position dot */
-        dl->AddCircleFilled(dot_pos, 6.0f, IM_COL32(100, 200, 255, 255), 16);
-        dl->AddCircle(dot_pos, 6.0f, IM_COL32(200, 230, 255, 200), 16, 2.0f);
+        /* draw current position dot - theme-aware (12.2) */
+        dl->AddCircleFilled(dot_pos, 6.0f,
+                            IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), 16);
+        dl->AddCircle(dot_pos, 6.0f,
+                      IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 200), 16, 2.0f);
 
         /* draw path trace: compute future positions over ~90 min */
         ImVec2 prev_pt = dot_pos;
@@ -127,7 +135,8 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
                 center.y - f_r * cosf(fa_rad)
             );
 
-            dl->AddLine(prev_pt, f_pos, IM_COL32(100, 200, 255, 100), 1.5f);
+            dl->AddLine(prev_pt, f_pos,
+                        IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 100), 1.5f);
             prev_pt = f_pos;
         }
 
@@ -137,15 +146,17 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         ImVec2 label_sz = ImGui::CalcTextSize(label);
         ImVec2 label_pos = ImVec2(canvas_pos.x + 6.0f, canvas_pos.y + 4.0f);
         dl->AddRectFilled(label_pos, ImVec2(label_pos.x + label_sz.x + 8.0f, label_pos.y + label_sz.y + 6.0f),
-                          IM_COL32(10, 10, 16, 180), 4.0f);
-        dl->AddText(ImVec2(label_pos.x + 4.0f, label_pos.y + 3.0f), IM_COL32(100, 200, 255, 255), label);
+                          IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 180), 4.0f);
+        dl->AddText(ImVec2(label_pos.x + 4.0f, label_pos.y + 3.0f),
+                    IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), label);
     }
     else
     {
         const char *msg = "No satellite selected";
         ImVec2 msg_sz = ImGui::CalcTextSize(msg);
+        Color msg_theme = g_theme.ui.text_secondary;
         dl->AddText(ImVec2(center.x - msg_sz.x * 0.5f, center.y - msg_sz.y * 0.5f),
-                    IM_COL32(120, 120, 140, 160), msg);
+                    IM_COL32(msg_theme.r, msg_theme.g, msg_theme.b, 160), msg);
     }
 
     ImGui::Dummy(ImVec2(0, 6.0f));

@@ -10,6 +10,7 @@
 
 #include "ui.h"
 #include "ui_layout.h"
+#include "notifications.h"
 #include "core/astro.h"
 #include "io/rotator.h"
 #include "core/config.h"
@@ -338,6 +339,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Button(ICON_FA_BACKWARD "##backward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, false);
+            NotifyPush(NOTIFY_INFO, ICON_FA_BACKWARD, "Time slowed");
         }
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Slow down / reverse time");
@@ -349,9 +351,15 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Button(is_paused ? (ICON_FA_PLAY "##playpause") : (ICON_FA_PAUSE "##playpause"), ImVec2(btn_sz, btn_sz)))
         {
             if (is_paused)
+            {
                 *ctx->time_multiplier = (*ctx->saved_multiplier != 0.0) ? *ctx->saved_multiplier : 1.0;
+                NotifyPush(NOTIFY_INFO, ICON_FA_PLAY, "Time resumed");
+            }
             else
-                { *ctx->saved_multiplier = *ctx->time_multiplier; *ctx->time_multiplier = 0.0; }
+            {
+                *ctx->saved_multiplier = *ctx->time_multiplier; *ctx->time_multiplier = 0.0;
+                NotifyPush(NOTIFY_INFO, ICON_FA_PAUSE, "Time paused");
+            }
         }
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(is_paused ? "Resume" : "Pause");
@@ -362,6 +370,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Button(ICON_FA_FORWARD "##forward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, true);
+            NotifyPush(NOTIFY_INFO, ICON_FA_FORWARD, "Time sped up");
         }
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Speed up time");
@@ -373,6 +382,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         {
             *ctx->current_epoch = get_current_real_time_epoch();
             *ctx->time_multiplier = 1.0;
+            NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time reset to now");
         }
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current time");
@@ -515,6 +525,10 @@ static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
         show_tle_warning = false;
         return;
     }
+
+    /* surface the staleness as a toast as well (ROADMAP section 8.1) */
+    NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+               "Orbital data is older than the configured threshold");
 
     int threshold_secs = cfg->data_stale_threshold_seconds;
     const char *threshold_str = "2 days";
@@ -762,6 +776,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     DrawHelpModal(ctx, cfg);
     DrawAboutModal(ctx, cfg);
     DrawExitDialog(ctx, cfg);
+
+    /* notification toasts (ROADMAP section 8.1) - drawn last so they stack
+     * on top of everything, top-right, without blocking interaction */
+    NotifyUpdate(ImGui::GetIO().DeltaTime);
+    DrawNotifications();
 
     /* end rlImGui frame */
     rlImGuiEnd();

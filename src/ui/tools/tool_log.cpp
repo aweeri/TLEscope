@@ -109,8 +109,9 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
             ImGui::TextUnformatted(""); /* advance cursor by one line height */
             ImVec2 row_max = ImGui::GetCursorScreenPos();
             row_max.x = row_min.x + ImGui::GetContentRegionAvail().x;
+            Color row_theme = g_theme.ui.frame_bg;
             ImGui::GetWindowDrawList()->AddRectFilled(row_min, row_max,
-                IM_COL32(255, 255, 255, 12));
+                IM_COL32(row_theme.r, row_theme.g, row_theme.b, 40));
             /* restore cursor to start of line */
             ImGui::SetCursorScreenPos(row_min);
         }

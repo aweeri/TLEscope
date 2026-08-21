@@ -6,9 +6,11 @@
 typedef struct tagMSG *LPMSG;
 #endif
 #include "rotator.h"
+#include "ui/notifications.h"
 #include "core/astro.h"
 #include "core/location.h"
 #include "util/log.h"
+#include "IconsFontAwesome6.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -134,6 +136,7 @@ static bool ConnectTcp(const char *host, const char *port)
     {
         LOG_ERROR("Rotator connection failed to %s:%s", host, port);
         snprintf(rot.status, sizeof(rot.status), "Connection failed");
+        NotifyPush(NOTIFY_ERROR, ICON_FA_PLUG, "Rotator connection failed");
         return false;
     }
 
@@ -151,6 +154,7 @@ static bool ConnectTcp(const char *host, const char *port)
     rot.connected = true;
     snprintf(rot.status, sizeof(rot.status), "Connected to %s:%s", host, port);
     LOG_INFO("Rotator connected to %s:%s", host, port);
+    NotifyPush(NOTIFY_SUCCESS, ICON_FA_PLUG, "Rotator connected");
     return true;
 }
 
@@ -338,6 +342,7 @@ void RotatorDisconnect(void)
     LOG_INFO("Rotator shutting down");
     Disconnect();
     snprintf(rot.status, sizeof(rot.status), "Disconnected");
+    NotifyPush(NOTIFY_INFO, ICON_FA_PLUG, "Rotator disconnected");
 }
 void RotatorPollNow(void) { PollPosition(); }
 void RotatorSendCustomNow(void)

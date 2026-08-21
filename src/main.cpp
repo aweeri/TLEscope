@@ -15,6 +15,7 @@
 #include "core/types.h"
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
+#include "ui/notifications.h"
 #include "ui/tools/tools_common.h"
 #include "ui/tools/tools_scene.h"
 #include "ui/imgui_theme.h"
@@ -534,6 +535,7 @@ int main(void)
     LoadAppConfig("settings.json", &cfg);
     SetUseLocalTime(cfg.use_local_time);
     RotatorLoadSettings(&cfg); /* restore persisted rotator config */
+    NotifyLoadSettings(&cfg);  /* restore persisted notification toggles */
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
@@ -2251,7 +2253,7 @@ int main(void)
         if (LayoutSettingsOpen())
         {
             DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                          (Color){ 0, 0, 0, 160 });
+                          g_theme.ui.modal_dim);
         }
 
         /* apply any completed async fetch results to the global satellite array.

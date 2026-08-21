@@ -24,6 +24,10 @@ extern SatPass passes[MAX_PASSES];
 extern int num_passes;
 extern Satellite *last_pass_calc_sat;
 
+/* pass prediction settings (ROADMAP 12.3) — defaults applied by CalculatePasses */
+extern float pass_min_elev;        /* minimum elevation (deg) for a pass to count */
+extern float pass_time_span_hours; /* prediction window in hours (default 24) */
+
 double get_current_real_time_epoch(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char *buffer);
