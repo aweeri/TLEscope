@@ -56,6 +56,23 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->retlector_groups_fetched = false;
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
+    config->active_sat_count = 0;
+    config->has_saved_selection = false;
+
+    /* default rotator settings (mirror the static defaults in rotator.cpp) */
+    {
+        RotatorSettings *R = &config->rotator_settings;
+        strcpy(R->host, "127.0.0.1");
+        strcpy(R->port, "4533");
+        strcpy(R->get_fmt, "p");
+        strcpy(R->set_fmt, "P %.1f %.1f");
+        R->custom_cmd[0] = '\0';
+        strcpy(R->park_az, "180.0");
+        strcpy(R->park_el, "0.0");
+        strcpy(R->lead_time, "30");
+        R->auto_steer = true;
+        R->steer_mode = 0; /* ROTATOR_STEER_POLAR */
+    }
 
     /* default UI layout (first-run state) */
     {
@@ -626,6 +643,63 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                 }
             }
 
+            // load rotator settings
+            {
+                RotatorSettings *R = &config->rotator_settings;
+                char *rot_ptr = strstr(text, "\"rotator_settings\"");
+                if (rot_ptr)
+                {
+                    char *block_end = strchr(rot_ptr, '}');
+                    if (!block_end) block_end = text + strlen(text);
+
+                    char *s = strstr(rot_ptr, "\"host\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->host); } }
+                    s = strstr(rot_ptr, "\"port\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->port); } }
+                    s = strstr(rot_ptr, "\"get_fmt\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->get_fmt); } }
+                    s = strstr(rot_ptr, "\"set_fmt\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->set_fmt); } }
+                    s = strstr(rot_ptr, "\"custom_cmd\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%127[^\"]", R->custom_cmd); } }
+                    s = strstr(rot_ptr, "\"park_az\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->park_az); } }
+                    s = strstr(rot_ptr, "\"park_el\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->park_el); } }
+                    s = strstr(rot_ptr, "\"lead_time\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->lead_time); } }
+                    R->auto_steer = ParseJsonBool(rot_ptr, "auto_steer", R->auto_steer);
+                    R->steer_mode = 0;
+                    s = strstr(rot_ptr, "\"steer_mode\"");
+                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) sscanf(c + 1, "%d", &R->steer_mode); }
+                }
+            }
+
+            // load active satellite selection (NORAD ids)
+            config->active_sat_count = 0;
+            {
+                char *as_ptr = strstr(text, "\"active_sat_ids\"");
+                if (as_ptr)
+                {
+                    config->has_saved_selection = true;
+                    char *arr = strchr(as_ptr, '[');
+                    if (arr)
+                    {
+                        char *cur = arr + 1;
+                        while (cur && config->active_sat_count < MAX_SATELLITES)
+                        {
+                            while (*cur && (*cur == ' ' || *cur == ',' || *cur == '\n' || *cur == '\r' || *cur == '\t'))
+                                cur++;
+                            if (*cur == ']' || *cur == '\0')
+                                break;
+                            config->active_sat_ids[config->active_sat_count++] = (uint32_t)strtoul(cur, NULL, 10);
+                            while (*cur && *cur != ',' && *cur != ']')
+                                cur++;
+                        }
+                    }
+                }
+            }
+
             UnloadFileText(text);
             LOG_INFO("Config loaded: theme=%s, %dx%d, %d locations, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
                      config->theme, config->window_width, config->window_height,
@@ -806,6 +880,30 @@ void SaveAppConfig(const char *filename, AppConfig *config)
 
         fprintf(file, "    }\n");
     }
+
+    /* -- rotator settings ------------------------------------------------ */
+    {
+        const RotatorSettings *R = &config->rotator_settings;
+        fprintf(file, "    \"rotator_settings\": {\n");
+        fprintf(file, "        \"host\": \"%s\",\n", R->host);
+        fprintf(file, "        \"port\": \"%s\",\n", R->port);
+        fprintf(file, "        \"get_fmt\": \"%s\",\n", R->get_fmt);
+        fprintf(file, "        \"set_fmt\": \"%s\",\n", R->set_fmt);
+        fprintf(file, "        \"custom_cmd\": \"%s\",\n", R->custom_cmd);
+        fprintf(file, "        \"park_az\": \"%s\",\n", R->park_az);
+        fprintf(file, "        \"park_el\": \"%s\",\n", R->park_el);
+        fprintf(file, "        \"lead_time\": \"%s\",\n", R->lead_time);
+        fprintf(file, "        \"auto_steer\": %s,\n", R->auto_steer ? "true" : "false");
+        fprintf(file, "        \"steer_mode\": %d\n", R->steer_mode);
+        fprintf(file, "    }\n");
+    }
+
+    /* -- active satellite selection (NORAD ids) --------------------------- */
+    fprintf(file, "    \"active_sat_ids\": [");
+    for (int i = 0; i < config->active_sat_count; i++)
+        fprintf(file, "%s%u", i ? "," : "", config->active_sat_ids[i]);
+    fprintf(file, "]\n");
+
     fprintf(file, "}\n");
     fclose(file);
 }

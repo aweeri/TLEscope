@@ -213,8 +213,8 @@ typedef struct
 extern UIState g_ui;
 
 /* core UI methods */
-void SaveSatSelection(void);
-void LoadSatSelection(void);
+void SaveSatSelection(AppConfig *cfg);
+void LoadSatSelection(AppConfig *cfg);
 bool IsUITyping(void);
 void ToggleTLEWarning(void);
 bool IsMouseOverUI(AppConfig *cfg);

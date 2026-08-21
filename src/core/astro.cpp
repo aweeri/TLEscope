@@ -332,13 +332,15 @@ void load_orbital_data(const char *filename)
     {
         LOG_INFO("Loaded %d satellites from %s", sat_count, filename);
 
-        // re-init SGP4 for each satellite from stored orbital elements
+        // Re-init SGP4 for every satellite from stored orbital elements.
+        // NOTE: we must init ALL satellites, not just the currently-active ones,
+        // because LoadSatSelection() (called later in main.cpp) may activate
+        // satellites that were inactive in data.json. If their SGP4 state is not
+        // initialized here, calculate_position() returns NaN and the satellite
+        // gets deactivated again (and its orbit cache is never built).
         for (int i = 0; i < sat_count; i++)
         {
             Satellite *sat = &satellites[i];
-            if (!sat->is_active) continue;
-
-            // initialize SGP4 directly from stored elements (no TLE round-trip)
             if (!init_sgp4_from_satellite(sat))
             {
                 LOG_WARN("SGP4 re-init failed for %s - deactivating", sat->name);

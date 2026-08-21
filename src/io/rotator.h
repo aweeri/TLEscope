@@ -13,6 +13,10 @@
 
 void RotatorShutdown(void);
 
+/* persist/restore rotator settings to/from an AppConfig (section 11) */
+void RotatorSaveSettings(AppConfig *cfg);
+void RotatorLoadSettings(const AppConfig *cfg);
+
 char *RotatorGetHostBuffer(void);
 int RotatorGetHostBufferSize(void);
 char *RotatorGetPortBuffer(void);

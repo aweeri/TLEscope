@@ -22,3 +22,9 @@ build_win/
 
 # Prebuilt raylib binaries (use system raylib instead)
 lib/raylib_*/
+
+# for people who accidentally run with tlescope main as workspace instead of under dist
+
+imgui.ini
+data.json
+data_selections.json

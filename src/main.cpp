@@ -15,6 +15,7 @@
 #include "core/types.h"
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
+#include "ui/panels.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 #include "imgui.h"
@@ -529,6 +530,7 @@ int main(void)
 
     LoadAppConfig("settings.json", &cfg);
     SetUseLocalTime(cfg.use_local_time);
+    RotatorLoadSettings(&cfg); /* restore persisted rotator config */
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
@@ -601,8 +603,10 @@ int main(void)
     LOG_INFO("Loaded %d satellites from storage", sat_count);
     load_manual_entries(&cfg);
     LOG_INFO("Loaded %d manual entries", cfg.manual_entry_count);
-    LoadSatSelection(); // restore active satellites
+    LoadSatSelection(&cfg); // restore active satellites
     LOG_INFO("Satellite selection restored");
+    LoadDataSelections(); // restore data-source shopping-cart selections
+    LOG_INFO("Data source selections restored");
 
     DrawLoadingScreen(0.25f, "Initializing Textures...", logoTex);
     LOG_INFO("Loading textures...");
@@ -2286,9 +2290,11 @@ int main(void)
 
     /* persist layout state before shutdown */
     LayoutFillPersist(&cfg.ui_layout);
+    RotatorSaveSettings(&cfg); /* copy live rotator settings into cfg */
+    SaveSatSelection(&cfg);    /* copy live active-satellite selection into cfg */
     SaveAppConfig("settings.json", &cfg);
 
-    SaveSatSelection();
+    SaveDataSelections();
     RotatorShutdown();
     LogShutdown();
 

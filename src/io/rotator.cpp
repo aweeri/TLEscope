@@ -277,6 +277,38 @@ static bool SetPosition(float az, float el)
 
 void RotatorShutdown(void) { Disconnect(); }
 
+void RotatorSaveSettings(AppConfig *cfg)
+{
+    if (!cfg) return;
+    RotatorSettings *R = &cfg->rotator_settings;
+    strncpy(R->host, rot.host, sizeof(R->host) - 1);
+    strncpy(R->port, rot.port, sizeof(R->port) - 1);
+    strncpy(R->get_fmt, rot.get_fmt, sizeof(R->get_fmt) - 1);
+    strncpy(R->set_fmt, rot.set_fmt, sizeof(R->set_fmt) - 1);
+    strncpy(R->custom_cmd, rot.custom_cmd, sizeof(R->custom_cmd) - 1);
+    strncpy(R->park_az, rot.park_az, sizeof(R->park_az) - 1);
+    strncpy(R->park_el, rot.park_el, sizeof(R->park_el) - 1);
+    strncpy(R->lead_time, rot.lead_time, sizeof(R->lead_time) - 1);
+    R->auto_steer = rot.auto_steer;
+    R->steer_mode = rot.steer_mode;
+}
+
+void RotatorLoadSettings(const AppConfig *cfg)
+{
+    if (!cfg) return;
+    const RotatorSettings *R = &cfg->rotator_settings;
+    strncpy(rot.host, R->host, sizeof(rot.host) - 1);
+    strncpy(rot.port, R->port, sizeof(rot.port) - 1);
+    strncpy(rot.get_fmt, R->get_fmt, sizeof(rot.get_fmt) - 1);
+    strncpy(rot.set_fmt, R->set_fmt, sizeof(rot.set_fmt) - 1);
+    strncpy(rot.custom_cmd, R->custom_cmd, sizeof(rot.custom_cmd) - 1);
+    strncpy(rot.park_az, R->park_az, sizeof(rot.park_az) - 1);
+    strncpy(rot.park_el, R->park_el, sizeof(rot.park_el) - 1);
+    strncpy(rot.lead_time, R->lead_time, sizeof(rot.lead_time) - 1);
+    rot.auto_steer = R->auto_steer;
+    rot.steer_mode = R->steer_mode;
+}
+
 char *RotatorGetHostBuffer(void) { return rot.host; }
 int RotatorGetHostBufferSize(void) { return (int)sizeof(rot.host); }
 char *RotatorGetPortBuffer(void) { return rot.port; }

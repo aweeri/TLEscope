@@ -240,6 +240,21 @@ extern int location_count;
 #define STALE_THRESHOLD_7D      604800
 #define STALE_THRESHOLD_DEFAULT 172800  // 2 days
 
+/* persisted rotator connection/settings (see section 6 / 11) */
+typedef struct
+{
+    char host[64];
+    char port[16];
+    char get_fmt[64];
+    char set_fmt[64];
+    char custom_cmd[128];
+    char park_az[16];
+    char park_el[16];
+    char lead_time[16];
+    bool auto_steer;
+    int steer_mode;
+} RotatorSettings;
+
 /* application settings (theme/appearance is managed by Theme in theme.h) */
 typedef struct
 {
@@ -250,7 +265,7 @@ typedef struct
     float ui_scale;
     float earth_rotation_offset;
     float orbits_to_draw;
-    float orbit_cache_drift_threshold_km;  // recalculate cache if satellite drifts more than this (default 50 km)
+    float orbit_cache_drift_threshold_km;  // recalculate if satellite drifts more than this (default 50 km)
     bool show_clouds;
     bool show_night_lights;
     bool show_markers;
@@ -265,6 +280,13 @@ typedef struct
     bool show_first_run_dialog;
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)
+
+    RotatorSettings rotator_settings;  // persisted rotator connection config
+
+    /* persisted active satellite selection (NORAD ids) */
+    uint32_t active_sat_ids[MAX_SATELLITES];
+    int active_sat_count;
+    bool has_saved_selection;  // true once a selection has been persisted
 
     CustomDataSource custom_data_sources[MAX_CUSTOM_DATA_SOURCES];
     int custom_data_source_count;

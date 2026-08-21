@@ -112,6 +112,129 @@ static void selection_remove(int idx)
     g_data_selection_count--;
 }
 
+/* -- Data source selection persistence (section 11) ------------------------- */
+
+/** persist the shopping-cart selections to data_selections.json */
+void SaveDataSelections(void)
+{
+    FILE *f = fopen("data_selections.json", "w");
+    if (!f)
+    {
+        LOG_ERROR("Failed to save data selections to data_selections.json");
+        return;
+    }
+    LOG_INFO("Saving %d data source selections", g_data_selection_count);
+
+    fprintf(f, "{\n");
+    fprintf(f, "  \"version\": 1,\n");
+    fprintf(f, "  \"selection_count\": %d,\n", g_data_selection_count);
+    fprintf(f, "  \"selections\": [\n");
+
+    for (int i = 0; i < g_data_selection_count; i++)
+    {
+        DataSourceSelection *s = &g_data_selections[i];
+        fprintf(f, "    {\n");
+        fprintf(f, "      \"type\": %d,\n", (int)s->type);
+        fprintf(f, "      \"name\": \"%s\",\n", s->name);
+        fprintf(f, "      \"identifier\": \"%s\",\n", s->identifier);
+        fprintf(f, "      \"paste_data\": \"%s\",\n", s->paste_data);
+        fprintf(f, "      \"format\": %d\n", (int)s->format);
+        fprintf(f, "    }%s\n", (i == g_data_selection_count - 1) ? "" : ",");
+    }
+
+    fprintf(f, "  ]\n");
+    fprintf(f, "}\n");
+    fclose(f);
+}
+
+/** restore the shopping-cart selections from data_selections.json */
+void LoadDataSelections(void)
+{
+    g_data_selection_count = 0;
+
+    if (!FileExists("data_selections.json"))
+        return;
+
+    char *text = LoadFileText("data_selections.json");
+    if (!text)
+        return;
+
+    const char *array_start = strstr(text, "\"selections\"");
+    if (!array_start)
+    {
+        UnloadFileText(text);
+        return;
+    }
+
+    const char *ptr = strchr(array_start, '[');
+    if (!ptr)
+    {
+        UnloadFileText(text);
+        return;
+    }
+
+    int brace_depth = 0;
+    int obj_start = -1;
+
+    while (*ptr && g_data_selection_count < MAX_DATA_SOURCE_SELECTIONS)
+    {
+        if (*ptr == '{')
+        {
+            if (brace_depth == 0) obj_start = (int)(ptr - text);
+            brace_depth++;
+        }
+        else if (*ptr == '}')
+        {
+            brace_depth--;
+            if (brace_depth == 0 && obj_start >= 0)
+            {
+                int obj_len = (int)(ptr - text) - obj_start + 1;
+                char *obj_text = (char*)malloc(obj_len + 1);
+                if (obj_text)
+                {
+                    strncpy(obj_text, text + obj_start, obj_len);
+                    obj_text[obj_len] = '\0';
+
+                    DataSourceSelection *s = &g_data_selections[g_data_selection_count];
+                    memset(s, 0, sizeof(DataSourceSelection));
+
+                    /* type */
+                    const char *v = strstr(obj_text, "\"type\"");
+                    if (v) { v = strchr(v, ':'); if (v) s->type = (SourceType)atoi(v + 1); }
+
+                    /* name */
+                    v = strstr(obj_text, "\"name\"");
+                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) sscanf(v + 1, "%63[^\"]", s->name); } }
+
+                    /* identifier */
+                    v = strstr(obj_text, "\"identifier\"");
+                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) sscanf(v + 1, "%63[^\"]", s->identifier); } }
+
+                    /* paste_data */
+                    v = strstr(obj_text, "\"paste_data\"");
+                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) { int i = 0; v++; while (*v && *v != '"' && i < 4095) s->paste_data[i++] = *v++; s->paste_data[i] = '\0'; } } }
+
+                    /* format */
+                    v = strstr(obj_text, "\"format\"");
+                    if (v) { v = strchr(v, ':'); if (v) s->format = (OrbitalDataFormat)atoi(v + 1); }
+
+                    free(obj_text);
+                    g_data_selection_count++;
+                }
+                obj_start = -1;
+            }
+        }
+        else if (*ptr == ']' && brace_depth == 0)
+        {
+            break;
+        }
+        ptr++;
+    }
+
+    UnloadFileText(text);
+    LOG_INFO("Loaded %d data source selections", g_data_selection_count);
+}
+
 /* -- Satellite Manager ----------------------------------------------------- */
 
 void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
@@ -151,11 +274,13 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
             if (!search_active || str_contains_ic(satellites[i].name, search_buf))
                 satellites[i].is_active = true;
         }
+        SaveSatSelection(cfg);
+        SaveAppConfig("settings.json", cfg);
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable all visible satellites");
     ImGui::SameLine();
 
-    /* Disable All (eye-slash icon) */
+    /* Disable all (eye-slash icon) */
     if (ImGui::Button(ICON_FA_EYE_SLASH "##disable_all", ImVec2(btn_w, btn_w)))
     {
         for (int i = 0; i < sat_count; i++)
@@ -163,6 +288,8 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
             if (!search_active || str_contains_ic(satellites[i].name, search_buf))
                 satellites[i].is_active = false;
         }
+        SaveSatSelection(cfg);
+        SaveAppConfig("settings.json", cfg);
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Disable all visible satellites");
 
@@ -205,7 +332,12 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
         ImGui::PushID(i);
 
         /* checkbox for active state */
-        ImGui::Checkbox("##active", &satellites[i].is_active);
+        if (ImGui::Checkbox("##active", &satellites[i].is_active))
+        {
+            /* persist the selection immediately so it survives a crash/kill */
+            SaveSatSelection(cfg);
+            SaveAppConfig("settings.json", cfg);
+        }
         ImGui::SameLine();
 
         if (!active)
@@ -1254,9 +1386,17 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     /* -- Activate / Deactivate -------------------------------------------- */
     ImGui::Separator();
     if (sat->is_active && ImGui::Button("Deactivate", ImVec2(avail_w, 0)))
+    {
         sat->is_active = false;
+        SaveSatSelection(cfg);
+        SaveAppConfig("settings.json", cfg);
+    }
     else if (!sat->is_active && ImGui::Button("Activate", ImVec2(avail_w, 0)))
+    {
         sat->is_active = true;
+        SaveSatSelection(cfg);
+        SaveAppConfig("settings.json", cfg);
+    }
 
     ImGui::PopTextWrapPos();
 }

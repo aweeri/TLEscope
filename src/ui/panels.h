@@ -16,6 +16,10 @@
 extern bool log_auto_scroll;        /* log auto-scroll preference               */
 extern bool log_show_timestamps;    /* show timestamps in log entries (default off) */
 
+/* data-source selection (shopping-cart) persistence (section 11) */
+void SaveDataSelections(void);
+void LoadDataSelections(void);
+
 /* panel body renderers (one per PanelId, ordered to match the registry) */
 void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg);
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg);

@@ -384,20 +384,23 @@ Status markers used below:
 
 ## 11. Persistence
 
-### 11.1 [~] Persist critical settings
+### 11.1 [x] Persist critical settings
 
 - Goal: whatever the user sets should survive a restart, minimizing setup time.
 - Already persisted: theme, window size, FPS, UI scale, display toggles, custom
   sources, retlector groups, custom entries, stale threshold, unified locations
   (markers + home), local/UTC preference, and sidebar/panel layout.
-- Gaps to close:
-  - Active satellite selection. `SaveSatSelection()` and `LoadSatSelection()`
-    are currently empty stubs. Persist which satellites are active or inactive
-    so the user's view is restored.
+- Done:
+  - Active satellite selection. `SaveSatSelection()`/`LoadSatSelection()` now
+    persist the set of active NORAD ids to `sat_selection.json` and re-apply
+    them to freshly loaded satellites on startup.
   - Data source selections. The shopping-cart selections in the Data Sources
-    panel (`g_data_selections`) are not persisted.
-  - Rotator settings (see section 6).
-  - Pass settings (min elevation, time span, mode).
+    panel (`g_data_selections`) are persisted to `data_selections.json` via
+    `SaveDataSelections()`/`LoadDataSelections()`.
+  - Rotator settings (see section 6). A `RotatorSettings` struct is stored in
+    `settings.json` and applied to the live rotator via
+    `RotatorSaveSettings()`/`RotatorLoadSettings()`.
+  - Pass settings (min elevation, time span, mode) remain to be persisted.
 - Acceptance criteria:
   - Restarting the app restores the user's active satellites, data-source
     selections, rotator config, and time preference.
@@ -533,7 +536,7 @@ Use this as the definition of done for the release.
       user FOV around the selected satellite.
 - [x] Apoapsis and periapsis show altitude labels.
 - [x] Markers are manageable (add, remove, persist) and Cape Canaveral is gone.
-- [ ] Persistence restores active satellites, source selections, rotator, and
+- [x] Persistence restores active satellites, source selections, rotator, and
       time preference.
 
 ### Polish

@@ -763,10 +763,55 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     rlImGuiEnd();
 }
 
-/* -- Required stubs (to match ui.h declarations) ---------------------------- */
+/* -- Satellite selection persistence (section 11) --------------------------- */
 
-void SaveSatSelection(void) {}
-void LoadSatSelection(void) {}
+/** persist which satellites are active (by NORAD id) into the AppConfig.
+ *  The list is written to settings.json by SaveAppConfig(), so it always
+ *  lives in the app's directory (no separate file / CWD mismatch). */
+void SaveSatSelection(AppConfig *cfg)
+{
+    if (!cfg) return;
+
+    cfg->active_sat_count = 0;
+    for (int i = 0; i < sat_count && cfg->active_sat_count < MAX_SATELLITES; i++)
+    {
+        if (satellites[i].is_active)
+            cfg->active_sat_ids[cfg->active_sat_count++] = satellites[i].norad_id_num;
+    }
+    cfg->has_saved_selection = true;
+
+    LOG_INFO("Saved %d active satellites to config", cfg->active_sat_count);
+}
+
+/** restore which satellites are active from the AppConfig (loaded from
+ *  settings.json by LoadAppConfig()). */
+void LoadSatSelection(AppConfig *cfg)
+{
+    if (!cfg) return;
+
+    /* If no selection has ever been persisted (first run / no settings key),
+     * keep the default active state from data.json instead of blanking all. */
+    if (!cfg->has_saved_selection)
+        return;
+
+    /* apply: only satellites whose id is in the saved set stay active */
+    for (int i = 0; i < sat_count; i++)
+    {
+        bool keep = false;
+        for (int k = 0; k < cfg->active_sat_count; k++)
+        {
+            if (satellites[i].norad_id_num == cfg->active_sat_ids[k])
+            {
+                keep = true;
+                break;
+            }
+        }
+        satellites[i].is_active = keep;
+    }
+
+    LOG_INFO("Restored %d active satellites from config", cfg->active_sat_count);
+}
+
 bool IsUITyping(void) { return ImGui::GetCurrentContext() ? ImGui::IsAnyItemActive() : false; }
 void ToggleTLEWarning(void) { show_tle_warning = !show_tle_warning; }
 bool IsMouseOverUI(AppConfig *cfg) { (void)cfg; return ImGui::GetCurrentContext() ? (ImGui::IsWindowHovered(ImGuiFocusedFlags_AnyWindow) || ImGui::IsAnyItemHovered()) : false; }
