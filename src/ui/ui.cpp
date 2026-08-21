@@ -760,13 +760,15 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                                        ImGui::GetFrameHeight() + 14.0f),
                                 ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowBgAlpha(0.9f);
-        ImGui::Begin("##pick_home_hint", NULL,
-                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoSavedSettings |
-                         ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav);
-        ImGui::TextUnformatted("Click on the map to set your home location    ESC to cancel");
-        ImGui::End();
+        if (ImGui::Begin("##pick_home_hint", NULL,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav))
+        {
+            ImGui::TextUnformatted("Click on the map to set your home location    ESC to cancel");
+            ImGui::End();
+        }
     }
 
     /* modals */

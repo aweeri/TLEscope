@@ -208,31 +208,32 @@ void DrawNotifications(void)
         /* scale the alpha of ALL content */
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
-        ImGui::Begin(win_id, NULL,
-                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoSavedSettings |
-                         ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
-
-        /* accent bar on the left edge */
-        ImVec2 pos = ImGui::GetWindowPos();
-        ImVec2 size = ImGui::GetWindowSize();
-        ImVec4 accent_col = LevelColor(n->level);
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(pos.x, pos.y + 2.0f),
-            ImVec2(pos.x + 4.0f, pos.y + size.y - 2.0f),
-            IM_COL32((int)(accent_col.x * 255), (int)(accent_col.y * 255),
-                     (int)(accent_col.z * 255), (int)(alpha * 255)));
-
-        /* icon + message */
-        if (n->icon[0] != '\0')
+        if (ImGui::Begin(win_id, NULL,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs))
         {
-            ImGui::TextColored(LevelColor(n->level), "%s", n->icon);
-            ImGui::SameLine();
-        }
-        ImGui::TextWrapped("%s", n->message);
+            /* accent bar on the left edge */
+            ImVec2 pos = ImGui::GetWindowPos();
+            ImVec2 size = ImGui::GetWindowSize();
+            ImVec4 accent_col = LevelColor(n->level);
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                ImVec2(pos.x, pos.y + 2.0f),
+                ImVec2(pos.x + 4.0f, pos.y + size.y - 2.0f),
+                IM_COL32((int)(accent_col.x * 255), (int)(accent_col.y * 255),
+                         (int)(accent_col.z * 255), (int)(alpha * 255)));
 
-        ImGui::End();
+            /* icon + message */
+            if (n->icon[0] != '\0')
+            {
+                ImGui::TextColored(LevelColor(n->level), "%s", n->icon);
+                ImGui::SameLine();
+            }
+            ImGui::TextWrapped("%s", n->message);
+
+            ImGui::End();
+        }
 
         ImGui::PopStyleVar(4);
         ImGui::PopStyleColor(2);
