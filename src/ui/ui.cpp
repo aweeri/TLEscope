@@ -56,7 +56,7 @@ UIState g_ui = {
 
 Color ApplyAlpha(Color c, float alpha)
 {
-    c.a = (unsigned char)(alpha * 255.0f);
+    c.a = (unsigned char)(c.a * alpha);
     return c;
 }
 
