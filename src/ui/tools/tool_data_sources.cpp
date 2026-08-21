@@ -12,6 +12,7 @@
 #include "data/provider.h"
 #include "data/storage.h"
 #include "data/omm_parser.h"
+#include "data/async_fetch.h"
 #include "util/log.h"
 
 #include <cstdio>
@@ -352,159 +353,75 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
     ImGui::Separator();
     ImGui::PopTextWrapPos();
 
+    /* async pull state (persists across frames) */
+    static bool s_pull_running = false;
+    static int s_pull_total = 0;
+
+    /* track whether BeginDisabled() was called this frame so the matching
+     * EndDisabled() is only emitted when it was because imgui be crashy if not*/
+    bool pull_disabled = false;
+
+    if (s_pull_running)
+    {
+        /* once all jobs have been drained, the pull is complete */
+        if (!AsyncFetchBusy())
+        {
+            s_pull_running = false;
+            s_pull_total = 0;
+        }
+        else
+        {
+            /* show progress while the worker thread fetches/parses in the background */
+            ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s Pulling data...",
+                               ICON_FA_SPINNER);
+            ImGui::SameLine();
+            static float spinner_angle = 0.0f;
+            spinner_angle += ImGui::GetIO().DeltaTime * 180.0f;
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "%c",
+                               "|/-\\"[(int)(spinner_angle / 45.0f) % 4]);
+
+            int done = s_pull_total - AsyncFetchPendingCount();
+            if (s_pull_total > 0)
+            {
+                ImGui::ProgressBar((float)done / (float)s_pull_total,
+                                   ImVec2(avail_w, 0.0f), "");
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+                                   "%d / %d sources", done, s_pull_total);
+            }
+
+            /* disable the button while a pull is in flight */
+            ImGui::BeginDisabled();
+            pull_disabled = true;
+        }
+    }
+
     if (ImGui::Button("Pull All Selected Sources", ImVec2(avail_w, 30)))
     {
-        /* ---- Phase 1: clear the slate (purge all satellites) ---- */
+        /* clear the slate and queue every selected source as an async job */
         sat_count = 0;
+        s_pull_total = DataSelectionCount();
+        s_pull_running = (s_pull_total > 0);
 
-        /* ---- Phase 2: fetch each selected source (if any) ---- */
-        for (int i = 0; i < DataSelectionCount(); i++)
+        for (int i = 0; i < s_pull_total; i++)
         {
             DataSourceSelection *s = DataSelectionAt(i);
             if (!s) break;
 
-            switch (s->type)
-            {
-                case SOURCE_RETLECTOR:
-                {
-                    char url[512];
-                    snprintf(url, sizeof(url), "https://retlector.eu/%s/csv", s->identifier);
-                    FetchResult result = FetchFromCustomURL(url);
-                    if (result.success)
-                    {
-                        int before = sat_count;
-                        ParseOMMCsv(result.data, result.size, satellites, &sat_count,
-                                    MAX_SATELLITES, "", FORMAT_OMM_CSV);
-                        char source_tag[80];
-                        snprintf(source_tag, sizeof(source_tag), "retlector:%s", s->identifier);
-                        for (int si = before; si < sat_count; si++)
-                            strncpy(satellites[si].data_meta.source_name, source_tag,
-                                    sizeof(satellites[si].data_meta.source_name) - 1);
-                        LOG_INFO("Retlector %s: parsed %d satellites", s->identifier, sat_count - before);
-                        FreeFetchResult(&result);
-                    }
-                    break;
-                }
+            AsyncFetchJob job;
+            memset(&job, 0, sizeof(job));
+            job.type = (AsyncJobType)s->type;
+            strncpy(job.name, s->name, sizeof(job.name) - 1);
+            strncpy(job.identifier, s->identifier, sizeof(job.identifier) - 1);
+            strncpy(job.paste_data, s->paste_data, sizeof(job.paste_data) - 1);
+            job.format = s->format;
 
-                case SOURCE_CELESTRAK:
-                {
-                    /* find the matching source index */
-                    for (int ci = 0; ci < NUM_CELESTRAK_SOURCES; ci++)
-                    {
-                        if (strcmp(CELESTRAK_SOURCES[ci].name, s->identifier) == 0)
-                        {
-                            FetchResult result = FetchFromSource(&CELESTRAK_SOURCES[ci], FORMAT_OMM_CSV);
-                            if (result.success)
-                            {
-                                int before = sat_count;
-                                ParseOMMCsv(result.data, result.size, satellites, &sat_count,
-                                            MAX_SATELLITES, "", FORMAT_OMM_CSV);
-                                char source_tag[80];
-                                snprintf(source_tag, sizeof(source_tag), "celestrak:%s", s->identifier);
-                                for (int si = before; si < sat_count; si++)
-                                    strncpy(satellites[si].data_meta.source_name, source_tag,
-                                            sizeof(satellites[si].data_meta.source_name) - 1);
-                                LOG_INFO("Celestrak %s: parsed %d satellites", s->identifier, sat_count - before);
-                                FreeFetchResult(&result);
-                            }
-                            break;
-                        }
-                    }
-                    break;
-                }
-
-                case SOURCE_CUSTOM_URL:
-                {
-                    FetchResult result = FetchFromCustomURL(s->identifier);
-                    if (result.success)
-                    {
-                        int before = sat_count;
-                        if (result.format == FORMAT_TLE)
-                        {
-                            char *ptr = result.data;
-                            char l0[256], l1[256], l2[256];
-                            while (*ptr && sat_count < MAX_SATELLITES)
-                            {
-                                while (*ptr == '\r' || *ptr == '\n') ptr++;
-                                if (!*ptr) break;
-                                if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
-                                int j = 0;
-                                while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
-                                l0[j] = '\0'; if (*ptr == '\n') ptr++;
-                                j = 0;
-                                while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
-                                l1[j] = '\0'; if (*ptr == '\n') ptr++;
-                                j = 0;
-                                while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
-                                l2[j] = '\0'; if (*ptr == '\n') ptr++;
-                                OrbitalDataMeta meta = {0};
-                                snprintf(meta.source_name, sizeof(meta.source_name), "custom:%.31s", s->name);
-                                meta.format = result.format;
-                                meta.fetch_time = time(NULL);
-                                add_satellite_from_tle(l0, l1, l2, &meta);
-                            }
-                        }
-                        else if (result.format == FORMAT_OMM_JSON)
-                        {
-                            ParseOMMJson(result.data, result.size, satellites, &sat_count,
-                                         MAX_SATELLITES, s->name, result.format);
-                        }
-                        else if (result.format == FORMAT_OMM_CSV)
-                        {
-                            ParseOMMCsv(result.data, result.size, satellites, &sat_count,
-                                        MAX_SATELLITES, s->name, result.format);
-                        }
-                        LOG_INFO("Custom URL %s: parsed %d satellites", s->identifier, sat_count - before);
-                        FreeFetchResult(&result);
-                    }
-                    break;
-                }
-
-                case SOURCE_CUSTOM_PASTE:
-                {
-                    int before = sat_count;
-                    if (s->format == FORMAT_TLE)
-                    {
-                        char *ptr = s->paste_data;
-                        char l0[256], l1[256], l2[256];
-                        while (*ptr && sat_count < MAX_SATELLITES)
-                        {
-                            while (*ptr == '\r' || *ptr == '\n') ptr++;
-                            if (!*ptr) break;
-                            if (*ptr == '#') { while (*ptr && *ptr != '\n') ptr++; continue; }
-                            int j = 0;
-                            while (*ptr && *ptr != '\n' && j < 255) l0[j++] = *ptr++;
-                            l0[j] = '\0'; if (*ptr == '\n') ptr++;
-                            j = 0;
-                            while (*ptr && *ptr != '\n' && j < 255) l1[j++] = *ptr++;
-                            l1[j] = '\0'; if (*ptr == '\n') ptr++;
-                            j = 0;
-                            while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
-                            l2[j] = '\0'; if (*ptr == '\n') ptr++;
-                            OrbitalDataMeta meta = {0};
-                            snprintf(meta.source_name, sizeof(meta.source_name), "paste:%d", i);
-                            meta.format = s->format;
-                            meta.fetch_time = time(NULL);
-                            add_satellite_from_tle(l0, l1, l2, &meta);
-                        }
-                    }
-                    else if (s->format == FORMAT_OMM_JSON)
-                    {
-                        ParseOMMJson(s->paste_data, strlen(s->paste_data), satellites,
-                                     &sat_count, MAX_SATELLITES, "paste", s->format);
-                    }
-                    else if (s->format == FORMAT_OMM_CSV)
-                    {
-                        ParseOMMCsv(s->paste_data, strlen(s->paste_data), satellites,
-                                    &sat_count, MAX_SATELLITES, "paste", s->format);
-                    }
-                    LOG_INFO("Custom paste %d: parsed %d satellites", i, sat_count - before);
-                    break;
-                }
-            }
+            AsyncFetchSubmit(&job);
         }
 
-        SaveOrbitalData("data.json", satellites, sat_count);
-        LOG_INFO("Pull complete: %d satellites total", sat_count);
+        if (s_pull_total == 0)
+            LOG_INFO("No sources selected to pull");
     }
+
+    if (pull_disabled)
+        ImGui::EndDisabled();
 }

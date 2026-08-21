@@ -197,11 +197,19 @@ static bool init_sgp4_from_satellite(Satellite *sat)
 /** parses TLE lines and populates the satellite struct */
 bool add_satellite_from_tle(const char* line0, const char* line1, const char* line2, OrbitalDataMeta *meta)
 {
-    if (sat_count >= MAX_SATELLITES) {
+    return add_satellite_from_tle_to(satellites, &sat_count, line0, line1, line2, meta);
+}
+
+/** buffer-based TLE add */
+bool add_satellite_from_tle_to(Satellite *sats, int *count,
+                               const char* line0, const char* line1, const char* line2, OrbitalDataMeta *meta)
+{
+    if (!sats || !count) return false;
+    if (*count >= MAX_SATELLITES) {
         LOG_WARN("Cannot add satellite - MAX_SATELLITES (%d) reached", MAX_SATELLITES);
         return false;
     }
-    Satellite *sat = &satellites[sat_count];
+    Satellite *sat = &sats[*count];
     memset(sat, 0, sizeof(Satellite));
 
     strncpy(sat->name, line0, 24);
@@ -263,7 +271,7 @@ bool add_satellite_from_tle(const char* line0, const char* line1, const char* li
         return false;
     }
 
-    sat_count++;
+    (*count)++;
     return true;
 }
 
@@ -275,11 +283,27 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
                                      double mean_anomaly_deg, double mean_motion_revday,
                                      double bstar, OrbitalDataMeta *meta)
 {
-    if (sat_count >= MAX_SATELLITES) {
+    return add_satellite_from_omm_elements_to(satellites, &sat_count, name, norad_id,
+                                              intl_desig, epoch, inclination_deg, raan_deg,
+                                              eccentricity, arg_perigee_deg, mean_anomaly_deg,
+                                              mean_motion_revday, bstar, meta);
+}
+
+/** buffer-based OMM add (writes into a caller-provided array, not the global) */
+bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
+                                        const char *name, const char *norad_id,
+                                        const char *intl_desig, double epoch,
+                                        double inclination_deg, double raan_deg,
+                                        double eccentricity, double arg_perigee_deg,
+                                        double mean_anomaly_deg, double mean_motion_revday,
+                                        double bstar, OrbitalDataMeta *meta)
+{
+    if (!sats || !count) return false;
+    if (*count >= MAX_SATELLITES) {
         LOG_WARN("Cannot add OMM satellite %s - MAX_SATELLITES (%d) reached", name, MAX_SATELLITES);
         return false;
     }
-    Satellite *sat = &satellites[sat_count];
+    Satellite *sat = &sats[*count];
     memset(sat, 0, sizeof(Satellite));
 
     // copy identification
@@ -319,7 +343,7 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
         return false;
     }
 
-    sat_count++;
+    (*count)++;
     LOG_DEBUG("Added OMM satellite: %s (NORAD: %s)", name, norad_id);
     return true;
 }

@@ -42,6 +42,20 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
                                      double mean_anomaly_deg, double mean_motion_revday,
                                      double bstar, OrbitalDataMeta *meta);
 
+// Buffer-based variants that write into an array instead of the
+// global `satellites[]`, used by the async fetch worker thread so it never
+// touches the global array because the render loop touches that every frame
+bool add_satellite_from_tle_to(Satellite *sats, int *count,
+                               const char* line0, const char* line1,
+                               const char* line2, OrbitalDataMeta *meta);
+bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
+                                        const char *name, const char *norad_id,
+                                        const char *intl_desig, double epoch,
+                                        double inclination_deg, double raan_deg,
+                                        double eccentricity, double arg_perigee_deg,
+                                        double mean_anomaly_deg, double mean_motion_revday,
+                                        double bstar, OrbitalDataMeta *meta);
+
 double normalize_epoch(double epoch);
 double get_unix_from_epoch(double epoch);
 

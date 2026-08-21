@@ -3,12 +3,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <mutex>
 #include <raylib.h>
 
 /* -- Static cache storage -------------------------------------------------- */
 
 static CacheEntry cache[MAX_CACHE_ENTRIES];
 static int cache_count = 0;
+
+/* guards all cache state so worker threads can safely call CacheGet/CachePut */
+static std::mutex s_cache_mutex;
 
 /* -- Simple URL hash (djb2) ------------------------------------------------ */
 
@@ -34,6 +38,8 @@ CacheEntry* CacheGet(const char *url)
 {
     if (!url) return NULL;
 
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+
     char h[64];
     hash_url(url, h, sizeof(h));
 
@@ -54,6 +60,8 @@ CacheEntry* CacheGet(const char *url)
 void CachePut(const char *url, const char *data, size_t size, OrbitalDataFormat format)
 {
     if (!url || !data || size == 0) return;
+
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
 
     char h[64];
     hash_url(url, h, sizeof(h));
@@ -111,6 +119,8 @@ void CachePut(const char *url, const char *data, size_t size, OrbitalDataFormat 
 
 void CacheClear(void)
 {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+
     for (int i = 0; i < cache_count; i++)
     {
         free(cache[i].data);
@@ -122,6 +132,8 @@ void CacheClear(void)
 
 bool CacheSave(const char *filename)
 {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+
     FILE *f = fopen(filename, "w");
     if (!f) return false;
 

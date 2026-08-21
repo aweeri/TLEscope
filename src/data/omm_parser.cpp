@@ -192,8 +192,8 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                     meta.fetch_time = time(NULL);
                     meta.epoch_time = (time_t)get_unix_from_epoch(epoch);
 
-                    if (add_satellite_from_omm_elements(
-                            name, norad_id, intl_desig, epoch,
+                    if (add_satellite_from_omm_elements_to(
+                            sats, count, name, norad_id, intl_desig, epoch,
                             inclination, raan, eccentricity, arg_perigee,
                             mean_anomaly, mean_motion, bstar, &meta))
                     {
@@ -426,8 +426,8 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         meta.fetch_time = time(NULL);
         meta.epoch_time = (time_t)get_unix_from_epoch(epoch);
 
-        if (add_satellite_from_omm_elements(
-                name, norad_id, intl_desig, epoch,
+        if (add_satellite_from_omm_elements_to(
+                sats, count, name, norad_id, intl_desig, epoch,
                 inclination, raan, eccentricity, arg_perigee,
                 mean_anomaly, mean_motion, bstar, &meta))
         {

@@ -19,6 +19,7 @@
 #include "ui/tools/tools_scene.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
+#include "data/async_fetch.h"
 #include "imgui.h"
 
 /**
@@ -528,6 +529,7 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
 int main(void)
 {
     LogInit();
+    AsyncFetchInit();
 
     LoadAppConfig("settings.json", &cfg);
     SetUseLocalTime(cfg.use_local_time);
@@ -2252,6 +2254,10 @@ int main(void)
                           (Color){ 0, 0, 0, 160 });
         }
 
+        /* apply any completed async fetch results to the global satellite array.
+         * Runs on the UI thread so it is safe with the render loop. */
+        AsyncFetchApplyResults();
+
         DrawGUI(&uiCtx, &cfg, customFont);
 
         /* statistics overlay (enabled via Settings -> Show Statistics).
@@ -2320,6 +2326,7 @@ int main(void)
     SaveAppConfig("settings.json", &cfg);
 
     SaveDataSelections();
+    AsyncFetchShutdown();
     RotatorShutdown();
     LogShutdown();
 
