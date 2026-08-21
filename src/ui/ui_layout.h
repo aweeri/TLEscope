@@ -77,8 +77,8 @@ typedef struct
     float right_restore_width;
 
     /* panel order arrays (PanelId values, -1 = unused slot) */
-    int left_order[MAX_LEFT_PANELS];
-    int right_order[MAX_RIGHT_PANELS];
+    int left_order[MAX_PANELS];
+    int right_order[MAX_PANELS];
 
     /* open/closed state indexed by PanelId */
     bool panel_open[PANEL_COUNT];
@@ -93,6 +93,9 @@ typedef struct
 
     /* settings modal */
     bool settings_open;
+
+    /* tools modal */
+    bool tools_open;
 
     /* bottom bar visibility (View menu) */
     bool show_bottom_bar;
@@ -140,16 +143,26 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg);
 /** draw the settings modal (centered, dimmed/blurred background) */
 void DrawSettingsModal(UIContext *ctx, AppConfig *cfg);
 
+/** draw the tools modal (manage tool enable/disable + sidebar placement) */
+void DrawToolsModal(UIContext *ctx, AppConfig *cfg);
+
 /* panel visibility helpers (used by menus, shortcuts, other dialogs) */
 void LayoutTogglePanel(PanelId id);
 void LayoutOpenPanel(PanelId id);
 void LayoutClosePanel(PanelId id);
 bool LayoutIsPanelOpen(PanelId id);
+void LayoutSetPanelSide(PanelId id, SidebarSide side);
+SidebarSide LayoutPanelCurrentSide(PanelId id);
 
 /* settings modal helpers */
 bool LayoutSettingsOpen(void);
 void LayoutOpenSettings(void);
 void LayoutCloseSettings(void);
+
+/* tools modal helpers */
+bool LayoutToolsOpen(void);
+void LayoutOpenTools(void);
+void LayoutCloseTools(void);
 
 /* bottom bar visibility */
 bool LayoutBottomBarVisible(void);

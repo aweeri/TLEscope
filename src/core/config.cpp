@@ -85,22 +85,26 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->right_sidebar_hidden = false;
 
         /* left sidebar: core functions */
-        int left_defaults[MAX_LEFT_PANELS] = {0, 1, 2, 3, 4}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
-        bool left_open_defaults[MAX_LEFT_PANELS] = {true, true, true, false, false};
-        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
+        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false, false};
+        for (int i = 0; i < MAX_PANELS; i++)
         {
             L->left_panel_order[i] = left_defaults[i];
             L->left_panel_open[i] = left_open_defaults[i];
         }
 
         /* right sidebar: inspector + scientific tools */
-        int right_defaults[MAX_RIGHT_PANELS] = {5, 6, 7, 8, 9}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
-        bool right_open_defaults[MAX_RIGHT_PANELS] = {true, false, false, false, false};
-        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
+        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false, false};
+        for (int i = 0; i < MAX_PANELS; i++)
         {
             L->right_panel_order[i] = right_defaults[i];
             L->right_panel_open[i] = right_open_defaults[i];
         }
+
+        /* all panels enabled by default (Tools dropdown) */
+        for (int i = 0; i < MAX_PANELS; i++)
+            L->panel_enabled[i] = true;
     }
 
     if (FileExists(filename))
@@ -581,7 +585,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         if (arr)
                         {
                             char *cur = arr + 1;
-                            for (int i = 0; i < MAX_LEFT_PANELS && cur && *cur != ']'; i++)
+                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
                             {
                                 while (*cur && (*cur == ' ' || *cur == ',')) cur++;
                                 if (*cur == ']' || *cur == '\0') break;
@@ -597,7 +601,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         if (arr)
                         {
                             char *cur = arr + 1;
-                            for (int i = 0; i < MAX_RIGHT_PANELS && cur && *cur != ']'; i++)
+                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
                             {
                                 while (*cur && (*cur == ' ' || *cur == ',')) cur++;
                                 if (*cur == ']' || *cur == '\0') break;
@@ -615,7 +619,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         if (arr)
                         {
                             char *cur = arr + 1;
-                            for (int i = 0; i < MAX_LEFT_PANELS && cur && *cur != ']'; i++)
+                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
                             {
                                 while (*cur && (*cur == ' ' || *cur == ',')) cur++;
                                 if (*cur == ']' || *cur == '\0') break;
@@ -631,11 +635,29 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         if (arr)
                         {
                             char *cur = arr + 1;
-                            for (int i = 0; i < MAX_RIGHT_PANELS && cur && *cur != ']'; i++)
+                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
                             {
                                 while (*cur && (*cur == ' ' || *cur == ',')) cur++;
                                 if (*cur == ']' || *cur == '\0') break;
                                 L->right_panel_open[i] = (strncmp(cur, "true", 4) == 0);
+                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                            }
+                        }
+                    }
+
+                    // panel enabled/disabled state (Tools dropdown)
+                    char *pe = strstr(ul_ptr, "\"panel_enabled\"");
+                    if (pe && pe < block_end)
+                    {
+                        char *arr = strchr(pe, '[');
+                        if (arr)
+                        {
+                            char *cur = arr + 1;
+                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
+                            {
+                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
+                                if (*cur == ']' || *cur == '\0') break;
+                                L->panel_enabled[i] = (strncmp(cur, "true", 4) == 0);
                                 while (*cur && *cur != ',' && *cur != ']') cur++;
                             }
                         }
@@ -859,23 +881,28 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         fprintf(file, "        \"right_sidebar_hidden\": %s,\n", L->right_sidebar_hidden ? "true" : "false");
 
         fprintf(file, "        \"left_panel_order\": [");
-        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+        for (int i = 0; i < MAX_PANELS; i++)
             fprintf(file, "%s%d", i ? "," : "", L->left_panel_order[i]);
         fprintf(file, "],\n");
 
         fprintf(file, "        \"right_panel_order\": [");
-        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+        for (int i = 0; i < MAX_PANELS; i++)
             fprintf(file, "%s%d", i ? "," : "", L->right_panel_order[i]);
         fprintf(file, "],\n");
 
         fprintf(file, "        \"left_panel_open\": [");
-        for (int i = 0; i < MAX_LEFT_PANELS; i++)
+        for (int i = 0; i < MAX_PANELS; i++)
             fprintf(file, "%s%s", i ? "," : "", L->left_panel_open[i] ? "true" : "false");
         fprintf(file, "],\n");
 
         fprintf(file, "        \"right_panel_open\": [");
-        for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+        for (int i = 0; i < MAX_PANELS; i++)
             fprintf(file, "%s%s", i ? "," : "", L->right_panel_open[i] ? "true" : "false");
+        fprintf(file, "],\n");
+
+        fprintf(file, "        \"panel_enabled\": [");
+        for (int i = 0; i < MAX_PANELS; i++)
+            fprintf(file, "%s%s", i ? "," : "", L->panel_enabled[i] ? "true" : "false");
         fprintf(file, "]\n");
 
         fprintf(file, "    }\n");

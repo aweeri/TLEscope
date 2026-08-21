@@ -214,12 +214,15 @@ typedef struct {
     bool right_sidebar_hidden;
 
     /* panel order (PanelId values in display order, -1 = unused slot) */
-    int left_panel_order[MAX_LEFT_PANELS];
-    int right_panel_order[MAX_RIGHT_PANELS];
+    int left_panel_order[MAX_PANELS];
+    int right_panel_order[MAX_PANELS];
 
     /* open/closed state, parallel to the order arrays above */
-    bool left_panel_open[MAX_LEFT_PANELS];
-    bool right_panel_open[MAX_RIGHT_PANELS];
+    bool left_panel_open[MAX_PANELS];
+    bool right_panel_open[MAX_PANELS];
+
+    /* panel enabled (completely shown/hidden in sidebar) indexed by PanelId */
+    bool panel_enabled[MAX_PANELS];
 } UILayoutPersist;
 
 extern Satellite satellites[MAX_SATELLITES];

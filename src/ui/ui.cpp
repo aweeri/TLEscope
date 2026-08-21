@@ -734,6 +734,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     /* settings modal (centered, dimmed/blurred background) */
     DrawSettingsModal(ctx, cfg);
 
+    /* tools modal (manage tool enable/disable + sidebar placement) */
+    DrawToolsModal(ctx, cfg);
+
     /* home-location picking hint: the settings modal is closed while picking,
      * so show a small banner telling the user how to set / cancel the pick */
     if (*ctx->picking_home)

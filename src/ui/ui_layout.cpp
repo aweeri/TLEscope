@@ -151,9 +151,9 @@ void LayoutInitDefaults(void)
     }
 
     /* fill unused slots with -1 so no panel id is duplicated in the arrays */
-    for (int i = li; i < MAX_LEFT_PANELS; i++)
+    for (int i = li; i < MAX_PANELS; i++)
         g_layout.left_order[i] = -1;
-    for (int i = ri; i < MAX_RIGHT_PANELS; i++)
+    for (int i = ri; i < MAX_PANELS; i++)
         g_layout.right_order[i] = -1;
 }
 
@@ -186,27 +186,31 @@ void LayoutApplyPersist(const UILayoutPersist *p)
     g_layout.left_hidden   = p->left_sidebar_hidden;
     g_layout.right_hidden  = p->right_sidebar_hidden;
 
-    for (int i = 0; i < MAX_LEFT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
         g_layout.left_order[i] = p->left_panel_order[i];
-    for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
         g_layout.right_order[i] = p->right_panel_order[i];
 
     /* sanitise: strip duplicates and invalid entries */
-    SanitiseOrder(g_layout.left_order, MAX_LEFT_PANELS);
-    SanitiseOrder(g_layout.right_order, MAX_RIGHT_PANELS);
+    SanitiseOrder(g_layout.left_order, MAX_PANELS);
+    SanitiseOrder(g_layout.right_order, MAX_PANELS);
 
-    for (int i = 0; i < MAX_LEFT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
     {
         int pid = g_layout.left_order[i];
         if (pid >= 0 && pid < PANEL_COUNT)
             g_layout.panel_open[pid] = p->left_panel_open[i];
     }
-    for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
     {
         int pid = g_layout.right_order[i];
         if (pid >= 0 && pid < PANEL_COUNT)
             g_layout.panel_open[pid] = p->right_panel_open[i];
     }
+
+    /* restore panel enabled/disabled state (Tools dropdown) */
+    for (int i = 0; i < PANEL_COUNT; i++)
+        g_layout.panel_enabled[i] = p->panel_enabled[i];
 }
 
 void LayoutFillPersist(UILayoutPersist *p)
@@ -218,21 +222,25 @@ void LayoutFillPersist(UILayoutPersist *p)
     p->left_sidebar_hidden   = g_layout.left_hidden;
     p->right_sidebar_hidden  = g_layout.right_hidden;
 
-    for (int i = 0; i < MAX_LEFT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
         p->left_panel_order[i] = g_layout.left_order[i];
-    for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
         p->right_panel_order[i] = g_layout.right_order[i];
 
-    for (int i = 0; i < MAX_LEFT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
     {
         int pid = g_layout.left_order[i];
         p->left_panel_open[i] = (pid >= 0 && pid < PANEL_COUNT) ? g_layout.panel_open[pid] : false;
     }
-    for (int i = 0; i < MAX_RIGHT_PANELS; i++)
+    for (int i = 0; i < MAX_PANELS; i++)
     {
         int pid = g_layout.right_order[i];
         p->right_panel_open[i] = (pid >= 0 && pid < PANEL_COUNT) ? g_layout.panel_open[pid] : false;
     }
+
+    /* persist panel enabled/disabled state (Tools dropdown) */
+    for (int i = 0; i < PANEL_COUNT; i++)
+        p->panel_enabled[i] = g_layout.panel_enabled[i];
 }
 
 /* -- Panel visibility helpers ----------------------------------------------- */
@@ -255,6 +263,59 @@ void LayoutClosePanel(PanelId id)
 {
     if (id < 0 || id >= PANEL_COUNT) return;
     g_layout.panel_open[id] = false;
+}
+
+/** move a panel to the given sidebar, appending it to that side's order.
+ *  Removes it from the source side's order first. Each sidebar can hold up
+ *  to MAX_PANELS panels, so a move never evicts another panel. */
+void LayoutSetPanelSide(PanelId id, SidebarSide side)
+{
+    if (id < 0 || id >= PANEL_COUNT) return;
+    if (side != SIDEBAR_LEFT && side != SIDEBAR_RIGHT) return;
+
+    /* no-op if the panel is already on the requested side */
+    if (LayoutPanelCurrentSide(id) == side) return;
+
+    /* remove from both order arrays */
+    for (int i = 0; i < MAX_PANELS; i++)
+        if (g_layout.left_order[i] == id) g_layout.left_order[i] = -1;
+    for (int i = 0; i < MAX_PANELS; i++)
+        if (g_layout.right_order[i] == id) g_layout.right_order[i] = -1;
+
+    /* compact each array (shift -1s to the end) */
+    int *orders[2] = { g_layout.left_order, g_layout.right_order };
+    for (int s = 0; s < 2; s++)
+    {
+        int w = 0;
+        for (int i = 0; i < MAX_PANELS; i++)
+            if (orders[s][i] >= 0) orders[s][w++] = orders[s][i];
+        for (int i = w; i < MAX_PANELS; i++)
+            orders[s][i] = -1;
+    }
+
+    /* append to the target side (there is always a free slot) */
+    int *target = (side == SIDEBAR_LEFT) ? g_layout.left_order : g_layout.right_order;
+    for (int i = 0; i < MAX_PANELS; i++)
+    {
+        if (target[i] < 0)
+        {
+            target[i] = id;
+            break;
+        }
+    }
+
+    EnsureSidebar(side);
+}
+
+/** return the sidebar a panel currently lives in (from the order arrays). */
+SidebarSide LayoutPanelCurrentSide(PanelId id)
+{
+    if (id < 0 || id >= PANEL_COUNT) return SIDEBAR_NONE;
+    for (int i = 0; i < MAX_PANELS; i++)
+        if (g_layout.left_order[i] == id) return SIDEBAR_LEFT;
+    for (int i = 0; i < MAX_PANELS; i++)
+        if (g_layout.right_order[i] == id) return SIDEBAR_RIGHT;
+    return SIDEBAR_NONE;
 }
 
 bool LayoutIsPanelOpen(PanelId id)
@@ -294,11 +355,15 @@ bool LayoutSettingsOpen(void) { return g_layout.settings_open; }
 void LayoutOpenSettings(void) { g_layout.settings_open = true; }
 void LayoutCloseSettings(void) { g_layout.settings_open = false; }
 
+bool LayoutToolsOpen(void) { return g_layout.tools_open; }
+void LayoutOpenTools(void) { g_layout.tools_open = true; }
+void LayoutCloseTools(void) { g_layout.tools_open = false; }
+
 /* -- Drag reorder data (per-frame) ----------------------------------------- */
 
 typedef struct { PanelId id; float y0, y1; } HeaderSlot;
-static HeaderSlot s_left_headers[MAX_LEFT_PANELS];
-static HeaderSlot s_right_headers[MAX_RIGHT_PANELS];
+static HeaderSlot s_left_headers[MAX_PANELS];
+static HeaderSlot s_right_headers[MAX_PANELS];
 static int s_left_hc = 0, s_right_hc = 0;
 
 /* ========================================================================== */
@@ -576,14 +641,14 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     }
 
     /* ---- store header rect for drop-target computation ----------------- */
-    if (is_left && s_left_hc < MAX_LEFT_PANELS)
+    if (is_left && s_left_hc < MAX_PANELS)
     {
         s_left_headers[s_left_hc].id = def->id;
         s_left_headers[s_left_hc].y0 = p0.y;
         s_left_headers[s_left_hc].y1 = p1.y;
         s_left_hc++;
     }
-    else if (!is_left && s_right_hc < MAX_RIGHT_PANELS)
+    else if (!is_left && s_right_hc < MAX_PANELS)
     {
         s_right_headers[s_right_hc].id = def->id;
         s_right_headers[s_right_hc].y0 = p0.y;
@@ -604,7 +669,7 @@ static void FinishReorder()
 
     bool is_left = g_layout.drag_is_left;
     int *order = is_left ? g_layout.left_order : g_layout.right_order;
-    int count = is_left ? MAX_LEFT_PANELS : MAX_RIGHT_PANELS;
+    int count = MAX_PANELS;
     HeaderSlot *slots = is_left ? s_left_headers : s_right_headers;
     int sc = is_left ? s_left_hc : s_right_hc;
 
@@ -726,7 +791,7 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     if (ImGui::Begin(win_name, NULL, flags))
     {
         int *order = is_left ? g_layout.left_order : g_layout.right_order;
-        int max = is_left ? MAX_LEFT_PANELS : MAX_RIGHT_PANELS;
+        int max = MAX_PANELS;
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 3.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 3.0f));
@@ -804,60 +869,10 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
         /* ---- Tools menu -------------------------------------------------- */
         if (ImGui::BeginMenu("Tools"))
         {
-            if (ImGui::BeginMenu("Core Functions"))
+            if (ImGui::MenuItem("Manage Tools..."))
             {
-                for (int i = 0; i < PANEL_COUNT; i++)
-                {
-                    const PanelDef *def = &g_panel_defs[i];
-                    if (def->category != PANEL_CAT_CORE) continue;
-                    bool enabled = g_layout.panel_enabled[def->id];
-                    if (ImGui::MenuItem(def->title, NULL, &enabled))
-                    {
-                        g_layout.panel_enabled[def->id] = enabled;
-                        if (enabled) {
-                            g_layout.panel_open[def->id] = true;
-                            EnsureSidebar(def->default_side);
-                        }
-                    }
-                }
-                ImGui::EndMenu();
+                LayoutOpenTools();
             }
-
-            if (ImGui::BeginMenu("Scientific Tools"))
-            {
-                for (int i = 0; i < PANEL_COUNT; i++)
-                {
-                    const PanelDef *def = &g_panel_defs[i];
-                    if (def->category != PANEL_CAT_SCIENTIFIC) continue;
-                    bool enabled = g_layout.panel_enabled[def->id];
-                    if (ImGui::MenuItem(def->title, NULL, &enabled))
-                    {
-                        g_layout.panel_enabled[def->id] = enabled;
-                        if (enabled) {
-                            g_layout.panel_open[def->id] = true;
-                            EnsureSidebar(def->default_side);
-                        }
-                    }
-                }
-                ImGui::Separator();
-                /* inspector panels also go in Scientific Tools */
-                for (int i = 0; i < PANEL_COUNT; i++)
-                {
-                    const PanelDef *def = &g_panel_defs[i];
-                    if (def->category != PANEL_CAT_INSPECTOR) continue;
-                    bool enabled = g_layout.panel_enabled[def->id];
-                    if (ImGui::MenuItem(def->title, NULL, &enabled))
-                    {
-                        g_layout.panel_enabled[def->id] = enabled;
-                        if (enabled) {
-                            g_layout.panel_open[def->id] = true;
-                            EnsureSidebar(def->default_side);
-                        }
-                    }
-                }
-                ImGui::EndMenu();
-            }
-
             ImGui::EndMenu();
         }
 
@@ -896,7 +911,10 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::BeginPopupModal("Settings", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    /* p_open draws a native close button in the title bar; clicking it sets
+     * settings_open to false so the modal closes. */
+    bool *p_open = &g_layout.settings_open;
+    if (ImGui::BeginPopupModal("Settings", p_open, ImGuiWindowFlags_AlwaysAutoResize))
     {
         /* ---- Display section --------------------------------------------- */
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1104,6 +1122,119 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Button("Close", ImVec2(140, 0)))
         {
             g_layout.settings_open = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+/* -- Tools modal row helper ------------------------------------------------ */
+
+/** draw one tool row: an enable/disable checkbox and a small left/right
+ *  toggle aligned to the right edge of the row. Changes are saved
+ *  immediately so the modal needs no explicit save button. */
+static void DrawToolRow(const PanelDef *def, AppConfig *cfg)
+{
+    bool enabled = g_layout.panel_enabled[def->id];
+    if (ImGui::Checkbox(def->title, &enabled))
+    {
+        g_layout.panel_enabled[def->id] = enabled;
+        if (enabled)
+        {
+            g_layout.panel_open[def->id] = true;
+            EnsureSidebar(def->default_side);
+        }
+        LayoutFillPersist(&cfg->ui_layout);
+        SaveAppConfig("settings.json", cfg);
+    }
+
+    /* right-align a compact Left/Right toggle (0 = left, 1 = right) */
+    const float btn_w = 34.0f;
+    float avail = ImGui::GetContentRegionAvail().x;
+    ImGui::SameLine(avail - 2.0f * btn_w - ImGui::GetStyle().ItemSpacing.x);
+
+    SidebarSide cur = LayoutPanelCurrentSide(def->id);
+    ImGui::PushID(def->id);
+
+    /* Left button */
+    if (ImGui::Button(cur == SIDEBAR_LEFT ? ICON_FA_ARROW_LEFT "##L" : "##L", ImVec2(btn_w, 0)))
+    {
+        LayoutSetPanelSide(def->id, SIDEBAR_LEFT);
+        LayoutFillPersist(&cfg->ui_layout);
+        SaveAppConfig("settings.json", cfg);
+    }
+    ImGui::SameLine();
+
+    /* Right button */
+    if (ImGui::Button(cur == SIDEBAR_RIGHT ? ICON_FA_ARROW_RIGHT "##R" : "##R", ImVec2(btn_w, 0)))
+    {
+        LayoutSetPanelSide(def->id, SIDEBAR_RIGHT);
+        LayoutFillPersist(&cfg->ui_layout);
+        SaveAppConfig("settings.json", cfg);
+    }
+
+    ImGui::PopID();
+}
+
+/* ========================================================================== */
+/*  Tools modal                                                               */
+/* ========================================================================== */
+
+void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
+{
+    (void)ctx;
+    if (!g_layout.tools_open) return;
+
+    ImGui::OpenPopup("Manage Tools");
+    ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
+                            ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    /* p_open draws a native close button in the title bar; clicking it sets
+     * tools_open to false so the modal closes. */
+    bool *p_open = &g_layout.tools_open;
+    if (ImGui::BeginPopupModal("Manage Tools", p_open, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        /* ---- Core Functions --------------------------------------------- */
+        if (ImGui::CollapsingHeader("Core Functions", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (int i = 0; i < PANEL_COUNT; i++)
+            {
+                const PanelDef *def = &g_panel_defs[i];
+                if (def->category != PANEL_CAT_CORE) continue;
+                DrawToolRow(def, cfg);
+            }
+        }
+
+        /* ---- Scientific Tools ------------------------------------------- */
+        if (ImGui::CollapsingHeader("Scientific Tools", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (int i = 0; i < PANEL_COUNT; i++)
+            {
+                const PanelDef *def = &g_panel_defs[i];
+                if (def->category != PANEL_CAT_SCIENTIFIC) continue;
+                DrawToolRow(def, cfg);
+            }
+        }
+
+        /* ---- Inspector --------------------------------------------------- */
+        if (ImGui::CollapsingHeader("Inspector", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (int i = 0; i < PANEL_COUNT; i++)
+            {
+                const PanelDef *def = &g_panel_defs[i];
+                if (def->category != PANEL_CAT_INSPECTOR) continue;
+                DrawToolRow(def, cfg);
+            }
+        }
+
+        /* ---- Buttons ----------------------------------------------------- */
+        ImGui::Separator();
+
+        if (ImGui::Button("Close", ImVec2(140, 0)))
+        {
+            g_layout.tools_open = false;
             ImGui::CloseCurrentPopup();
         }
 
