@@ -50,6 +50,7 @@ static ImVec4 ThemeColor(const Color &c)
 UIState g_ui = {
     .ra_format = 0,   /* default: decimal degrees (compact) */
     .dec_format = 0,  /* default: decimal degrees (compact) */
+    .selected_pass_idx = -1, /* no pass selected by default */
 };
 
 /* -- Helpers --------------------------------------------------------------- */

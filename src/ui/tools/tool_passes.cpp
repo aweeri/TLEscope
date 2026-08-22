@@ -133,9 +133,15 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
         bool selected = (i == g_ui.selected_pass_idx);
         if (ImGui::Selectable(label, selected))
         {
-            g_ui.selected_pass_idx = i;
-            /* ---- 2.4: selecting a pass shows it in the Polar Plot ---- */
-            LayoutOpenPanel(PANEL_POLAR_PLOT);
+            /* clicking the already-selected pass deselects it */
+            if (selected)
+                g_ui.selected_pass_idx = -1;
+            else
+            {
+                g_ui.selected_pass_idx = i;
+                /* ---- 2.4: selecting a pass shows it in the Polar Plot ---- */
+                LayoutOpenPanel(PANEL_POLAR_PLOT);
+            }
         }
 
         /* ---- 2.5: right-click a pass to hand it off to Doppler ---- */

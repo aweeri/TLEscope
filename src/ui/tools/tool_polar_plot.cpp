@@ -19,6 +19,104 @@
 
 #include "imgui.h"
 
+/**
+ * @brief mark the selected pass's AOS/LOS points in the scene.
+ *
+ * Registered as the draw_scene hook for PANEL_POLAR_PLOT. When a pass is
+ * selected (g_ui.selected_pass_idx), this places a tick at the AOS and LOS
+ * markers — on the 3D globe (DrawLine3D) and on the 2D map (DrawLineEx).
+ */
+void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
+{
+    (void)cfg;
+    if (g_ui.selected_pass_idx < 0 || g_ui.selected_pass_idx >= num_passes)
+        return;
+
+    SatPass *pass = &passes[g_ui.selected_pass_idx];
+    if (!pass->sat || !pass->sat->is_active)
+        return;
+
+    /* AOS/LOS edge epochs (in normalized epoch days) */
+    double aos_epoch = pass->aos_epoch;
+    double los_epoch = pass->los_epoch;
+
+    Color notch_col = g_theme.ui.notif_warning;
+
+    /* helper to compute the satellite's draw-space position at an epoch */
+    auto pos_at = [&](double epoch) -> Vector3 {
+        double unix = get_unix_from_epoch(epoch);
+        return Vector3Scale(calculate_position(pass->sat, unix), 1.0f / DRAW_SCALE);
+    };
+
+    Vector3 aos_pos = pos_at(aos_epoch);
+    Vector3 los_pos = pos_at(los_epoch);
+
+    if (sctx->is_2d_view)
+    {
+        /* ---- 2D map ---- */
+        float map_w = sctx->map_w, map_h = sctx->map_h;
+        float tick_len = 14.0f / sctx->camera2d->zoom;
+        double dt = 30.0 / 86400.0; /* 30 s sample for the tangent */
+
+        /* helper: map coords at an epoch */
+        auto map_at = [&](double epoch, float *x, float *y) {
+            Vector3 p = pos_at(epoch);
+            get_map_coordinates(Vector3Scale(p, DRAW_SCALE), sctx->gmst_deg,
+                                sctx->earth_rotation_offset, map_w, map_h, x, y);
+        };
+
+        /* helper: draw a tick perpendicular to the orbit path in map space */
+        auto draw_tick = [&](double epoch) {
+            float x, y, x1, y1, x2, y2;
+            map_at(epoch, &x, &y);
+            map_at(epoch - dt, &x1, &y1);
+            map_at(epoch + dt, &x2, &y2);
+            float tx = x2 - x1, ty = y2 - y1;
+            float len = sqrtf(tx * tx + ty * ty);
+            if (len < 0.001f)
+                return;
+            float px = -ty / len, py = tx / len; /* perpendicular unit */
+            for (int off = -1; off <= 1; off++)
+            {
+                float x_off = off * map_w;
+                DrawLineEx((Vector2){x + x_off - px * tick_len, y - py * tick_len},
+                           (Vector2){x + x_off + px * tick_len, y + py * tick_len},
+                           3.0f / sctx->camera2d->zoom, notch_col);
+            }
+        };
+
+        draw_tick(aos_epoch);
+        draw_tick(los_epoch);
+    }
+    else
+    {
+        /* ---- 3D globe ---- */
+        float tick_len = 0.05f; /* ~150 km at DRAW_SCALE, clearly visible */
+        double dt = 30.0 / 86400.0; /* ~30 s sample for the tangent */
+
+        /* helper: orbit tangent at an epoch (finite difference) */
+        auto tangent_at = [&](double epoch) -> Vector3 {
+            Vector3 p1 = pos_at(epoch - dt);
+            Vector3 p2 = pos_at(epoch + dt);
+            return Vector3Normalize(Vector3Subtract(p2, p1));
+        };
+
+        /* helper: draw a tick perpendicular to the orbit and facing the camera */
+        auto draw_tick = [&](Vector3 pos, Vector3 tangent) {
+            Vector3 to_cam = Vector3Normalize(Vector3Subtract(sctx->camera3d->position, pos));
+            Vector3 perp = Vector3Normalize(Vector3CrossProduct(tangent, to_cam));
+            if (Vector3LengthSqr(perp) < 0.001f)
+                perp = Vector3Normalize(Vector3CrossProduct(tangent, (Vector3){0, 1, 0}));
+            DrawLine3D(Vector3Add(pos, Vector3Scale(perp, tick_len)),
+                       Vector3Add(pos, Vector3Scale(perp, -tick_len)),
+                       notch_col);
+        };
+
+        draw_tick(aos_pos, tangent_at(aos_epoch));
+        draw_tick(los_pos, tangent_at(los_epoch));
+    }
+}
+
 static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
 {
     /* concentric rings for 0°, 30°, 60°, 90° elevation — theme-aware (12.2) */
@@ -105,14 +203,26 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
                           center.y - r * cosf(a_rad));
         };
 
-        /* draw the pass arc */
+        /* draw the pass arc.
+         * Break the polyline whenever the azimuth jumps by more than 180°
+         * (a pass crossing the 0°/360° north boundary) so we never draw a
+         * straight chord across the plot. */
         ImVec2 prev = {0, 0};
         bool has_prev = false;
         for (int k = 0; k < pass->num_pts; k++)
         {
             ImVec2 pt = project(pass->path_pts[k].x, pass->path_pts[k].y);
             if (has_prev)
+            {
+                double az_delta = fabs(pass->path_pts[k].x - pass->path_pts[k - 1].x);
+                if (az_delta > 180.0)
+                {
+                    /* azimuth wrapped across north — start a new segment */
+                    prev = pt;
+                    continue;
+                }
                 dl->AddLine(prev, pt, IM_COL32(path_col.r, path_col.g, path_col.b, 200), 2.0f);
+            }
             prev = pt;
             has_prev = true;
         }
@@ -220,8 +330,6 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         {
             *ctx->current_epoch = passes[g_ui.selected_pass_idx].aos_epoch;
         }
-
-        ImGui::PopTextWrapPos();
     }
     ImGui::SameLine();
     if (ImGui::Button("Doppler Analysis", ImVec2(half_w, 0)))
