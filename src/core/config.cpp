@@ -89,8 +89,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->right_restore_width = 300.0f;
 
         /* left sidebar: core functions */
-        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, TIME_CTRL, SCOPE, ROTATOR */
-        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false};
+        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, LAYERS, SCOPE, ROTATOR */
+        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
             L->left_panel_order[i] = left_defaults[i];
@@ -98,8 +98,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         }
 
         /* right sidebar: inspector + scientific tools */
-        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG */
-        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false};
+        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, 10, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG, TRXDB */
+        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
             L->right_panel_order[i] = right_defaults[i];
