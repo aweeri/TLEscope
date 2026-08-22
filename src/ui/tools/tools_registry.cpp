@@ -50,6 +50,7 @@ const PanelDef g_panel_defs[PANEL_COUNT] = {
     { PANEL_POLAR_PLOT,   "Polar Plot",          ICON_FA_COMPASS,         PANEL_CAT_CORE,  SIDEBAR_RIGHT, false, true,  DrawPanelPolarPlot },
     { PANEL_DOPPLER,      "Doppler Analysis",    ICON_FA_TOWER_BROADCAST, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, false, DrawPanelDoppler },
     { PANEL_LOG,          "Log",                 ICON_FA_LIST,            PANEL_CAT_DEBUG, SIDEBAR_RIGHT, false, false, DrawPanelLog },
+    { PANEL_TRXDB,        "TRXDB NORAD TEST",    ICON_FA_SATELLITE_DISH,  PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, false, DrawPanelTrxdb },
 };
 
 const int g_panel_count = PANEL_COUNT;

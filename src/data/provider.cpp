@@ -226,7 +226,8 @@ static FetchResult http_fetch(const char *url)
 
     // error handling per Celestrak guidelines:
     // 301, 403, 404, 500 -> halt retries to prevent IP ban
-    if (res == CURLE_OK && http_code == 200)
+    if (res == CURLE_OK && http_code != 301 && http_code != 403 &&
+        http_code != 404 && http_code != 500)
     {
         result.data = chunk.memory;
         result.size = chunk.size;

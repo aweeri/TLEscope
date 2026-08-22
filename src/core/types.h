@@ -111,6 +111,7 @@ typedef enum
     PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
     PANEL_DOPPLER,          /* Doppler Analysis             -> right */
     PANEL_LOG,              /* Log                          -> right */
+    PANEL_TRXDB,            /* TRXDB NORAD TEST             -> right */
     PANEL_COUNT
 } PanelId;
 
