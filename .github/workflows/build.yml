@@ -217,6 +217,8 @@ jobs:
           
           # Move installer out of its artifact subdirectory for flat publishing
           mv TLEscope-Installer/TLEscope-Installer.exe ../
+          # macOS artifact is already a ditto-zipped .app, just move it up
+          mv TLEscope-macOS/TLEscope-macOS.zip ../
           cd ..
 
       - name: Clean Existing Release Assets
