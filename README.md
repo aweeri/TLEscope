@@ -94,7 +94,10 @@ brew install raylib pkg-config
 git clone https://github.com/aweeri/TLEscope
 cd TLEscope
 make macos      # Results in dist/TLEscope-macOS-Portable/
+make app        # Results in dist/TLEscope.app
 ```
+
+`make app` additionally bundles everything into a proper `TLEscope.app`: it compiles `AppIcon.icns` from `logo.png`, generates an `Info.plist` with the git version baked in, and ad-hoc codesigns the bundle (required for Apple Silicon to run at all). To sign with a real identity instead, set `CODE_SIGN_IDENTITY="Developer ID Application: ..."` before bundling. The app must be built on macOS itself - the icon and signing steps use native tooling.
 
 **Windows systems**
 Install [MSYS2](https://www.msys2.org/), then run the following in a UCRT64 or MINGW64 terminal:
