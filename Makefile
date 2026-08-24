@@ -42,12 +42,16 @@ APP_DIR     ?= /usr/share/applications
 
 # macOS (Apple Silicon / Intel)
 CC_MACOS = clang
-RAYLIB_CFLAGS = $(shell pkg-config --cflags raylib 2>/dev/null)
-RAYLIB_LIBS = $(shell pkg-config --libs raylib 2>/dev/null)
+empty :=
+space := $(empty) $(empty)
+MACOS_PC_PATH := $(subst $(space),:,$(strip $(wildcard /opt/homebrew/lib/pkgconfig /usr/local/lib/pkgconfig)))
+MACOS_PKG_CONFIG_ENV = PKG_CONFIG_PATH="$(PKG_CONFIG_PATH):$(MACOS_PC_PATH)"
+RAYLIB_CFLAGS = $(shell $(MACOS_PKG_CONFIG_ENV) pkg-config --cflags raylib 2>/dev/null)
+RAYLIB_LIBS = $(shell $(MACOS_PKG_CONFIG_ENV) pkg-config --libs raylib 2>/dev/null)
 LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild
+.PHONY: all linux macos app windows windows-arm64 win-installer clean build bin install uninstall raylib raylib-crossbuild
 
 all: linux
 
@@ -68,7 +72,11 @@ macos: bin/TLEscope-macos
 	cp logo*.png $(DIST_MACOS)/ 2>/dev/null || true
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
-	@echo "To make a MacOS bundle: ./macos_bundle.sh"
+	@echo "To make a proper .app bundle: make app"
+
+# proper .app bundle: compiles the icon, generates Info.plist, codesigns
+app: bin/TLEscope-macos
+	./scripts/macos-bundle.sh
 
 windows: bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
@@ -103,7 +111,7 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CFLAGS) -o $@ $^ $(LDFLAGS_LIN)
 
 bin/TLEscope-macos: $(SRC) | bin
-	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
+	@if ! $(MACOS_PKG_CONFIG_ENV) pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
 	$(CC_MACOS) $(CFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(SRC) | bin

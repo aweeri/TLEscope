@@ -6,6 +6,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__APPLE__)
+#include <unistd.h>
+#include <libgen.h>
+#include <mach-o/dyld.h>
+/* launchd starts .app bundles with cwd=/ but all our assets (themes,
+ * settings.json, logo.png, ...) load relative to cwd, so when the binary
+ * lives inside a bundle hop over to Contents/Resources. no wrapper needed */
+static void BundleChdir(void)
+{
+    char exe[4096];
+    uint32_t size = sizeof(exe);
+    if (_NSGetExecutablePath(exe, &size) != 0)
+        return;
+    char *contents = strstr(exe, "/Contents/MacOS/");
+    if (!contents)
+        return;
+    strcpy(contents + strlen("/Contents"), "/Resources");
+    if (chdir(exe) != 0)
+        fprintf(stderr, "warning: could not chdir into %s\n", exe);
+}
+#endif
+
 #include "astro.h"
 #include "config.h"
 
@@ -530,6 +552,10 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
 
 int main(void)
 {
+#if defined(__APPLE__)
+    BundleChdir();
+#endif
+
     LoadAppConfig("settings.json", &cfg);
 
     /* window setup and msaa */

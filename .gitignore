@@ -13,5 +13,8 @@ dist/
 # Compoile Commands CLANGD
 /compile_commands.json
 
+# mac finder junk
+.DS_Store
+
 # csv exports
 *.csv
