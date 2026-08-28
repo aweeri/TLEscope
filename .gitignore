@@ -20,8 +20,13 @@ dev_thoughts.md
 *.csv
 build_win/
 
-# Prebuilt raylib binaries (use system raylib instead)
-lib/raylib_*/
+# raylib is a git submodule (lib/raylib); ignore its build artifacts
+lib/raylib/src/*.o
+lib/raylib/src/libraylib.a
+lib/raylib/src/*.dll
+lib/raylib/src/*.dll.a
+lib/raylib/src/*.so*
+lib/raylib/src/*.dylib*
 
 # for people who accidentally run with tlescope main as workspace instead of under dist
 

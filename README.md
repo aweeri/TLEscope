@@ -66,9 +66,11 @@ TLEscope provides also packages on following systems/distributions:
 
 ### **Building From Source**
 
-TLEscope uses GCC for Linux builds, Clang with Homebrew's raylib for macOS, and cross-compiles for Windows using `x86_64-w64-mingw32-g++` (or `clang++` on ARM64).
+TLEscope uses GCC for Linux builds, Clang for macOS, and cross-compiles for Windows using `x86_64-w64-mingw32-g++` (or `clang++` on ARM64).
 
 The project is written in **C++20** and uses the **raylib** framework with **Dear ImGui** (via rlImGui) for the user interface. Orbital propagation uses the **SGP4** algorithm, and HTTP fetching uses **libcurl**.
+
+**raylib is vendored as a git submodule** and built from source by the Makefile, so there is no need to install raylib via a system package manager. When cloning, use `--recurse-submodules` (or run `git submodule update --init --recursive` after a plain clone) to fetch it.
 
 Install the required build tools and libraries, then clone the repository and execute the appropriate `make` command in the root directory of the project. Steps for typical system configurations can be found below:
 
@@ -78,38 +80,35 @@ Install the required build tools and libraries, then clone the repository and ex
 **Debian/Ubuntu-based systems**
 ```
 sudo apt-get update
-sudo apt-get install -y g++ make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev libraylib-dev
-# If cross-compiling for Windows:
+sudo apt-get install -y g++ make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
+# Additionally needed if cross-compiling for Windows:
 sudo apt-get install -y binutils-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
-git clone https://github.com/aweeri/TLEscope
+git clone --recurse-submodules https://github.com/aweeri/TLEscope
 cd TLEscope
 make linux      # Results in dist/TLEscope-Linux-Portable/
 ```
 **Arch-based systems**
 ```
-sudo pacman -Syu --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl raylib
+sudo pacman -S --needed base-devel git alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama wayland libxkbcommon curl
 # If cross-compiling for Windows:
 sudo pacman -S mingw-w64-gcc
 
-git clone https://github.com/aweeri/TLEscope
+git clone --recurse-submodules https://github.com/aweeri/TLEscope
 cd TLEscope
 make linux      # Results in dist/TLEscope-Linux-Portable/
 ```
 **macOS (Apple Silicon / Intel)**
 ```
-brew install raylib pkg-config
-
-git clone https://github.com/aweeri/TLEscope
+git clone --recurse-submodules https://github.com/aweeri/TLEscope
 cd TLEscope
 make macos      # Results in dist/TLEscope-macOS-Portable/
 ```
-
 **Windows systems (MSYS2 UCRT64 / MINGW64)**
 Install [MSYS2](https://www.msys2.org/), then run the following in a **UCRT64** terminal:
 ```
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-raylib mingw-w64-ucrt-x86_64-zstd mingw-w64-ucrt-x86_64-pkgconf make git
-git clone https://github.com/aweeri/TLEscope
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-zstd mingw-w64-ucrt-x86_64-pkgconf make git
+git clone --recurse-submodules https://github.com/aweeri/TLEscope
 cd TLEscope
 make windows
 ```
@@ -118,8 +117,8 @@ make windows
 **Windows ARM64 (MSYS2 CLANGARM64)**
 Install [MSYS2](https://www.msys2.org/), then run the following in a **CLANGARM64** terminal:
 ```
-pacman -S mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-curl mingw-w64-clang-aarch64-raylib mingw-w64-clang-aarch64-zstd mingw-w64-clang-aarch64-pkgconf make git
-git clone https://github.com/aweeri/TLEscope
+pacman -S mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-curl mingw-w64-clang-aarch64-zstd mingw-w64-clang-aarch64-pkgconf make git
+git clone --recurse-submodules https://github.com/aweeri/TLEscope
 cd TLEscope
 make windows-arm64
 ```
@@ -128,6 +127,7 @@ make windows-arm64
 
 | Target | Description |
 |--------|-------------|
+| `make raylib` | Build the raylib submodule into a static library (done automatically by the other targets) |
 | `make linux` | Build for Linux (x86_64 or ARM64) |
 | `make macos` | Build for macOS (Apple Silicon / Intel) |
 | `make windows` | Build for Windows x86_64 (cross-compile or native) |

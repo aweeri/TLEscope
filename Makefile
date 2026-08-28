@@ -3,9 +3,12 @@ GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 CC_LINUX = g++
 CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/cjson -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 
-# raylib via system package manager (pkg-config)
-RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib)
-RAYLIB_LIBS   := $(shell pkg-config --libs raylib)
+# raylib is built from the git submodule (lib/raylib)
+RAYLIB_SRC   = lib/raylib/src
+RAYLIB_LIB   = $(RAYLIB_SRC)/libraylib.a
+RAYLIB_CFLAGS = -I$(RAYLIB_SRC)
+# Extra args passed to raylib's own Makefile (for example CC=... PLATFORM_OS=WINDOWS for cross-compiles)
+RAYLIB_MAKE_ARGS ?=
 
 CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
 CXXFLAGS_WIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
@@ -33,8 +36,9 @@ else
     CURL_FIX = $(shell echo "$(CURL_FIX_RAW)" | sed -e 's/-R[^ ]*//g' -e 's/-lzstd//g')
 endif
 
-LDFLAGS_LIN = $(RAYLIB_LIBS) -lcurl -lm -lpthread -ldl -lrt
-LDFLAGS_WIN = $(RAYLIB_LIBS) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -mwindows
+# Link against the static raylib built from the submodule, plus per-OS system libs
+LDFLAGS_LIN = $(RAYLIB_LIB) -lcurl -lGL -lX11 -lm -lpthread -ldl -lrt
+LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows
 DIST_LINUX = dist/TLEscope-Linux-Portable
 DIST_WIN   = dist/TLEscope-Win-Portable
 
@@ -44,7 +48,7 @@ APP_DIR     ?= /usr/share/applications
 
 # macOS (Apple Silicon / Intel)
 CC_MACOS = clang++
-LDFLAGS_MACOS = $(RAYLIB_LIBS) -lcurl -framework IOKit -framework Cocoa -framework OpenGL
+LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
 SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp $(wildcard src/ui/tools/tool_*.cpp)
@@ -60,11 +64,22 @@ $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescop
 TOTAL_WIN_OBJ := $(words $(OBJ_WIN))
 $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp/tlescope_build_counter_win)
 
-.PHONY: all linux macos windows windows-arm64 win-installer clean build bin install uninstall test
+.PHONY: all raylib linux macos windows windows-arm64 win-installer clean build bin install uninstall test
 
 all: linux
 
-linux: bin/TLEscope
+# Build raylib from the git submodule into a static library (lib/raylib/src/libraylib.a)
+# Extra args can be passed via RAYLIB_MAKE_ARGS, e.g. for cross-compiling:
+#   make raylib RAYLIB_MAKE_ARGS="CC=aarch64-linux-gnu-gcc PLATFORM_OS=LINUX"
+raylib: $(RAYLIB_LIB)
+
+$(RAYLIB_LIB):
+	@if [ ! -f "$(RAYLIB_SRC)/raylib.h" ]; then echo "Error: raylib submodule not initialized. Run: git submodule update --init --recursive"; exit 1; fi
+	@printf "\033[1;35mBuilding raylib (static)...\033[0m\n"
+	$(MAKE) -C $(RAYLIB_SRC) $(RAYLIB_MAKE_ARGS)
+	@printf "\033[1;32mraylib built: $(RAYLIB_LIB)\033[0m\n"
+
+linux: raylib bin/TLEscope
 	@mkdir -p $(DIST_LINUX)
 	cp bin/TLEscope $(DIST_LINUX)/
 	cp -r themes $(DIST_LINUX)/
@@ -73,7 +88,7 @@ linux: bin/TLEscope
 	@echo "Linux build bundled in $(DIST_LINUX)/"
 	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
-macos: bin/TLEscope-macos
+macos: raylib bin/TLEscope-macos
 	@mkdir -p $(DIST_MACOS)
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
 	cp -r themes $(DIST_MACOS)/
@@ -83,11 +98,9 @@ macos: bin/TLEscope-macos
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 	@echo "To make a MacOS bundle: ./macos_bundle.sh"
 
-windows: bin/TLEscope.exe
+windows: raylib bin/TLEscope.exe
 	@mkdir -p $(DIST_WIN)
 	cp bin/TLEscope.exe $(DIST_WIN)/
-	cp $(MINGW_PREFIX)/bin/libraylib.dll $(DIST_WIN)/ 2>/dev/null || true
-	cp $(MINGW_PREFIX)/bin/glfw3.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp $(MINGW_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp -r themes $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
@@ -95,7 +108,7 @@ windows: bin/TLEscope.exe
 	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
 
-windows-arm64: bin/TLEscope-arm64.exe
+windows-arm64: raylib bin/TLEscope-arm64.exe
 	@mkdir -p $(DIST_WIN_ARM64)
 	cp bin/TLEscope-arm64.exe $(DIST_WIN_ARM64)/TLEscope.exe
 	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN_ARM64)/ 2>/dev/null || true
@@ -119,15 +132,12 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-macos: $(SRC) $(CJSON_SRC) | bin
-	@if ! pkg-config --exists raylib 2>/dev/null; then echo "Error: raylib not found. Install with: brew install raylib"; exit 1; fi
+bin/TLEscope-macos: raylib $(SRC) $(CJSON_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(OBJ_WIN) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
-	cp $(MINGW_PREFIX)/bin/libraylib.dll bin/ 2>/dev/null || true
-	cp $(MINGW_PREFIX)/bin/glfw3.dll bin/ 2>/dev/null || true
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-arm64.exe: $(OBJ_WIN) | bin
@@ -210,9 +220,3 @@ uninstall:
 	rm -f $(DESTDIR)$(LINK_DIR)/TLEscope
 	rm -rf $(DESTDIR)$(INSTALL_DIR)
 	@echo "Uninstall complete."
-
-test: tests/test_astro
-	./tests/test_astro
-
-tests/test_astro: tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp
-	$(CC_LINUX) $(CXXFLAGS) $(RAYLIB_CFLAGS) -DTLESCOPE_VERSION=\"test\" tests/test_astro.cpp src/astro.cpp src/config.cpp src/storage.cpp $(RAYLIB_LIBS) -lm -o tests/test_astro
