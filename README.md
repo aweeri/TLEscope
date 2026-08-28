@@ -135,7 +135,6 @@ make windows-arm64
 | `make win-installer` | Build Windows executable + NSIS installer |
 | `make install` | System-wide install to `/opt/TLEscope` |
 | `make uninstall` | Remove system-wide installation |
-| `make test` | Build and run unit tests |
 | `make clean` | Remove build artifacts |
 
 ### **System-wide Installation**
