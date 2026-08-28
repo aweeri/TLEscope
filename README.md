@@ -8,9 +8,6 @@
 
 TLEscope is a satellite visualization and tracking tool designed to transform orbital data (such as the deprecated Two-Line Element sets or more modern CCSDS Orbit Mean-Elements Messages) into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
 
-<img width="2381" height="1235" alt="image" src="https://github.com/user-attachments/assets/a410cb2c-28ef-4e7f-86b5-f8a68ccac478" />
-
-
 ### Not interested in the market pitch? [__Click Here__](#download-from-github) to skip directly to downloads.
 
 ### **Features**
@@ -20,8 +17,6 @@ TLEscope is a satellite visualization and tracking tool designed to transform or
 - **Accurate Terminator Line Simulation**: Easily preview sunlight conditions, in 2D and 3D, with realistic atmospheric scattering and sunset coloring.
 
 - **Coverage Analysis**: Real-time rendering of Line-of-Sight (LOS) coverage areas and comprehensive orbital characteristics.
-<img width="45%" alt="image" src="https://github.com/user-attachments/assets/5cdf9629-5ae7-415e-8fa7-5ec3a2c953ef" />
-<img width="45%" alt="image" src="https://github.com/user-attachments/assets/5af3467e-abc9-4e57-910f-4bc179fb2808" />
 
 - **Multi-Format Orbital Data**: Load and parse orbital data in multiple formats:
   - Legacy TLE / 3LE
@@ -29,41 +24,18 @@ TLEscope is a satellite visualization and tracking tool designed to transform or
   - CCSDS OMM CSV
   - CCSDS OMM XML
   - CCSDS OMM KVN (Key-Value Notation)
-<img width="963" height="608" alt="image" src="https://github.com/user-attachments/assets/029451e5-0567-4af0-9c91-04d63636e131" />
 
 - **Online Data Fetching**: Fetch orbital data directly from:
   - [CelesTrak](https://celestrak.org/) — built-in source groups (stations, visual, weather, etc.)
-  - [Retlector](https://github.com/MrTalon63/retlector) — CelesTrak mirror for frequent queries
+  - [ReTLEctor](https://github.com/MrTalon63/retlector) — CelesTrak mirror for frequent queries
   - Custom data sources with configurable URLs and preferred formats
 
-- **Intelligent Caching**: Response cache with 120-minute TTL (per CelesTrak guidelines), persisted to disk to minimize redundant network requests.
-
 - **Dear ImGui Interface**: Modern, dockable-window UI built with [Dear ImGui](https://github.com/ocornut/imgui) via [rlImGui](https://github.com/raylib-extras/rlImGui), including:
-  - Satellite Manager — search, filter, and select satellites
-  - TLE Manager — manually enter or paste orbital data
-  - Pass Prediction — AOS/LOS times with elevation profiles
-  - Polar Plot — azimuth/elevation sky track
-  - Doppler Shift Calculator — frequency shift predictions
-  - Antenna Rotator Control — GS-232, EasyComm, and custom protocols
-  - Radio Telescope / Spectrum Analyzer Scope View
-  - Time Controls — real-time, time-warp, and auto-warp to events
-  - Settings Panel — full application configuration
 
 - **Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. Settings are persisted to [`settings.json`](settings.json).
 
 - **For nerds, By nerds**:
 TLEscope comes equipped with tools designed for RF engineers, satellite operators, and people who *just* want to know when to expect the next sunlit ISS pass.
-<img width="769" height="581" alt="image" src="https://github.com/user-attachments/assets/45495333-5f00-4c6c-af66-9933264e5e80" />
-
-- **Advanced Rendering**:
-  - Atmospheric scattering shader with sunset glow and Fresnel rim lighting
-  - Cloud layer with dynamic sun-shadow projection
-  - Solar eclipse simulation (Moon shadow on Earth)
-  - Earth eclipse on Moon with umbra/penumbra rendering
-  - Specular ocean highlights with fresnel-based glare
-  - Per-satellite sunlit highlighting on orbit paths
-
-- **Minimal Footprint and High Performance**: Developed in C++20 utilizing the raylib framework with Dear ImGui, TLEscope maintains a minimal footprint. The application provides high-performance rendering that is likely more efficient than your standard system file browser, even with hundreds or thousands of satellites on-screen.
 
 - **Native OS Support**: Built for Linux (x86_64 and ARM64), macOS (Apple Silicon and Intel), and Windows (x86_64 and ARM64).
 
@@ -72,27 +44,6 @@ TLEscope comes equipped with tools designed for RF engineers, satellite operator
 Most existing orbital tracking software suffers from dated, unintuitive interfaces. TLEscope bridges this gap by prioritizing both visual clarity and ease of use.
 
 The project is heavily influenced by the Kerbal Space Program map view and Blender-style camera navigation, offering a familiar and fluid control scheme for researchers and enthusiasts alike.
-
-### **Architecture**
-
-TLEscope is organized into modular components:
-
-| Module | Description |
-|--------|-------------|
-| [`src/core/astro.cpp`](src/core/astro.cpp) | Core orbital mechanics — SGP4 propagation, sun/moon position, pass prediction, Doppler calculation |
-| [`src/core/config.cpp`](src/core/config.cpp) | Configuration loading/saving from [`settings.json`](settings.json) |
-| [`src/data/storage.cpp`](src/data/storage.cpp) | Structured JSON-based orbital data persistence |
-| [`src/data/provider.cpp`](src/data/provider.cpp) | Data provider abstraction — CelesTrak, Retlector, custom sources |
-| [`src/data/cache.cpp`](src/data/cache.cpp) | HTTP response cache with disk persistence |
-| [`src/data/omm_parser.cpp`](src/data/omm_parser.cpp) | CCSDS OMM parser (JSON, CSV formats) |
-| [`src/ui/ui.cpp`](src/ui/ui.cpp) | Dear ImGui interface — all windows and dialogs |
-| [`src/io/rotator.cpp`](src/io/rotator.cpp) | Antenna rotator control (TCP/IP, GS-232, EasyComm) |
-| [`src/util/c23_compat.cpp`](src/util/c23_compat.cpp) | C23 compatibility |
-| [`lib/csgp4.h`](lib/csgp4.h) | SGP4 orbital propagator |
-
-### **Roadmap**
-
-You can find the roadmap here: [ROADMAP.md](https://github.com/aweeri/TLEscope/blob/main/ROADMAP.md)
 
 ### **Development & Contributions**
 
@@ -196,13 +147,6 @@ sudo make install          # Installs to /opt/TLEscope
 sudo make uninstall        # Removes the installation
 ```
 
-### **Running Tests**
-
-```sh
-make test
-```
-
-This compiles and runs the unit tests in [`tests/test_astro.cpp`](tests/test_astro.cpp), which validate core orbital calculations (SGP4 propagation, sun/moon position, pass prediction) without any UI dependencies.
 
 ### **Credits**
 
