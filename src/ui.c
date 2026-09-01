@@ -2493,7 +2493,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                         if (delim) *delim = '\0';
 
                         GuiLabel((Rectangle){viewRec.x + 10 * cfg->ui_scale + tle_mgr_scroll.x, current_y, viewRec.width - 85 * cfg->ui_scale, 24 * cfg->ui_scale}, display_name);
-                        
+                        GuiSetTooltip("Copy TLE to clipboard");
+
                         if (GuiButton((Rectangle){viewRec.x + viewRec.width - 70 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "C"))
                         {
                             char copy_buf[512];
@@ -2503,6 +2504,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
                             }
                             SetClipboardText(copy_buf);
                         }
+                        GuiSetTooltip("Remove TLE");
 
                         if (GuiButton((Rectangle){viewRec.x + viewRec.width - 35 * cfg->ui_scale + tle_mgr_scroll.x, current_y, 30 * cfg->ui_scale, 24 * cfg->ui_scale}, "X"))
                         {
