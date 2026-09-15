@@ -1977,7 +1977,20 @@ int main(void)
                 float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                 Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
                 Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
+
+                /* draw on top of the clouds / scattering / ground coverage
+                 * layers: flush the pending batch, then disable depth test so
+                 * those earlier-drawn shells do not occlude the line between
+                 * home and the satellite (the batch must be flushed while the
+                 * state is changed, otherwise the line is drawn later with
+                 * depth testing still enabled) */
+                rlDrawRenderBatchActive();
+                rlDisableDepthTest();
+                rlDisableDepthMask();
                 DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(g_theme.ui.ui_accent, 0.6f));
+                rlDrawRenderBatchActive();
+                rlEnableDepthTest();
+                rlEnableDepthMask();
             }
 
             if (show_scope)
@@ -2017,14 +2030,22 @@ int main(void)
 
                 Color lineCol = ApplyAlpha(g_theme.ui.ui_accent, 0.4f);
 
+                /* same overlay treatment as the slant range line: keep the
+                 * cone visible through clouds / scattering / footprint */
+                rlDrawRenderBatchActive();
+                rlDisableDepthTest();
+                rlDisableDepthMask();
                 for (int i = 0; i < 4; i++) {
                     /* calculate 4 corners at 45, 135, 225, 315 degrees */
-                    float angle = (i * PI / 2.0f) + (PI / 4.0f); 
-                    Vector3 pt = Vector3Add(center_end, 
+                    float angle = (i * PI / 2.0f) + (PI / 4.0f);
+                    Vector3 pt = Vector3Add(center_end,
                                     Vector3Add(Vector3Scale(perp1, cosf(angle) * cone_radius),
                                                Vector3Scale(perp2, sinf(angle) * cone_radius)));
                     DrawLine3D(h_pos3d, pt, lineCol);
                 }
+                rlDrawRenderBatchActive();
+                rlEnableDepthTest();
+                rlEnableDepthMask();
             }
 
             /* tool scene hooks (3D overlays) */
