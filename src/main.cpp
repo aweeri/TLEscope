@@ -1555,6 +1555,7 @@ int main(void)
 
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
         float m_text_2d = 16.0f * cfg.ui_scale / Camera2DParams.zoom;
+        float m_spacing_2d = cfg.ui_scale / Camera2DParams.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
 
         /* 2d projection rendering */
@@ -1743,8 +1744,8 @@ int main(void)
                                     char peri_label[32], apo_label[32];
                                     TextCopy(peri_label, TextFormat("P %.0f km", calc_perigee_km(&satellites[i])));
                                     TextCopy(apo_label, TextFormat("A %.0f km", calc_apogee_km(&satellites[i])));
-                                    DrawUIText(customFont, peri_label, peri2d.x + x_off + (mark_size_2d / 2.f) + 4.f, peri2d.y - (mark_size_2d / 2.f), m_text_2d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
-                                    DrawUIText(customFont, apo_label, apo2d.x + x_off + (mark_size_2d / 2.f) + 4.f, apo2d.y - (mark_size_2d / 2.f), m_text_2d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
+                                    DrawTextEx(customFont, peri_label, (Vector2){peri2d.x + x_off + (mark_size_2d / 2.f) + 4.f / Camera2DParams.zoom, peri2d.y - (mark_size_2d / 2.f)}, m_text_2d, m_spacing_2d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
+                                    DrawTextEx(customFont, apo_label, (Vector2){apo2d.x + x_off + (mark_size_2d / 2.f) + 4.f / Camera2DParams.zoom, apo2d.y - (mark_size_2d / 2.f)}, m_text_2d, m_spacing_2d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
                                 }
                             }
                         }
@@ -1763,7 +1764,7 @@ int main(void)
 
                             if (is_hl && Camera2DParams.zoom > 0.1f)
                             {
-                                DrawUIText(customFont, satellites[i].name, sat_mx + (offset_i * map_w) + (m_size_2d / 2.f) + 4.f, sat_my - (m_size_2d / 2.f), m_text_2d, sCol);
+                                DrawTextEx(customFont, satellites[i].name, (Vector2){sat_mx + (offset_i * map_w) + (m_size_2d / 2.f) + 4.f / Camera2DParams.zoom, sat_my - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, sCol);
                             }
                         }
                     }
@@ -1784,7 +1785,7 @@ int main(void)
 
                         if (Camera2DParams.zoom > 0.1f)
                         {
-                            DrawUIText(customFont, home->name, hx + x_off + (m_size_2d / 2.f) + 4.f, hy - (m_size_2d / 2.f), m_text_2d, WHITE);
+                            DrawTextEx(customFont, home->name, (Vector2){hx + x_off + (m_size_2d / 2.f) + 4.0f / Camera2DParams.zoom, hy - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, WHITE);
                         }
                     }
                 }
@@ -1814,13 +1815,13 @@ int main(void)
                             Vector2 mid = {(p1.x + p2.x) / 2.0f, (p1.y + p2.y) / 2.0f};
                             char rng_str[32];
                             TextCopy(rng_str, TextFormat("%.1f km", range));
-                            Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_2d, 1.0f);
+                            Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_2d, m_spacing_2d);
 
                             DrawRectangle(
                                 mid.x - tSize.x / 2.0f - 2.0f / Camera2DParams.zoom, mid.y - tSize.y / 2.0f - 2.0f / Camera2DParams.zoom, tSize.x + 4.0f / Camera2DParams.zoom,
                                 tSize.y + 4.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_bg, 0.7f)
                             );
-                            DrawUIText(customFont, rng_str, mid.x - tSize.x / 2.0f, mid.y - tSize.y / 2.0f, m_text_2d, g_theme.ui.ui_accent);
+                            DrawTextEx(customFont, rng_str, (Vector2){mid.x - tSize.x / 2.0f, mid.y - tSize.y / 2.0f}, m_text_2d, m_spacing_2d, g_theme.ui.ui_accent);
                         }
                     }
                 }
@@ -1843,7 +1844,7 @@ int main(void)
 
                             if (Camera2DParams.zoom > 0.1f)
                             {
-                                DrawUIText(customFont, locations[i].name, mx + x_off + (m_size_2d / 2.f) + 4.f, my - (m_size_2d / 2.f), m_text_2d, WHITE);
+                                DrawTextEx(customFont, locations[i].name, (Vector2){mx + x_off + (m_size_2d / 2.f) + 4.f / Camera2DParams.zoom, my - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, WHITE);
                             }
                         }
                     }
