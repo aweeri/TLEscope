@@ -141,7 +141,7 @@ bin/TLEscope: $(OBJ) | bin
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-macos: raylib $(SRC) $(CJSON_SRC) | bin
-	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
+	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $(filter-out raylib,$^) $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
