@@ -24,6 +24,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
     static char search_buf[64] = "";
+    static bool active_only = false;
     bool search_active = (search_buf[0] != '\0');
 
     /* empty state - point the user at the data puller */
@@ -54,7 +55,8 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     {
         for (int i = 0; i < sat_count; i++)
         {
-            if (!search_active || str_contains_ic(satellites[i].name, search_buf))
+            if ((!search_active || str_contains_ic(satellites[i].name, search_buf)) &&
+                (!active_only || satellites[i].is_active))
                 satellites[i].is_active = true;
         }
         SaveSatSelection(cfg);
@@ -68,7 +70,8 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     {
         for (int i = 0; i < sat_count; i++)
         {
-            if (!search_active || str_contains_ic(satellites[i].name, search_buf))
+            if ((!search_active || str_contains_ic(satellites[i].name, search_buf)) &&
+                (!active_only || satellites[i].is_active))
                 satellites[i].is_active = false;
         }
         SaveSatSelection(cfg);
@@ -76,14 +79,30 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Disable all visible satellites");
 
+    int active_count = 0;
+    for (int i = 0; i < sat_count; i++)
+    {
+        if (satellites[i].is_active)
+            active_count++;
+    }
+
+    ImGui::Checkbox("Active only", &active_only);
+    ImGui::SameLine();
+    ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+                       "%d active", active_count);
+
     /* show count of displayed satellites */
     int displayed = 0;
     for (int i = 0; i < sat_count; i++)
     {
+        if (satellites[i].name[0] == '\0' || satellites[i].norad_id[0] == '\0')
+            continue;
+        if (active_only && !satellites[i].is_active)
+            continue;
         if (!search_active || str_contains_ic(satellites[i].name, search_buf))
             displayed++;
     }
-    if (search_active)
+    if (search_active || active_only)
     {
         ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
                            "%d / %d satellites", displayed, sat_count);
@@ -105,6 +124,9 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     {
         /* skip empty/invalid entries (name must be non-empty and have a valid NORAD ID) */
         if (satellites[i].name[0] == '\0' || satellites[i].norad_id[0] == '\0')
+            continue;
+
+        if (active_only && !satellites[i].is_active)
             continue;
 
         /* case-insensitive search matching */
