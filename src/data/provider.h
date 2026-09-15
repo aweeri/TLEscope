@@ -10,6 +10,7 @@
  */
 
 #include "core/types.h"
+#include "data/curl_diagnostics.h"
 #include <time.h>
 #include <stdbool.h>
 
