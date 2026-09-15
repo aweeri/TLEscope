@@ -7,6 +7,7 @@
 #include "core/theme.h"
 #include "core/config.h"
 #include "ui/labels.h"
+#include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
 
 #include <raylib.h>
@@ -48,6 +49,9 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     DrawLayerCheckbox("Ground Coverage", &cfg->show_ground_coverage, ICON_FA_ROUTE, "Show the line-of-sight ground coverage footprint");
     DrawLayerCheckbox("Apsides", &cfg->show_apsides, ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels");
 
+    ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "Press H for clean view");
+    ImGui::Separator();
+
     /* Labels layer: master toggle + Sel/All scope dropdown (see labels.h / labels.cpp) */
     bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
     bool labels_prev = labels_enabled;
@@ -67,4 +71,39 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         ImGui::SetTooltip("Sel: only the selected satellite's label; All: labels for all active satellites");
 
     ImGui::PopTextWrapPos();
+}
+
+void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
+{
+    (void)sctx;
+    (void)cfg;
+
+    static bool clean_view = false;
+    static bool saved_left = true;
+    static bool saved_right = true;
+    static bool saved_bottom = true;
+
+    if (!ImGui::GetCurrentContext())
+        return;
+
+    if (ImGui::GetIO().WantTextInput || !IsKeyPressed(KEY_H))
+        return;
+
+    clean_view = !clean_view;
+    if (clean_view)
+    {
+        saved_left = LayoutSidebarVisible(SIDEBAR_LEFT);
+        saved_right = LayoutSidebarVisible(SIDEBAR_RIGHT);
+        saved_bottom = LayoutBottomBarVisible();
+
+        LayoutSetSidebarVisible(SIDEBAR_LEFT, false);
+        LayoutSetSidebarVisible(SIDEBAR_RIGHT, false);
+        LayoutSetBottomBarVisible(false);
+    }
+    else
+    {
+        LayoutSetSidebarVisible(SIDEBAR_LEFT, saved_left);
+        LayoutSetSidebarVisible(SIDEBAR_RIGHT, saved_right);
+        LayoutSetBottomBarVisible(saved_bottom);
+    }
 }
