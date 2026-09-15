@@ -31,6 +31,7 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
 
 /* scene hooks (draw into the 3D globe / 2D map, see tools_scene.h) */
+void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg);
 void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg);
 
 #endif /* TOOLS_H */
