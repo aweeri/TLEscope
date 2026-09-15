@@ -1358,9 +1358,21 @@ int main(void)
                 else
                 {
                     // normal satellite selection
-                    selected_sat = hovered_sat;
                     double current_time = GetTime();
-                    if (current_time - last_left_click_time < 0.3)
+                    bool is_double_click = (current_time - last_left_click_time < 0.3);
+
+                    if (hovered_sat != NULL)
+                    {
+                        // clicking a satellite selects it
+                        selected_sat = hovered_sat;
+                    }
+                    else if (is_double_click)
+                    {
+                        // double-clicking empty space deselects the satellite
+                        selected_sat = NULL;
+                    }
+
+                    if (is_double_click)
                     {
                         // double-click lock logic (unchanged)
                         if (is_2d_view)
