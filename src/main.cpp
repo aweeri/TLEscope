@@ -23,248 +23,7 @@
 #include "data/async_fetch.h"
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
-
-/**
- * @brief shader for day/night transition
- *
- * Uses the dot product between surface normal and sun direction.
- * For solar eclipses it casts a ray from the fragment towards the sun
- * and calculates its minimum distance to the Moon's center in local space.
- */
-const char *fs3D = "#version 330\n"
-                   "in vec2 fragTexCoord;\n"
-                   "in vec4 fragColor;\n"
-                   "out vec4 finalColor;\n"
-                   "uniform sampler2D texture0;\n"
-                   "uniform sampler2D texture1;\n"
-                   "uniform sampler2D texture2;\n"
-                   "uniform vec3 sunDir;\n"
-                   "uniform vec3 moonPos;\n"
-                   "uniform float moonRadius;\n"
-                   "uniform float earthRadius;\n"
-                   "uniform vec3 viewPos;\n"
-                   "uniform float cloudUVOffset;\n"
-                   "uniform int advancedScatter;\n"
-                   "uniform int showClouds;\n"
-                   "void main() {\n"
-                   "    vec4 day = texture(texture0, fragTexCoord);\n"
-                   "    vec4 night = texture(texture1, fragTexCoord);\n"
-                   "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
-                   "    float phi = fragTexCoord.y * 3.14159265359;\n"
-                   "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
-                   "    float intensity = dot(normal, sunDir);\n"
-                   "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
-                   "    vec3 fragPos = normal * earthRadius;\n"
-                   "    vec3 scatteredDay = day.rgb;\n"
-                   "    \n"
-                   "    if (advancedScatter == 1) {\n"
-                   "        vec3 viewDir = normalize(viewPos - fragPos);\n"
-                   "        vec3 halfDir = normalize(sunDir + viewDir);\n"
-                   "        float NdotV = max(dot(normal, viewDir), 0.0);\n"
-                   "        float fresnel = pow(1.0 - NdotV, 4.0);\n"
-                   "        float specPower = mix(48.0, 12.0, fresnel);\n"
-                   "        float spec = pow(max(dot(normal, halfDir), 0.0), specPower);\n"
-                   "        float water = clamp((day.b - day.r) * 2.5, 0.0, 1.0);\n"
-                   "        float glareBoost = mix(0.6, 4.0, fresnel);\n"
-                   "        vec3 specular = vec3(1.0, 0.9, 0.8) * spec * water * glareBoost * max(intensity, 0.0);\n"
-                   "        \n"
-                   "        float cShadow = 1.0;\n"
-                   "        if (showClouds == 1) {\n"
-                   "            float cloudR = earthRadius * (1.0 + 25.0 / 6371.0);\n"
-                   "            float b = 2.0 * dot(fragPos, sunDir);\n"
-                   "            float c = earthRadius * earthRadius - cloudR * cloudR;\n"
-                   "            float t = (-b + sqrt(b * b - 4.0 * c)) * 0.5;\n"
-                   "            float cloudH = max(cloudR - earthRadius, 1e-5);\n"
-                   "            float minSunSin = 0.14;\n"
-                   "            float maxShadowLen = cloudH / minSunSin;\n"
-                   "            t = min(t, maxShadowLen);\n"
-                   "            vec3 cn = normalize(fragPos + t * sunDir);\n"
-                   "            vec2 cUV = vec2(atan(-cn.z, cn.x) / 6.28318530718 + 0.5, cn.y);\n"
-                   "            cUV.y = acos(clamp(cUV.y, -1.0, 1.0)) / 3.14159265359;\n"
-                   "            cUV.x = fract(cUV.x + cloudUVOffset);\n"
-                   "            float cAlpha = texture(texture2, cUV).a;\n"
-                   "            float termFade = smoothstep(0.00, 0.25, intensity);\n"
-                   "            cShadow = mix(1.0, 0.1, cAlpha * termFade);\n"
-                   "        }\n"
-                   "        \n"
-                   "        scatteredDay = (scatteredDay * cShadow) + specular;\n"
-                   "    }\n"
-                   "    \n"
-                   "    vec3 toMoon = moonPos - fragPos;\n"
-                   "    float distSunward = dot(toMoon, sunDir);\n"
-                   "    float shadow = 1.0;\n"
-                   "    if (distSunward > 0.0) {\n"
-                   "        vec3 proj = fragPos + sunDir * distSunward;\n"
-                   "        float distSq = dot(proj - moonPos, proj - moonPos);\n"
-                   "        float rSq = moonRadius * moonRadius;\n"
-                   "        if (distSq < rSq * 4.0) {\n"
-                       "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
-                   "        }\n"
-                   "    }\n"
-                   "    vec4 dayColor = mix(night, vec4(scatteredDay, day.a), shadow);\n"
-                   "    finalColor = mix(night, dayColor, blend) * fragColor;\n"
-                   "}\n";
-
-/// @brief 
-const char *fs2D = "#version 330\n"
-                   "in vec2 fragTexCoord;\n"
-                   "in vec4 fragColor;\n"
-                   "out vec4 finalColor;\n"
-                   "uniform sampler2D texture0;\n"
-                   "uniform sampler2D texture1;\n"
-                   "uniform vec3 sunDir;\n"
-                   "uniform vec3 moonPos;\n"
-                   "uniform float moonRadius;\n"
-                   "uniform float earthRadius;\n"
-                   "void main() {\n"
-                   "    vec4 day = texture(texture0, fragTexCoord);\n"
-                   "    vec4 night = texture(texture1, fragTexCoord);\n"
-                   "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
-                   "    float phi = fragTexCoord.y * 3.14159265359;\n"
-                   "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
-                   "    float intensity = dot(normal, sunDir);\n"
-                   "    float blend = smoothstep(-0.15, 0.15, intensity);\n"
-                   "    vec3 fragPos = normal * earthRadius;\n"
-                   "    vec3 toMoon = moonPos - fragPos;\n"
-                   "    float distSunward = dot(toMoon, sunDir);\n"
-                   "    float shadow = 1.0;\n"
-                   "    if (distSunward > 0.0) {\n"
-                   "        vec3 proj = fragPos + sunDir * distSunward;\n"
-                   "        float distSq = dot(proj - moonPos, proj - moonPos);\n"
-                   "        float rSq = moonRadius * moonRadius;\n"
-                   "        if (distSq < rSq * 4.0) {\n"
-                   "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
-                   "        }\n"
-                   "    }\n"
-                   "    vec4 shadowedDay = vec4(day.rgb * shadow, day.a);\n"
-                   "    finalColor = mix(night, shadowedDay, blend) * fragColor;\n"
-                   "}\n";
-
-/** cloud shader handles transparency based on sun position */
-const char *fsCloud3D = "#version 330\n"
-                        "in vec2 fragTexCoord;\n"
-                        "in vec4 fragColor;\n"
-                        "out vec4 finalColor;\n"
-                        "uniform sampler2D texture0;\n"
-                        "uniform vec3 sunDir;\n"
-                        "uniform vec3 moonPos;\n"
-                        "uniform float moonRadius;\n"
-                        "uniform float earthRadius;\n"
-                        "void main() {\n"
-                        "    vec4 texel = texture(texture0, fragTexCoord);\n"
-                        "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
-                        "    float phi = fragTexCoord.y * 3.14159265359;\n"
-                        "    vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
-                        "    float intensity = dot(normal, sunDir);\n"
-                        "    float alpha = smoothstep(-0.15, 0.05, intensity);\n"
-                        "    float scatterMult = min(smoothstep(-0.3, 0.15, intensity) * smoothstep(0.15, -0.15, intensity) * 4.0, 1.0);\n"
-                        "    vec3 sunsetDeep = vec3(0.75, 0.08, 0.10);\n"
-                        "    vec3 sunsetWarm = vec3(1.0, 0.82, 0.75);\n"
-                        "    float gradPos = smoothstep(-0.1, 0.0, intensity);\n"
-                        "    vec3 sunsetColor = mix(sunsetDeep, sunsetWarm, gradPos);\n"
-                        "    vec3 cloudColor = mix(texel.rgb, sunsetColor, scatterMult * 0.7);\n"
-                        "    vec3 fragPos = normal * earthRadius;\n"
-                        "    vec3 toMoon = moonPos - fragPos;\n"
-                        "    float distSunward = dot(toMoon, sunDir);\n"
-                        "    float shadow = 1.0;\n"
-                        "    if (distSunward > 0.0) {\n"
-                        "        vec3 proj = fragPos + sunDir * distSunward;\n"
-                        "        float distSq = dot(proj - moonPos, proj - moonPos);\n"
-                        "        float rSq = moonRadius * moonRadius;\n"
-                        "        if (distSq < rSq * 4.0) {\n"
-                        "            shadow = mix(0.03, 1.0, smoothstep(rSq * 0.1, rSq * 4.0, distSq));\n"
-                        "        }\n"
-                        "    }\n"
-                        "    finalColor = vec4(cloudColor * shadow, texel.a * alpha) * fragColor;\n"
-                        "}\n";
-
-/** shader to handle moon self-shadowing and earth's eclipse projection */
-const char *fsMoon3D = "#version 330\n"
-                       "in vec2 fragTexCoord;\n"
-                       "in vec4 fragColor;\n"
-                       "out vec4 finalColor;\n"
-                       "uniform sampler2D texture0;\n"
-                       "uniform vec3 sunDir;\n"
-                       "uniform vec3 moonPos;\n"
-                       "uniform mat4 moonRot;\n"
-                       "uniform float moonRadius;\n"
-                       "uniform float earthRadiusSq;\n"
-                       "void main() {\n"
-                       "    vec4 texel = texture(texture0, fragTexCoord);\n"
-                       "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
-                       "    float phi = fragTexCoord.y * 3.14159265359;\n"
-                       "    vec3 localNormal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));\n"
-                       "    vec3 worldNormal = normalize(mat3(moonRot) * localNormal);\n"
-                       "    vec3 worldPos = moonPos + worldNormal * moonRadius;\n"
-                       "    float NdotL = dot(worldNormal, sunDir);\n"
-                       "    float diffuse = smoothstep(-0.05, 0.05, NdotL);\n"
-                       "    float b = dot(worldPos, sunDir);\n"
-                       "    float c = dot(worldPos, worldPos) - earthRadiusSq;\n"
-                       "    float discriminant = b * b - c;\n"
-                       "    float shadow = 1.0;\n"
-                       "    if (discriminant > 0.0 && b < 0.0) {\n"
-                       "        float distSq = dot(worldPos, worldPos) - b * b;\n"
-                       "        float umbraSq = earthRadiusSq * 0.6;\n"
-                       "        float penumbraSq = earthRadiusSq * 1.2;\n"
-                       "        if (distSq < umbraSq) shadow = 0.05;\n"
-                       "        else if (distSq < penumbraSq) shadow = mix(0.05, 1.0, smoothstep(umbraSq, penumbraSq, distSq));\n"
-                       "    }\n"
-                       "    vec3 umbraColor = vec3(0.5, 0.1, 0.05);\n"
-                       "    vec3 shadowColor = mix(umbraColor * texel.rgb, texel.rgb, shadow);\n"
-                       "    float ambient = 0.01;\n"
-                       "    float light = max(ambient, diffuse);\n"
-                       "    finalColor = vec4(shadowColor * light, texel.a) * fragColor;\n"
-                       "}\n";
-
-/** atmospheric scattering glow shader */
-const char *fsAtmosphere3D = "#version 330\n"
-                       "in vec2 fragTexCoord;\n"
-                       "in vec4 fragColor;\n"
-                       "out vec4 finalColor;\n"
-                       "uniform vec3 sunDir;\n"
-                       "uniform vec3 viewPos;\n"
-                       "uniform float atmRadius;\n"
-                       "void main() {\n"
-                       "    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;\n"
-                       "    float phi = fragTexCoord.y * 3.14159265359;\n"
-                       "    vec3 normal = normalize(vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi)));\n"
-                       "    vec3 worldPos = normal * atmRadius;\n"
-                       "    vec3 viewDir = normalize(viewPos - worldPos);\n"
-                       "    \n"
-                       "    float NdotV = max(dot(normal, viewDir), 0.001);\n"
-                       "    float NdotL = dot(normal, sunDir);\n"
-                       "    \n"
-                       "    vec3 dayColor = vec3(0.25, 0.58, 1.0);\n"
-                       "    vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // realistic gold-orange\n"
-                       "    \n"
-                       "    // fresnel for the soft edge glow\n"
-                       "    float fresnel = pow(1.0 - NdotV, 2.5);\n"
-                       "    \n"
-                       "    // sun brightness: 15% on the night side, 100% on the day side\n"
-                       "    float sunBlend = smoothstep(-0.3, 0.3, NdotL);\n"
-                       "    float brightness = mix(0.05, 1.0, sunBlend);\n"
-                       "    \n"
-                       "    // atmosphere base color with a sunset shift near the terminator\n"
-                       "    float sunsetBlend = smoothstep(0.35, -0.15, NdotL);\n"
-                       "    vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);\n"
-                       "    \n"
-                       "    // brighten the atmosphere where it is thickest\n"
-                       "    atmosColor = mix(atmosColor, vec3(0.7, 0.85, 1.0), pow(fresnel, 1.5) * 0.7);\n"
-                       "    \n"
-                       "    // forward-scatter glow: brighter when looking toward the sun through the limb\n"
-                       "    float VdotL = dot(viewDir, sunDir);\n"
-                       "    float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.15;\n"
-                       "    atmosColor += vec3(1.0, 0.6, 0.3) * forwardGlow * sunBlend;\n"
-                       "    \n"
-                       "    // smooth fadeout into the vacuum at the very edge\n"
-                       "    float vacuumFade = smoothstep(0.0, 0.35, NdotV);\n"
-                       "    \n"
-                       "    // combine into a smooth transparent atmospheric ring\n"
-                       "    vec3 color = atmosColor * brightness;\n"
-                       "    float alpha = fresnel * vacuumFade * brightness * 2.0;\n"
-                       "    \n"
-                       "    finalColor = vec4(color, clamp(alpha, 0.0, 1.0)) * fragColor;\n"
-                       "}\n";
+#include "render/shaders.h"
 
 /* application state and resources */
 static AppConfig cfg = []() -> AppConfig {
@@ -626,7 +385,7 @@ int main(void)
 
     DrawLoadingScreen(0.4f, "Compiling Shaders...", logoTex);
     LOG_INFO("Compiling shaders...");
-    Shader shader3D = LoadShaderFromMemory(NULL, fs3D);
+    Shader shader3D = LoadShaderFromMemory(NULL, Shaders::fs3D);
     int sunDirLoc3D = GetShaderLocation(shader3D, "sunDir");
     shader3D.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader3D, "texture1");
     shader3D.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(shader3D, "texture2");
@@ -635,21 +394,21 @@ int main(void)
     int advScatLoc3D = GetShaderLocation(shader3D, "advancedScatter");
     int showCloudsLoc3D = GetShaderLocation(shader3D, "showClouds");
 
-    Shader shader2D = LoadShaderFromMemory(NULL, fs2D);
+    Shader shader2D = LoadShaderFromMemory(NULL, Shaders::fs2D);
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
     int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
 
-    Shader shaderCloud = LoadShaderFromMemory(NULL, fsCloud3D);
+    Shader shaderCloud = LoadShaderFromMemory(NULL, Shaders::fsCloud3D);
     int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
 
-    Shader shaderMoon = LoadShaderFromMemory(NULL, fsMoon3D);
+    Shader shaderMoon = LoadShaderFromMemory(NULL, Shaders::fsMoon3D);
     int sunDirLocMoon = GetShaderLocation(shaderMoon, "sunDir");
     int moonPosLocMoon = GetShaderLocation(shaderMoon, "moonPos");
     int moonRotLocMoon = GetShaderLocation(shaderMoon, "moonRot");
     int moonRadiusLocMoon = GetShaderLocation(shaderMoon, "moonRadius");
     int earthRadiusSqLocMoon = GetShaderLocation(shaderMoon, "earthRadiusSq");
 
-    Shader shaderAtmosphere = LoadShaderFromMemory(NULL, fsAtmosphere3D);
+    Shader shaderAtmosphere = LoadShaderFromMemory(NULL, Shaders::fsAtmosphere3D);
     int sunDirLocAtmosphere = GetShaderLocation(shaderAtmosphere, "sunDir");
     int viewPosLocAtmosphere = GetShaderLocation(shaderAtmosphere, "viewPos");
 
