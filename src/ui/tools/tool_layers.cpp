@@ -9,6 +9,7 @@
 #include "ui/labels.h"
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
+#include "map_detail_data.h"
 
 #include <raylib.h>
 #include <stddef.h> /* offsetof */
@@ -60,7 +61,7 @@ static const LayerDef s_layers[] = {
     { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map (not implemented yet)", LAYER_2D, -1, "layers.coast_lines", true },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show latitude/longitude grid on the map (not implemented yet)", LAYER_2D, -1, "layers.latlon_grid", true },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -156,10 +157,42 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     ImGui::PopTextWrapPos();
 }
 
+static Vector2 MapDetailToWorld(MapDetailPoint point, float map_w, float map_h)
+{
+    return {
+        ((float)point.lon100 / 100.0f / 360.0f) * map_w,
+        -((float)point.lat100 / 100.0f / 180.0f) * map_h
+    };
+}
+
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
-    (void)sctx;
-    (void)cfg;
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.coast_lines", false))
+    {
+        float zoom = sctx->camera2d->zoom;
+        if (zoom < 0.10f)
+            zoom = 0.10f;
+
+        Color color = g_theme.ui.text_main;
+        color.a = (unsigned char)(color.a * 0.58f);
+        const float width = 1.15f / zoom;
+
+        for (int i = 0; i < MAP_COAST_LINE_COUNT; ++i)
+        {
+            const int start = MAP_COAST_LINES[i].start;
+            const int count = MAP_COAST_LINES[i].count;
+            for (int j = 1; j < count; ++j)
+            {
+                const Vector2 a = MapDetailToWorld(MAP_COAST_POINTS[start + j - 1], sctx->map_w, sctx->map_h);
+                const Vector2 b = MapDetailToWorld(MAP_COAST_POINTS[start + j], sctx->map_w, sctx->map_h);
+                float dx = a.x - b.x;
+                if (dx < 0.0f)
+                    dx = -dx;
+                if (dx <= sctx->map_w * 0.45f)
+                    DrawLineEx(a, b, width, color);
+            }
+        }
+    }
 
     static bool clean_view = false;
     static bool saved_left = true;
