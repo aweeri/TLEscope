@@ -503,7 +503,7 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
     }
     else
     {
-        Ray ray = GetMouseRay(mouse, cam3d);
+        Ray ray = GetScreenToWorldRay(mouse, cam3d);
         float earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
         RayCollision col = GetRayCollisionSphere(ray, (Vector3){0, 0, 0}, earthRadius);
         if (col.hit)
@@ -1281,7 +1281,7 @@ int main(void)
 
             if (!over_ui)
             {
-                Ray mouseRay = GetMouseRay(GetMousePosition(), Camera3DParams);
+                Ray mouseRay = GetScreenToWorldRay(GetMousePosition(), Camera3DParams);
                 float closest_dist = 9999.0f;
 
                 for (int i = 0; i < sat_count; i++)
@@ -1383,7 +1383,7 @@ int main(void)
                         }
                         else
                         {
-                            Ray mouseRay = GetMouseRay(GetMousePosition(), Camera3DParams);
+                            Ray mouseRay = GetScreenToWorldRay(GetMousePosition(), Camera3DParams);
                             RayCollision earthCol = GetRayCollisionSphere(mouseRay, Vector3Zero(), draw_earth_radius);
                             RayCollision moonCol = GetRayCollisionSphere(mouseRay, draw_moon_pos, draw_moon_radius);
                             if (moonCol.hit && (!earthCol.hit || moonCol.distance < earthCol.distance))
