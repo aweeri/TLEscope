@@ -545,14 +545,11 @@ int main(void)
 #define TLESCOPE_VERSION "vUnknown"
 #endif
 
-    char short_version[64] = {0};
-    strncpy(short_version, TLESCOPE_VERSION, sizeof(short_version) - 1);
-    char *dash = strchr(short_version, '-');
-    if (dash) *dash = '\0';
-    LOG_INFO("TLEscope %s starting", short_version);
+    /* Show the full version string (e.g. "v3.9.2-12-g4f2a1c9-dirty") */
+    LOG_INFO("TLEscope %s starting", TLESCOPE_VERSION);
 
     char window_title[128];
-    snprintf(window_title, sizeof(window_title), "TLEscope %s", short_version);
+    snprintf(window_title, sizeof(window_title), "TLEscope %s", TLESCOPE_VERSION);
     InitWindow(cfg.window_width, cfg.window_height, window_title);
     LOG_INFO("Window created: %dx%d, theme=%s", cfg.window_width, cfg.window_height, cfg.theme);
 

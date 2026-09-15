@@ -1,4 +1,5 @@
-GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "vUnknown")
+GIT_VERSION     := $(shell scripts/version.sh describe 2>/dev/null || echo "vUnknown")
+GIT_VERSION_NUM := $(shell scripts/version.sh num 2>/dev/null || echo "0.0.0.0")
 
 CC_LINUX = g++
 CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/cjson -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
@@ -29,6 +30,13 @@ else
     CC_WIN = x86_64-w64-mingw32-g++
 endif
 
+# Windows resource compiler (for the VERSIONINFO resource embedded in the exe)
+ifeq ($(MSYSTEM),CLANGARM64)
+	RC_WIN ?= llvm-windres
+else
+	RC_WIN ?= windres
+endif
+
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
     CURL_FIX = -lcurl -lngtcp2_crypto_ossl -lngtcp2 -lnghttp3 -lnghttp2 -lssl -lcrypto -lssh2 -lbrotlidec -lbrotlicommon -lz -lpsl -lidn2 -lunistring -liconv -lcrypt32 -lwldap32 -lws2_32 -lnormaliz -lgdi32 -ladvapi32
@@ -51,7 +59,7 @@ CC_MACOS = clang++
 LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp $(wildcard src/ui/tools/tool_*.cpp)
+SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/util/version.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp $(wildcard src/ui/tools/tool_*.cpp)
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 CJSON_SRC    = lib/cjson/cJSON.c
@@ -121,7 +129,7 @@ windows-arm64: raylib bin/TLEscope-arm64.exe
 win-installer: windows
 	@echo "Building Windows installer..."
 	magick logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || convert logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || cp logo.ico $(DIST_WIN)/
-	makensis installer.nsi
+	makensis -DVERSION_STR="$(GIT_VERSION)" -DVERSION_NUM="$(GIT_VERSION_NUM)" installer.nsi
 	@echo "Installer built at dist/TLEscope-Installer.exe"
 
 # yes makefile this data copied juuuuuuuust fine and is safe and sound don't worry about it :3
@@ -135,12 +143,12 @@ bin/TLEscope: $(OBJ) | bin
 bin/TLEscope-macos: raylib $(SRC) $(CJSON_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $^ $(LDFLAGS_MACOS)
 
-bin/TLEscope.exe: $(OBJ_WIN) | bin
+bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-arm64.exe: $(OBJ_WIN) | bin
+bin/TLEscope-arm64.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
@@ -176,6 +184,11 @@ build_win/%.o: lib/rlImGui/%.cpp | build_win
 build_win/%.o: lib/cjson/%.c | build_win
 	@mkdir -p $(@D)
 	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -x c++ -c $< -o $@
+
+build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh scripts/version.sh | build_win
+	@mkdir -p $(@D)
+	@scripts/gen_versioninfo.sh "$(GIT_VERSION_NUM)" "$(GIT_VERSION)" build_win/versioninfo.rc
+	@$(RC_WIN) -O coff -i build_win/versioninfo.rc -o $@
 
 build:
 	mkdir -p build

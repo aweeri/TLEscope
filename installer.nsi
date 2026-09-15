@@ -2,6 +2,22 @@ Name "TLEscope"
 OutFile "dist\TLEscope-Installer.exe"
 InstallDir "$PROGRAMFILES\TLEscope"
 
+# version metadata (injected by the Makefile via -DVERSION_NUM / -DVERSION_STR)
+!ifndef VERSION_NUM
+!define VERSION_NUM "0.0.0.0"
+!endif
+!ifndef VERSION_STR
+!define VERSION_STR "0.0.0.0"
+!endif
+
+VIProductVersion "${VERSION_NUM}"
+VIAddVersionKey "ProductName" "TLEscope"
+VIAddVersionKey "CompanyName" "TLEscope"
+VIAddVersionKey "FileDescription" "TLEscope satellite tracking installer"
+VIAddVersionKey "FileVersion" "${VERSION_NUM}"
+VIAddVersionKey "ProductVersion" "${VERSION_STR}"
+VIAddVersionKey "LegalCopyright" "Copyright (c) TLEscope contributors"
+
 # installer icons
 Icon "dist\TLEscope-Win-Portable\logo.ico"
 UninstallIcon "dist\TLEscope-Win-Portable\logo.ico"
