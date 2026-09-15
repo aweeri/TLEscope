@@ -446,17 +446,9 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::BulletText("Right click: Orbit camera");
         ImGui::Separator();
         ImGui::Text("Keyboard Shortcuts:");
-        ImGui::BulletText("1: Satellite Manager");
-        ImGui::BulletText("2: Data Sources");
-        ImGui::BulletText("4: Scope");
-        ImGui::BulletText("5: Satellite Passes");
-        ImGui::BulletText("6: Polar Plot");
-        ImGui::BulletText("7: Doppler Analysis");
-        ImGui::BulletText("8: Rotator Control");
-        ImGui::BulletText("9: Log");
-        ImGui::BulletText("0: Satellite Info");
         ImGui::BulletText("R: Rotator Control");
         ImGui::BulletText("M: Toggle 2D/3D");
+        ImGui::BulletText("H: Toggle clean view (hide/show panels)");
         ImGui::Separator();
         if (ImGui::Button("GitHub Repository"))
         {

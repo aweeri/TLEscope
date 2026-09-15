@@ -49,9 +49,6 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     DrawLayerCheckbox("Ground Coverage", &cfg->show_ground_coverage, ICON_FA_ROUTE, "Show the line-of-sight ground coverage footprint");
     DrawLayerCheckbox("Apsides", &cfg->show_apsides, ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels");
 
-    ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "Press H for clean view");
-    ImGui::Separator();
-
     /* Labels layer: master toggle + Sel/All scope dropdown (see labels.h / labels.cpp) */
     bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
     bool labels_prev = labels_enabled;
