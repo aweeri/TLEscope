@@ -11,13 +11,69 @@
 #include "ui/tools/tools_settings.h"
 
 #include <raylib.h>
+#include <stddef.h> /* offsetof */
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
 
+/* -- Layer registry -------------------------------------------------------- */
+
+/** which views a layer toggle applies to */
+typedef enum
+{
+    LAYER_UNIVERSAL, /* shown in both 2D map and 3D globe */
+    LAYER_2D,        /* 2D map only */
+    LAYER_3D         /* 3D globe only */
+} LayerScope;
+
+/**
+ * One row in the layers panel.
+ *
+ * The value is backed either by a direct AppConfig bool field
+ * (cfg_offset, via offsetof) or by a key in the generic tool-settings store
+ * (settings_key, via tools_settings.h). cfg_offset == -1 means the row uses
+ * settings_key; exactly one of the two backends applies.
+ *
+ * To add a new layer toggle: append one row to s_layers[] below. If it needs no
+ * AppConfig field, give it a namespaced settings_key (e.g. "mytool.enabled")
+ * and it will persist automatically via tools_settings.h. Set placeholder=true
+ * for toggles that have no rendering effect yet (UI-only, state still saved).
+ */
+typedef struct
+{
+    const char *label;
+    const char *icon;
+    const char *tooltip;
+    LayerScope scope;
+    int cfg_offset;           /* offsetof(AppConfig, field), or -1 */
+    const char *settings_key; /* tool-settings key, or NULL */
+    bool placeholder;         /* true = UI only, no render effect yet */
+} LayerDef;
+
+static const LayerDef s_layers[] = {
+    /* -- Universal (both 2D map and 3D globe) ------------------------------ */
+    { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false },
+    { "Markers",           ICON_FA_MAP_PIN,     "Show ground markers (L)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_markers), NULL, false },
+    { "Highlight Sunlit",   ICON_FA_BOLT,       "Highlight sunlit portions of orbits", LAYER_UNIVERSAL, (int)offsetof(AppConfig, highlight_sunlit), NULL, false },
+    { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false },
+    { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false },
+    { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false },
+
+    /* -- 2D map only ------------------------------------------------------- */
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map (not implemented yet)", LAYER_2D, -1, "layers.coast_lines", true },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show latitude/longitude grid on the map (not implemented yet)", LAYER_2D, -1, "layers.latlon_grid", true },
+
+    /* -- 3D globe only ----------------------------------------------------- */
+    { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false },
+    { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false },
+    { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false },
+};
+
+#define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
+
 void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 {
-    (void)ctx;
+    const bool is_2d = ctx->is_2d_view ? *ctx->is_2d_view : false;
 
     ImGui::PushTextWrapPos(0.0f);
 
@@ -39,15 +95,38 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("%s", tooltip);
     };
 
-    DrawLayerCheckbox("Clouds", &cfg->show_clouds, ICON_FA_CLOUD, "Show cloud layer (C)");
-    DrawLayerCheckbox("Night Lights", &cfg->show_night_lights, ICON_FA_MOON, "Show night-side city lights (N)");
-    DrawLayerCheckbox("Markers", &cfg->show_markers, ICON_FA_MAP_PIN, "Show ground markers (L)");
-    DrawLayerCheckbox("Scattering", &cfg->show_scattering, ICON_FA_SUN, "Atmospheric scattering effect");
-    DrawLayerCheckbox("Skybox", &cfg->show_skybox, ICON_FA_STAR, "Show starfield skybox");
-    DrawLayerCheckbox("Highlight Sunlit", &cfg->highlight_sunlit, ICON_FA_BOLT, "Highlight sunlit portions of orbits");
-    DrawLayerCheckbox("Slant Range", &cfg->show_slant_range, ICON_FA_RULER, "Show slant range line to home");
-    DrawLayerCheckbox("Ground Coverage", &cfg->show_ground_coverage, ICON_FA_ROUTE, "Show the line-of-sight ground coverage footprint");
-    DrawLayerCheckbox("Apsides", &cfg->show_apsides, ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels");
+    auto DrawSectionHeader = [&](const char *title) {
+        ImGui::Spacing();
+        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", title);
+        ImGui::Separator();
+    };
+
+    auto GetLayerValue = [&](const LayerDef *def) -> bool {
+        if (def->cfg_offset >= 0)
+            return *(bool *)((char *)cfg + def->cfg_offset);
+        return ToolSettingGetBool(cfg, def->settings_key, false);
+    };
+
+    auto SetLayerValue = [&](const LayerDef *def, bool val) {
+        if (def->cfg_offset >= 0)
+            *(bool *)((char *)cfg + def->cfg_offset) = val;
+        else
+            ToolSettingSetBool(cfg, def->settings_key, val);
+    };
+
+    auto DrawLayerDef = [&](const LayerDef *def) {
+        bool val = GetLayerValue(def);
+        bool prev = val;
+        DrawLayerCheckbox(def->label, &val, def->icon, def->tooltip);
+        if (val != prev)
+            SetLayerValue(def, val);
+    };
+
+    /* -- Universal: shown in both 2D map and 3D globe ----------------------- */
+    DrawSectionHeader("Universal");
+    for (size_t i = 0; i < LAYER_COUNT; i++)
+        if (s_layers[i].scope == LAYER_UNIVERSAL)
+            DrawLayerDef(&s_layers[i]);
 
     /* Labels layer: master toggle + Sel/All scope dropdown (see labels.h / labels.cpp) */
     bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
@@ -66,6 +145,13 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         ToolSettingSetInt(cfg, LABELS_KEY_MODE, label_mode);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Sel: only the selected satellite's label; All: labels for all active satellites");
+
+    /* -- current view's exclusive layers ------------------------------------ */
+    const LayerScope active_scope = is_2d ? LAYER_2D : LAYER_3D;
+    DrawSectionHeader(is_2d ? "2D Map" : "3D Globe");
+    for (size_t i = 0; i < LAYER_COUNT; i++)
+        if (s_layers[i].scope == active_scope)
+            DrawLayerDef(&s_layers[i]);
 
     ImGui::PopTextWrapPos();
 }
