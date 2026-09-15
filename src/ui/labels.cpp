@@ -9,7 +9,7 @@
  *
  * Config is stored in the generic ToolSettings store (see tools_settings.h):
  *   labels.enabled       bool   master switch (default true)
- *   labels.mode          int    0=active only, 1=all, 2=none
+ *   labels.mode          int    0=selected only (Sel), 1=all active (All)
  *   labels.show_altitude bool   append altitude (km) to satellite labels
  *   labels.size          float  scale multiplier on the UI font (default 1.0)
  *   labels.background    bool   draw a rounded background behind text
@@ -69,7 +69,10 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     bool enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
     if (!enabled) return;
 
-    int mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_ACTIVE_ONLY);
+    int mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
+    /* normalize: only Sel (0) and All (1) are valid now; treat legacy values
+     * (e.g. the old "None" = 2) as the default Sel scope */
+    if (mode != LABELS_MODE_ALL) mode = LABELS_MODE_SELECTED_ONLY;
     bool show_alt = ToolSettingGetBool(cfg, LABELS_KEY_ALTITUDE, false);
     float size_mult = ToolSettingGetFloat(cfg, LABELS_KEY_SIZE, 1.0f);
     if (size_mult < 0.25f) size_mult = 0.25f;
@@ -137,68 +140,65 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     };
 
     /* ---- satellite labels ---- */
-    if (mode != 2)
+    for (int i = 0; i < sat_count; i++)
     {
-        for (int i = 0; i < sat_count; i++)
+        Satellite &s = satellites[i];
+        if (!s.is_active) continue;
+
+        bool is_selected = (selected == &s);
+        bool is_hovered = (hovered == &s);
+        bool is_active = (active == &s);
+
+        /* Sel mode: only the selected satellite gets a label */
+        if (mode == LABELS_MODE_SELECTED_ONLY && !is_selected) continue;
+
+        /* respect hide-unselected isolation */
+        if (hide_unselected && selected != NULL && !is_selected) continue;
+
+        /* skip the POV camera's own satellite (its icon is hidden too) */
+        if (is_pov && is_selected) continue;
+
+        ImVec2 anchor;
+        if (is_2d)
         {
-            Satellite &s = satellites[i];
-            if (!s.is_active) continue;
-
-            bool is_selected = (selected == &s);
-            bool is_hovered = (hovered == &s);
-            bool is_active = (active == &s);
-
-            /* mode 0 = active only */
-            if (mode == 0 && !is_active) continue;
-
-            /* respect hide-unselected isolation */
-            if (hide_unselected && selected != NULL && !is_selected) continue;
-
-            /* skip the POV camera's own satellite (its icon is hidden too) */
-            if (is_pov && is_selected) continue;
-
-            ImVec2 anchor;
-            if (is_2d)
-            {
-                float mx, my;
-                get_map_coordinates(s.current_pos, ctx->gmst_deg, cfg->earth_rotation_offset,
-                                    ctx->map_w, ctx->map_h, &mx, &my);
-                ImVec2 sp;
-                if (!MapToScreen2D(mx, my, &sp)) continue;
-                anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
-            }
-            else
-            {
-                if (!ctx->camera3d) continue;
-                Vector3 draw_pos = Vector3Scale(s.current_pos, 1.0f / DRAW_SCALE);
-                Vector3 toTarget = Vector3Subtract(draw_pos, ctx->camera3d->position);
-                Vector3 camForward = Vector3Normalize(Vector3Subtract(ctx->camera3d->target, ctx->camera3d->position));
-                float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
-                if (Vector3DotProduct(toTarget, camForward) <= 0.0f) continue;
-                if (IsOccludedByEarth(ctx->camera3d->position, draw_pos, draw_earth_radius)) continue;
-                Vector2 sp = GetWorldToScreen(draw_pos, *ctx->camera3d);
-                anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
-            }
-
-            LabelCandidate c;
-            if (show_alt)
-            {
-                float alt = Vector3Length(s.current_pos) - EARTH_RADIUS_KM;
-                snprintf(c.text, sizeof(c.text), "%s  %.0f km", s.name, alt);
-            }
-            else
-            {
-                snprintf(c.text, sizeof(c.text), "%s", s.name);
-            }
-            c.anchor = anchor;
-            c.size = size;
-            c.centered = false;
-            if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 4; }
-            else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 3; }
-            else if (is_active)   { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 2; }
-            else                  { c.color = ToImU32(g_theme.world.sat_normal);      c.priority = 1; }
-            cands.push_back(c);
+            float mx, my;
+            get_map_coordinates(s.current_pos, ctx->gmst_deg, cfg->earth_rotation_offset,
+                                ctx->map_w, ctx->map_h, &mx, &my);
+            ImVec2 sp;
+            if (!MapToScreen2D(mx, my, &sp)) continue;
+            anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
         }
+        else
+        {
+            if (!ctx->camera3d) continue;
+            Vector3 draw_pos = Vector3Scale(s.current_pos, 1.0f / DRAW_SCALE);
+            Vector3 toTarget = Vector3Subtract(draw_pos, ctx->camera3d->position);
+            Vector3 camForward = Vector3Normalize(Vector3Subtract(ctx->camera3d->target, ctx->camera3d->position));
+            float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
+            if (Vector3DotProduct(toTarget, camForward) <= 0.0f) continue;
+            if (IsOccludedByEarth(ctx->camera3d->position, draw_pos, draw_earth_radius)) continue;
+            Vector2 sp = GetWorldToScreen(draw_pos, *ctx->camera3d);
+            anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+        }
+
+        LabelCandidate c;
+        if (show_alt)
+        {
+            float alt = Vector3Length(s.current_pos) - EARTH_RADIUS_KM;
+            snprintf(c.text, sizeof(c.text), "%s  %.0f km", s.name, alt);
+        }
+        else
+        {
+            snprintf(c.text, sizeof(c.text), "%s", s.name);
+        }
+        c.anchor = anchor;
+        c.size = size;
+        c.centered = false;
+        if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 4; }
+        else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 3; }
+        else if (is_active)   { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 2; }
+        else                  { c.color = ToImU32(g_theme.world.sat_normal);      c.priority = 1; }
+        cands.push_back(c);
     }
 
     /* ---- apsis labels (active sat) ---- */

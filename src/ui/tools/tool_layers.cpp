@@ -48,46 +48,23 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     DrawLayerCheckbox("Ground Coverage", &cfg->show_ground_coverage, ICON_FA_ROUTE, "Show the line-of-sight ground coverage footprint");
     DrawLayerCheckbox("Apsides", &cfg->show_apsides, ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels");
 
-    ImGui::Separator();
-
-    /* label overlay controls (see labels.h / labels.cpp) */
+    /* Labels layer: master toggle + Sel/All scope dropdown (see labels.h / labels.cpp) */
     bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
-    if (ImGui::Checkbox("Labels", &labels_enabled))
+    bool labels_prev = labels_enabled;
+    float labels_row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the combo */
+    DrawLayerCheckbox("Labels", &labels_enabled, ICON_FA_TAG, "Show name labels for satellites and markers");
+    if (labels_enabled != labels_prev)
         ToolSettingSetBool(cfg, LABELS_KEY_ENABLED, labels_enabled);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Show name labels for satellites and markers");
 
-    int label_mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_ACTIVE_ONLY);
-    const char *modes[] = { "Active only", "All", "None" };
-    ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::Combo("##label_mode", &label_mode, modes, 3))
+    const float combo_w = 60.0f;
+    ImGui::SameLine(labels_row_avail - combo_w);
+    ImGui::SetNextItemWidth(combo_w);
+    int label_mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
+    const char *modes[] = { "Sel", "All" };
+    if (ImGui::Combo("##label_mode", &label_mode, modes, 2))
         ToolSettingSetInt(cfg, LABELS_KEY_MODE, label_mode);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Which satellites get name labels");
-
-    bool show_alt = ToolSettingGetBool(cfg, LABELS_KEY_ALTITUDE, false);
-    if (ImGui::Checkbox("Label Altitude", &show_alt))
-        ToolSettingSetBool(cfg, LABELS_KEY_ALTITUDE, show_alt);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Append current altitude (km) to satellite labels");
-
-    float label_size = ToolSettingGetFloat(cfg, LABELS_KEY_SIZE, 1.0f);
-    if (ImGui::SliderFloat("Label Size", &label_size, 0.5f, 1.5f, "%.2fx"))
-        ToolSettingSetFloat(cfg, LABELS_KEY_SIZE, label_size);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Scale multiplier on the UI font (1.0x = crisp native size)");
-
-    bool use_bg = ToolSettingGetBool(cfg, LABELS_KEY_BG, true);
-    if (ImGui::Checkbox("Label Background", &use_bg))
-        ToolSettingSetBool(cfg, LABELS_KEY_BG, use_bg);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Draw a dark rounded box behind label text for contrast");
-
-    int max_count = ToolSettingGetInt(cfg, LABELS_KEY_MAX_COUNT, 200);
-    if (ImGui::SliderInt("Max Labels", &max_count, 10, 1000))
-        ToolSettingSetInt(cfg, LABELS_KEY_MAX_COUNT, max_count);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Declutter cap: how many labels are drawn before overlap rejection kicks in");
+        ImGui::SetTooltip("Sel: only the selected satellite's label; All: labels for all active satellites");
 
     ImGui::PopTextWrapPos();
 }

@@ -6,6 +6,9 @@
 
 # **TLEscope**
 
+> [!WARNING]
+> **⚠️ This branch is an undocumented work-in-progress.** Features are being actively broken, rebuilt, and moved around.
+
 TLEscope is a satellite visualization and tracking tool designed to transform orbital data (such as the deprecated Two-Line Element sets or more modern CCSDS Orbit Mean-Elements Messages) into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
 
 ### Not interested in the market pitch? [__Click Here__](#download-from-github) to skip directly to downloads.

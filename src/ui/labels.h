@@ -27,10 +27,9 @@
 #define LABELS_KEY_BG        "labels.background"
 #define LABELS_KEY_MAX_COUNT "labels.max_count"
 
-/* label mode values for LABELS_KEY_MODE */
-#define LABELS_MODE_ACTIVE_ONLY 0
-#define LABELS_MODE_ALL         1
-#define LABELS_MODE_NONE        2
+/* label scope values for LABELS_KEY_MODE */
+#define LABELS_MODE_SELECTED_ONLY 0  /* Sel: only the selected satellite gets a label */
+#define LABELS_MODE_ALL           1  /* All: every active satellite gets a label */
 
 /** collect + render all scene labels for the current frame */
 void DrawSceneLabels(UIContext *ctx, AppConfig *cfg);
