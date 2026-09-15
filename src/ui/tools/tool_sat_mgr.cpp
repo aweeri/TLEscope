@@ -46,7 +46,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     /* search box + icon buttons on the same line */
     float avail_w = ImGui::GetContentRegionAvail().x;
     float btn_w = ImGui::GetFrameHeight();
-    ImGui::SetNextItemWidth(avail_w - btn_w * 2.0f - ImGui::GetStyle().ItemSpacing.x * 2.0f - 4.0f);
+    ImGui::SetNextItemWidth(avail_w - btn_w * 3.0f - ImGui::GetStyle().ItemSpacing.x * 3.0f - 4.0f);
     ImGui::InputText("##sat_mgr_search", search_buf, sizeof(search_buf));
     ImGui::SameLine();
 
@@ -78,18 +78,14 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
         SaveAppConfig("settings.json", cfg);
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Disable all visible satellites");
-
-    int active_count = 0;
-    for (int i = 0; i < sat_count; i++)
-    {
-        if (satellites[i].is_active)
-            active_count++;
-    }
-
-    ImGui::Checkbox("Active only", &active_only);
     ImGui::SameLine();
-    ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
-                       "%d active", active_count);
+
+    /* Active-only filter (funnel icon) */
+    ImGui::PushStyleColor(ImGuiCol_Text, active_only ? ThemeColor(g_theme.ui.ui_accent) : ThemeColor(g_theme.ui.text_secondary));
+    if (ImGui::Button(ICON_FA_FILTER "##active_only", ImVec2(btn_w, btn_w)))
+        active_only = !active_only;
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only show already active satellites");
 
     /* show count of displayed satellites */
     int displayed = 0;

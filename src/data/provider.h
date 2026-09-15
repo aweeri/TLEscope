@@ -25,7 +25,7 @@ typedef enum {
 // -- Data Source Definition --------------------------------------------------
 
 typedef struct {
-    char id[16];
+    char id[32];   // CelesTrak group ids like "cosmos-2251-debris" need >16
     char name[64];
     char base_url[256];
     ProviderType type;
