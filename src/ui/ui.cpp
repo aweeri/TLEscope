@@ -10,6 +10,7 @@
 
 #include "ui.h"
 #include "ui_layout.h"
+#include "labels.h"
 #include "notifications.h"
 #include "core/astro.h"
 #include "io/rotator.h"
@@ -736,6 +737,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* begin rlImGui frame */
     rlImGuiBegin();
+
+    /* scene label overlay: drawn into the background draw list so labels
+     * render on top of the raylib scene but behind all ImGui windows */
+    DrawSceneLabels(ctx, cfg);
 
     /* top navigation bar */
     DrawNavBar(ctx, cfg);

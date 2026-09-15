@@ -1554,8 +1554,6 @@ int main(void)
         };
 
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
-        float m_text_2d = 16.0f * cfg.ui_scale / Camera2DParams.zoom;
-        float m_spacing_2d = cfg.ui_scale / Camera2DParams.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
 
         /* 2d projection rendering */
@@ -1739,14 +1737,6 @@ int main(void)
                                     (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
                                 );
 
-                                if (Camera2DParams.zoom > 0.1f)
-                                {
-                                    char peri_label[32], apo_label[32];
-                                    TextCopy(peri_label, TextFormat("P %.0f km", calc_perigee_km(&satellites[i])));
-                                    TextCopy(apo_label, TextFormat("A %.0f km", calc_apogee_km(&satellites[i])));
-                                    DrawTextEx(customFont, peri_label, (Vector2){peri2d.x + x_off + (mark_size_2d / 2.f) + 4.f / Camera2DParams.zoom, peri2d.y - (mark_size_2d / 2.f)}, m_text_2d, m_spacing_2d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
-                                    DrawTextEx(customFont, apo_label, (Vector2){apo2d.x + x_off + (mark_size_2d / 2.f) + 4.f / Camera2DParams.zoom, apo2d.y - (mark_size_2d / 2.f)}, m_text_2d, m_spacing_2d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
-                                }
                             }
                         }
                     }
@@ -1761,11 +1751,6 @@ int main(void)
                                 satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
                                 (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
                             );
-
-                            if (is_hl && Camera2DParams.zoom > 0.1f)
-                            {
-                                DrawTextEx(customFont, satellites[i].name, (Vector2){sat_mx + (offset_i * map_w) + (m_size_2d / 2.f) + 4.f / Camera2DParams.zoom, sat_my - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, sCol);
-                            }
                         }
                     }
                 }
@@ -1782,11 +1767,6 @@ int main(void)
                         DrawTexturePro(
                             markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){hx + x_off, hy, m_size_2d, m_size_2d}, (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, WHITE
                         );
-
-                        if (Camera2DParams.zoom > 0.1f)
-                        {
-                            DrawTextEx(customFont, home->name, (Vector2){hx + x_off + (m_size_2d / 2.f) + 4.0f / Camera2DParams.zoom, hy - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, WHITE);
-                        }
                     }
                 }
 
@@ -1801,28 +1781,12 @@ int main(void)
                     else if (hx - sx > map_w / 2.0f)
                         sx += map_w;
 
-                    double range = get_sat_range(active_sat, current_epoch, *home);
-
                     for (int offset_i = -1; offset_i <= 1; offset_i++)
                     {
                         float x_off = offset_i * map_w;
                         Vector2 p1 = {hx + x_off, hy};
                         Vector2 p2 = {sx + x_off, sy};
                         DrawLineEx(p1, p2, 2.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_accent, 0.8f));
-
-                        if (Camera2DParams.zoom > 0.1f)
-                        {
-                            Vector2 mid = {(p1.x + p2.x) / 2.0f, (p1.y + p2.y) / 2.0f};
-                            char rng_str[32];
-                            TextCopy(rng_str, TextFormat("%.1f km", range));
-                            Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_2d, m_spacing_2d);
-
-                            DrawRectangle(
-                                mid.x - tSize.x / 2.0f - 2.0f / Camera2DParams.zoom, mid.y - tSize.y / 2.0f - 2.0f / Camera2DParams.zoom, tSize.x + 4.0f / Camera2DParams.zoom,
-                                tSize.y + 4.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_bg, 0.7f)
-                            );
-                            DrawTextEx(customFont, rng_str, (Vector2){mid.x - tSize.x / 2.0f, mid.y - tSize.y / 2.0f}, m_text_2d, m_spacing_2d, g_theme.ui.ui_accent);
-                        }
                     }
                 }
 
@@ -1841,11 +1805,6 @@ int main(void)
                                 markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){mx + x_off, my, m_size_2d, m_size_2d}, (Vector2){m_size_2d / 2.f, m_size_2d / 2.f},
                                 0.0f, WHITE
                             );
-
-                            if (Camera2DParams.zoom > 0.1f)
-                            {
-                                DrawTextEx(customFont, locations[i].name, (Vector2){mx + x_off + (m_size_2d / 2.f) + 4.f / Camera2DParams.zoom, my - (m_size_2d / 2.f)}, m_text_2d, m_spacing_2d, WHITE);
-                            }
                         }
                     }
                 }
@@ -2075,34 +2034,9 @@ int main(void)
 
             /* screen-space icons/text for 3d objects */
             float m_size_3d = 24.0f * cfg.ui_scale;
-            float m_text_3d = 16.0f * cfg.ui_scale;
             float mark_size_3d = 32.0f * cfg.ui_scale;
 
             Vector3 camForward = Vector3Normalize(Vector3Subtract(Camera3DParams.target, Camera3DParams.position));
-
-            /* slant range text overlay 3d */
-            if (cfg.show_slant_range && active_sat && active_sat->is_active)
-            {
-                float h_lat_rad = home->lat * DEG2RAD;
-                float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
-                Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
-                Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
-
-                Vector3 mid_pos = Vector3Lerp(h_pos3d, s_pos3d, 0.5f);
-                Vector3 toMid = Vector3Subtract(mid_pos, Camera3DParams.position);
-
-                if (Vector3DotProduct(Vector3Normalize(toMid), camForward) > 0.0f)
-                {
-                    Vector2 mid_screen = GetWorldToScreen(mid_pos, Camera3DParams);
-                    double range = get_sat_range(active_sat, current_epoch, *home);
-                    char rng_str[32];
-                    TextCopy(rng_str, TextFormat("%.1f km", range));
-                    Vector2 tSize = MeasureTextEx(customFont, rng_str, m_text_3d, 1.0f);
-
-                    DrawRectangle(mid_screen.x - tSize.x / 2.0f - 4, mid_screen.y - tSize.y / 2.0f - 4, tSize.x + 8, tSize.y + 8, ApplyAlpha(g_theme.ui.ui_bg, 0.7f));
-                    DrawUIText(customFont, rng_str, mid_screen.x - tSize.x / 2.0f, mid_screen.y - tSize.y / 2.0f, m_text_3d, g_theme.ui.ui_accent);
-                }
-            }
 
             bool hide_apsis = (is_pov_mode && selected_sat != NULL && active_sat == selected_sat);
             if (cfg.show_apsides && active_sat && active_sat->is_active && !hide_apsis)
@@ -2123,9 +2057,6 @@ int main(void)
                         periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.periapsis, sat_alpha)
                     );
-                    char peri_label[32];
-                    TextCopy(peri_label, TextFormat("P %.0f km", calc_perigee_km(active_sat)));
-                    DrawUIText(customFont, peri_label, sp.x + (mark_size_3d / 2.f) + 4.f, sp.y - (mark_size_3d / 2.f), m_text_3d, ApplyAlpha(g_theme.world.periapsis, sat_alpha));
                 }
                 if (!IsOccludedByEarth(Camera3DParams.position, draw_a, draw_earth_radius))
                 {
@@ -2134,9 +2065,6 @@ int main(void)
                         apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
                     );
-                    char apo_label[32];
-                    TextCopy(apo_label, TextFormat("A %.0f km", calc_apogee_km(active_sat)));
-                    DrawUIText(customFont, apo_label, sp.x + (mark_size_3d / 2.f) + 4.f, sp.y - (mark_size_3d / 2.f), m_text_3d, ApplyAlpha(g_theme.world.apoapsis, sat_alpha));
                 }
             }
 
@@ -2156,7 +2084,6 @@ int main(void)
                 {
                     if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
-                        bool is_hl = (active_sat == &satellites[i]);
                         Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
@@ -2165,11 +2092,6 @@ int main(void)
                         Vector2 earthScreen = GetWorldToScreen(Vector3Zero(), Camera3DParams);
                         float sat_angle = (atan2f(earthScreen.y - sp.y, earthScreen.x - sp.x) * RAD2DEG) - 45.0f;
                         DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, sat_angle, sCol);
-
-                        if (is_hl)
-                        {
-                            DrawUIText(customFont, satellites[i].name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, sCol);
-                        }
                     }
                 }
             }
@@ -2186,11 +2108,6 @@ int main(void)
                 DrawTexturePro(
                     markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, WHITE
                 );
-
-                if (camDistance < 50.0f)
-                {
-                    DrawUIText(customFont, home->name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
-                }
             }
 
             if (cfg.show_markers)
@@ -2211,11 +2128,6 @@ int main(void)
                         DrawTexturePro(
                             markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, WHITE
                         );
-
-                        if (camDistance < 50.0f)
-                        {
-                            DrawUIText(customFont, locations[i].name, sp.x + (m_size_3d / 2.f) + 4.f, sp.y - (m_size_3d / 2.f), m_text_3d, WHITE);
-                        }
                     }
                 }
             }
