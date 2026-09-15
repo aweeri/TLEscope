@@ -12,32 +12,75 @@
 
 #define CELESTRAK_BASE "https://celestrak.org/NORAD/elements/gp.php"
 
+/*
+ * CelesTrak GROUP values are stored directly in DataSource::id.  This keeps
+ * the user-visible catalog and the API query in one auditable table instead
+ * of relying on a second, position-dependent index-to-group mapping.
+ *
+ * This list mirrors the ordinary GROUP= datasets advertised on CelesTrak's
+ * Current GP Element Sets page.  Special queries such as GPZ/GPZ-PLUS and
+ * filtered views such as OLDEST/DOCKED/MOVERS are intentionally not groups.
+ */
 const DataSource CELESTRAK_SOURCES[] = {
-    {"1",  "Last 30 Days' Launches", CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"2",  "Space Stations",         CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"3",  "100 Brightest",          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"4",  "Active Satellites",      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"5",  "Analyst Satellites",     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"6",  "Russian ASAT Debris",    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"7",  "Chinese ASAT Debris",    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"8",  "IRIDIUM 33 Debris",      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"9",  "COSMOS 2251 Debris",     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"10", "Weather",                CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"11", "NOAA",                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"12", "GOES",                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"13", "Earth Resources",        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"14", "SARSAT",                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"15", "Disaster Monitoring",    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"16", "TDRSS",                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"17", "ARGOS",                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"18", "Planet",                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"19", "Spire",                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"20", "Starlink",               CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"21", "OneWeb",                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"22", "GPS Operational",        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"23", "Galileo",                CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"24", "Amateur Radio",          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
-    {"25", "CubeSats",               CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON,  {0}},
+    /* Special-interest satellites */
+    {"last-30-days",       "Last 30 Days' Launches",                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"stations",           "Space Stations",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"visual",             "100 Brightest",                             CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"active",             "Active Satellites",                         CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"analyst",            "Analyst Satellites",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"fengyun-1c-debris",  "Chinese ASAT Test Debris (FENGYUN 1C)",     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"iridium-33-debris",  "IRIDIUM 33 Debris",                         CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"cosmos-2251-debris", "COSMOS 2251 Debris",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+
+    /* Weather and Earth resources */
+    {"weather",            "Weather",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"resource",           "Earth Resources",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"sar",                "Synthetic Aperture Radar",                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"sarsat",             "Search & Rescue (SARSAT)",                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"dmc",                "Disaster Monitoring",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"tdrss",              "Tracking and Data Relay Satellites (TDRSS)", CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"argos",              "ARGOS Data Collection System",              CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"planet",             "Planet",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"spire",              "Spire",                                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+
+    /* Communications satellites */
+    {"geo",                "Active Geosynchronous",                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"intelsat",           "Intelsat",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"ses",                "SES",                                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"eutelsat",           "Eutelsat",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"telesat",            "Telesat",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"starlink",           "Starlink",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"oneweb",             "OneWeb",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"qianfan",            "Qianfan",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"hulianwang",         "Hulianwang Digui",                           CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"kuiper",             "Kuiper",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"iridium-NEXT",       "Iridium NEXT",                               CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"orbcomm",            "Orbcomm",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"globalstar",         "Globalstar",                                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"amateur",            "Amateur Radio",                              CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"satnogs",            "SatNOGS",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"x-comm",             "Experimental Comm",                          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"other-comm",         "Other Comm",                                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+
+    /* Navigation satellites */
+    {"gnss",               "GNSS",                                       CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"gps-ops",            "GPS Operational",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"glo-ops",            "GLONASS Operational",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"galileo",            "Galileo",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"beidou",             "Beidou",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"sbas",               "Satellite-Based Augmentation System",        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+
+    /* Scientific satellites */
+    {"science",            "Space & Earth Science",                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"geodetic",           "Geodetic",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"engineering",        "Engineering",                                CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"education",          "Education",                                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+
+    /* Miscellaneous satellites */
+    {"misc",               "Miscellaneous",                              CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"military",           "Miscellaneous Military",                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"radar",              "Radar Calibration",                          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
+    {"cubesat",            "CubeSats",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 };
 const int NUM_CELESTRAK_SOURCES = sizeof(CELESTRAK_SOURCES) / sizeof(CELESTRAK_SOURCES[0]);
 
@@ -72,9 +115,9 @@ const DataSource RETLECTOR_SOURCES[] = {
 };
 const int NUM_RETLECTOR_SOURCES = sizeof(RETLECTOR_SOURCES) / sizeof(RETLECTOR_SOURCES[0]);
 
-/* -- Group name mapping ---------------------------------------------------- */
+/* -- Retlector group name mapping ----------------------------------------- */
 
-static const char* celestrak_group_for_index(int idx)
+static const char* retlector_group_for_index(int idx)
 {
     static const char *groups[] = {
         "last-30-days", "stations", "visual", "active", "analyst",
@@ -93,10 +136,8 @@ static const char* celestrak_group_for_index(int idx)
 static bool celestrak_build_url(const DataSource *source, OrbitalDataFormat format,
                                  char *url, size_t url_size)
 {
-    // extract the group name from the source index
-    int idx = atoi(source->id) - 1;
-    const char *group = celestrak_group_for_index(idx);
-    if (!group) return false;
+    const char *group = source ? source->id : NULL;
+    if (!group || !group[0]) return false;
 
     const char *fmt_str = "TLE";
     switch (format)
@@ -118,7 +159,7 @@ static bool retlector_build_url(const DataSource *source, OrbitalDataFormat form
                                  char *url, size_t url_size)
 {
     int idx = atoi(source->id) - 1;
-    const char *group = celestrak_group_for_index(idx);
+    const char *group = retlector_group_for_index(idx);
     if (!group) return false;
 
     const char *path = "tle";
