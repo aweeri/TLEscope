@@ -4,6 +4,11 @@
   <a href="https://github.com/aweeri/TLEscope/stargazers"><img src="https://img.shields.io/github/stars/aweeri/TLEscope?style=for-the-badge&color=yellow" alt="Stars"></a> <a href="https://github.com/aweeri/TLEscope/network/members"><img src="https://img.shields.io/github/forks/aweeri/TLEscope?style=for-the-badge&color=lightgrey" alt="Forks"></a> <a href="https://github.com/aweeri/TLEscope/issues"><img src="https://img.shields.io/github/issues/aweeri/TLEscope?style=for-the-badge&color=orange" alt="Issues"></a> <a href="https://github.com/aweeri/TLEscope/graphs/contributors"><img src="https://img.shields.io/github/contributors/aweeri/TLEscope?style=for-the-badge&color=blueviolet" alt="Contributors"></a> <a href="https://github.com/aweeri/TLEscope/pulse"><img src="https://img.shields.io/github/last-commit/aweeri/TLEscope?style=for-the-badge&color=brightgreen" alt="Last Commit"></a>
 </p>
 
+> [!WARNING]
+> **This branch is considered legacy.** minor bugfixes within reason to `main` are welcome, however TLEscope is currently being majorly revamped as part of the `extremelywip` branch.
+>
+> v4.0.0 is expected to release in Q4 2026.
+
 # **TLEscope**
 ​TLEscope is a satellite visualization tool designed to transform Two-Line Element (TLE) sets into intuitive, interactive data. It provides a streamlined interface for tracking the current and future positions of orbital bodies across both 3D and 2D environments.
 
