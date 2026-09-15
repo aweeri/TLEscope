@@ -61,7 +61,7 @@ static const LayerDef s_layers[] = {
 
     /* -- 2D map only ------------------------------------------------------- */
     { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map (not implemented yet)", LAYER_2D, -1, "layers.coast_lines", true },
-    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show latitude/longitude grid on the map (not implemented yet)", LAYER_2D, -1, "layers.latlon_grid", true },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false },
 
     /* -- 3D globe only ----------------------------------------------------- */
     { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false },
@@ -158,8 +158,42 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
-    (void)sctx;
-    (void)cfg;
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.latlon_grid", false))
+    {
+        float zoom = sctx->camera2d->zoom;
+        if (zoom < 0.10f)
+            zoom = 0.10f;
+
+        const float thin_width = 0.8f / zoom;
+        const float strong_width = 1.1f / zoom;
+
+        Color thin_color = g_theme.ui.text_main;
+        thin_color.a = (unsigned char)(thin_color.a * 0.15f);
+        Color strong_color = g_theme.ui.text_main;
+        strong_color.a = (unsigned char)(strong_color.a * 0.28f);
+
+        for (int lon = -150; lon <= 150; lon += 30)
+        {
+            const float x = ((float)lon / 360.0f) * sctx->map_w;
+            const bool prime_meridian = lon == 0;
+            DrawLineEx(
+                {x, -sctx->map_h * 0.5f},
+                {x, sctx->map_h * 0.5f},
+                prime_meridian ? strong_width : thin_width,
+                prime_meridian ? strong_color : thin_color);
+        }
+
+        for (int lat = -60; lat <= 60; lat += 30)
+        {
+            const float y = -((float)lat / 180.0f) * sctx->map_h;
+            const bool equator = lat == 0;
+            DrawLineEx(
+                {-sctx->map_w * 0.5f, y},
+                {sctx->map_w * 0.5f, y},
+                equator ? strong_width : thin_width,
+                equator ? strong_color : thin_color);
+        }
+    }
 
     static bool clean_view = false;
     static bool saved_left = true;
