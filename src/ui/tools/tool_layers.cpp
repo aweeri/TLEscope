@@ -9,6 +9,7 @@
 #include "ui/labels.h"
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
+#include "map_detail_data.h"
 
 #include <raylib.h>
 #include <stddef.h> /* offsetof */
@@ -60,7 +61,7 @@ static const LayerDef s_layers[] = {
     { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map (not implemented yet)", LAYER_2D, -1, "layers.coast_lines", true },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", true },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -154,6 +155,14 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             DrawLayerDef(&s_layers[i]);
 
     ImGui::PopTextWrapPos();
+}
+
+static Vector2 MapDetailToWorld(MapDetailPoint point, float map_w, float map_h)
+{
+    return {
+        ((float)point.lon100 / 100.0f / 360.0f) * map_w,
+        -((float)point.lat100 / 100.0f / 180.0f) * map_h
+    };
 }
 
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
