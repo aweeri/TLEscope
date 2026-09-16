@@ -12,6 +12,7 @@
 #include "map_detail_data.h"
 
 #include <raylib.h>
+#include <math.h>   /* fabsf, fmaxf */
 #include <stddef.h> /* offsetof */
 #include <string.h> /* strcmp */
 
@@ -56,7 +57,7 @@ typedef struct
 /* persisted lat/lon grid keys (ToolSettings store, see tools_settings.h) */
 #define GRID_KEY_ENABLED "layers.latlon_grid"
 #define GRID_KEY_SPACING "layers.latlon_grid_spacing"
-#define COUNTRY_BORDERS_KEY "layers.country_borders"
+#define BORDER_KEY_ENABLED "layers.country_borders"
 
 static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
 static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60°" };
@@ -74,7 +75,7 @@ static const LayerDef s_layers[] = {
 
     /* -- 2D map only ------------------------------------------------------- */
     { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
-    { "Country Borders",   ICON_FA_ROUTE,       "Show country borders on the map", LAYER_2D, -1, COUNTRY_BORDERS_KEY, false, NULL },
+    { "Country Borders",   ICON_FA_DRAW_POLYGON, "Show country borders on the map", LAYER_2D, -1, BORDER_KEY_ENABLED, false },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -253,57 +254,43 @@ static Vector2 MapDetailToWorld(MapDetailPoint point, float map_w, float map_h)
     };
 }
 
-void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
+/**
+ * Draws one MapDetail polyline set (coastlines, borders) in map world space.
+ *
+ * alpha scales the theme text color; segments that jump the antimeridian are
+ * skipped so a polyline wrapping the map edge does not draw a seam across it.
+ */
+static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *points,
+                               const MapDetailLine *lines, int line_count,
+                               float line_width, float alpha)
 {
-    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.coast_lines", false))
+    Color color = g_theme.ui.text_main;
+    color.a = (unsigned char)(color.a * alpha);
+
+    for (int i = 0; i < line_count; i++)
     {
-        float zoom = sctx->camera2d->zoom;
-        if (zoom < 0.10f)
-            zoom = 0.10f;
-
-        const float line_width = 1.0f / zoom;
-
-        Color coast_color = g_theme.ui.text_main;
-        coast_color.a = (unsigned char)(coast_color.a * 0.5f);
-
-        for (int i = 0; i < MAP_COAST_LINE_COUNT; i++)
+        const int end = lines[i].start + lines[i].count;
+        for (int p = lines[i].start; p + 1 < end; p++)
         {
-            const MapDetailLine *line = &MAP_COAST_LINES[i];
-            const int end = line->start + line->count;
-            for (int p = line->start; p + 1 < end; p++)
-            {
-                Vector2 a = MapDetailToWorld(MAP_COAST_POINTS[p], sctx->map_w, sctx->map_h);
-                Vector2 b = MapDetailToWorld(MAP_COAST_POINTS[p + 1], sctx->map_w, sctx->map_h);
-                DrawLineEx(a, b, line_width, coast_color);
-            }
+            Vector2 a = MapDetailToWorld(points[p], sctx->map_w, sctx->map_h);
+            Vector2 b = MapDetailToWorld(points[p + 1], sctx->map_w, sctx->map_h);
+            if (fabsf(a.x - b.x) <= sctx->map_w * 0.45f)
+                DrawLineEx(a, b, line_width, color);
         }
     }
+}
 
-    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, COUNTRY_BORDERS_KEY, false))
+void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
+{
+    if (sctx->is_2d_view && sctx->camera2d)
     {
-        float zoom = sctx->camera2d->zoom;
-        if (zoom < 0.10f)
-            zoom = 0.10f;
+        const float zoom = fmaxf(sctx->camera2d->zoom, 0.10f);
 
-        const float line_width = 0.8f / zoom;
-        Color border_color = g_theme.ui.text_main;
-        border_color.a = (unsigned char)(border_color.a * 0.20f);
+        if (ToolSettingGetBool(cfg, "layers.coast_lines", false))
+            DrawMapDetailLines(sctx, MAP_COAST_POINTS, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, 1.0f / zoom, 0.5f);
 
-        for (int i = 0; i < MAP_BORDER_LINE_COUNT; i++)
-        {
-            const MapDetailLine *line = &MAP_BORDER_LINES[i];
-            const int end = line->start + line->count;
-            for (int p = line->start; p + 1 < end; p++)
-            {
-                Vector2 a = MapDetailToWorld(MAP_BORDER_POINTS[p], sctx->map_w, sctx->map_h);
-                Vector2 b = MapDetailToWorld(MAP_BORDER_POINTS[p + 1], sctx->map_w, sctx->map_h);
-                float dx = a.x - b.x;
-                if (dx < 0.0f)
-                    dx = -dx;
-                if (dx <= sctx->map_w * 0.45f)
-                    DrawLineEx(a, b, line_width, border_color);
-            }
-        }
+        if (ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false))
+            DrawMapDetailLines(sctx, MAP_BORDER_POINTS, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, 0.8f / zoom, 0.20f);
     }
 
     if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
