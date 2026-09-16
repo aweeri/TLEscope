@@ -16,6 +16,16 @@
 extern bool log_auto_scroll;        /* log auto-scroll preference               */
 extern bool log_show_timestamps;    /* show timestamps in log entries (default off) */
 
+/* -- Layers panel persistence keys (see tool_layers.cpp) ------------------- */
+
+/* master switch for the 2D "Future Orbits" track (bool, default true) */
+#define LAYERS_KEY_FUTURE_ORBITS "layers.future_orbits"
+
+/* Ground Coverage scope: 0 = Sel (active satellite only), 1 = All (every active satellite) */
+#define LAYERS_KEY_GC_MODE       "layers.ground_coverage_mode"
+#define LAYERS_GC_MODE_SELECTED  0
+#define LAYERS_GC_MODE_ALL       1
+
 /* -- Shared UI helpers ----------------------------------------------------- */
 
 /** convert a raylib Color to an ImGui ImVec4 */

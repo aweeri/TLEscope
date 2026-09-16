@@ -18,6 +18,7 @@
 #include "ui/notifications.h"
 #include "ui/tools/tools_common.h"
 #include "ui/tools/tools_scene.h"
+#include "ui/tools/tools_settings.h"
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 #include "data/async_fetch.h"
@@ -1272,33 +1273,37 @@ int main(void)
 /* calculate radio footprint (visibility cone) */
 #define FP_RINGS 12
 #define FP_PTS 120
-        Vector3 fp_grid[FP_RINGS + 1][FP_PTS];
-        bool has_footprint = false;
 
-        if (active_sat && active_sat->is_active)
-        {
-            float r = Vector3Length(active_sat->current_pos);
-            if (r > EARTH_RADIUS_KM)
+        /* compute a footprint grid for a satellite; returns false if none exists */
+        auto ComputeFootprintGrid = [](const Satellite *sat, Vector3 grid[FP_RINGS + 1][FP_PTS]) -> bool {
+            if (!sat || !sat->is_active)
+                return false;
+            float r = Vector3Length(sat->current_pos);
+            if (r <= EARTH_RADIUS_KM)
+                return false;
+            float theta = acosf(EARTH_RADIUS_KM / r);
+            Vector3 s_norm = Vector3Normalize(sat->current_pos);
+            Vector3 up = fabsf(s_norm.y) > 0.99f ? (Vector3){1, 0, 0} : (Vector3){0, 1, 0};
+            Vector3 u = Vector3Normalize(Vector3CrossProduct(up, s_norm));
+            Vector3 v = Vector3CrossProduct(s_norm, u);
+            for (int i = 0; i <= FP_RINGS; i++)
             {
-                has_footprint = true;
-                float theta = acosf(EARTH_RADIUS_KM / r);
-                Vector3 s_norm = Vector3Normalize(active_sat->current_pos);
-                Vector3 up = fabsf(s_norm.y) > 0.99f ? (Vector3){1, 0, 0} : (Vector3){0, 1, 0};
-                Vector3 u = Vector3Normalize(Vector3CrossProduct(up, s_norm));
-                Vector3 v = Vector3CrossProduct(s_norm, u);
-
-                for (int i = 0; i <= FP_RINGS; i++)
+                float a = theta * ((float)i / FP_RINGS);
+                float d_plane = EARTH_RADIUS_KM * cosf(a), r_circle = EARTH_RADIUS_KM * sinf(a);
+                for (int k = 0; k < FP_PTS; k++)
                 {
-                    float a = theta * ((float)i / FP_RINGS);
-                    float d_plane = EARTH_RADIUS_KM * cosf(a), r_circle = EARTH_RADIUS_KM * sinf(a);
-                    for (int k = 0; k < FP_PTS; k++)
-                    {
-                        float alpha = (2.0f * PI * k) / FP_PTS;
-                        fp_grid[i][k] = Vector3Add(Vector3Scale(s_norm, d_plane), Vector3Add(Vector3Scale(u, cosf(alpha) * r_circle), Vector3Scale(v, sinf(alpha) * r_circle)));
-                    }
+                    float alpha = (2.0f * PI * k) / FP_PTS;
+                    grid[i][k] = Vector3Add(Vector3Scale(s_norm, d_plane), Vector3Add(Vector3Scale(u, cosf(alpha) * r_circle), Vector3Scale(v, sinf(alpha) * r_circle)));
                 }
             }
-        }
+            return true;
+        };
+
+        Vector3 fp_grid[FP_RINGS + 1][FP_PTS];
+        bool has_footprint = ComputeFootprintGrid(active_sat, fp_grid);
+
+        /* ground coverage scope: Sel (active satellite only) or All (every active satellite) */
+        int gc_mode = ToolSettingGetInt(&cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
 
         BeginDrawing();
         ClearBackground(g_theme.world.bg);
@@ -1374,18 +1379,17 @@ int main(void)
                 BeginScissorMode(sc_x, sc_y, sc_w, sc_h);
 
                 /* draw 2d footprint */
-                if (cfg.show_ground_coverage && active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
-                {
+                auto draw_footprint_2d = [&](const Vector3 grid[FP_RINGS + 1][FP_PTS]) {
                     for (int i = 0; i < FP_RINGS; i++)
                     {
                         for (int k = 0; k < FP_PTS; k++)
                         {
                             int next = (k + 1) % FP_PTS;
                             float x1, y1, x2, y2, x3, y3, x4, y4;
-                            get_map_coordinates(fp_grid[i][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
-                            get_map_coordinates(fp_grid[i][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
-                            get_map_coordinates(fp_grid[i + 1][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x3, &y3);
-                            get_map_coordinates(fp_grid[i + 1][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x4, &y4);
+                            get_map_coordinates(grid[i][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
+                            get_map_coordinates(grid[i][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
+                            get_map_coordinates(grid[i + 1][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x3, &y3);
+                            get_map_coordinates(grid[i + 1][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x4, &y4);
 
                             if (x2 - x1 > map_w * 0.6f)
                                 x2 -= map_w;
@@ -1412,8 +1416,8 @@ int main(void)
                     {
                         int next = (k + 1) % FP_PTS;
                         float x1, y1, x2, y2;
-                        get_map_coordinates(fp_grid[FP_RINGS][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
-                        get_map_coordinates(fp_grid[FP_RINGS][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
+                        get_map_coordinates(grid[FP_RINGS][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
+                        get_map_coordinates(grid[FP_RINGS][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
                         if (x2 - x1 > map_w * 0.6f)
                             x2 -= map_w;
                         else if (x2 - x1 < -map_w * 0.6f)
@@ -1425,6 +1429,25 @@ int main(void)
                                 DrawLineEx((Vector2){x1 + offset_i * map_w, y1}, (Vector2){x2 + offset_i * map_w, y2}, 2.0f / Camera2DParams.zoom, g_theme.world.footprint_border);
                             }
                         }
+                    }
+                };
+
+                if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
+                {
+                    if (gc_mode == LAYERS_GC_MODE_ALL)
+                    {
+                        for (int i = 0; i < sat_count; i++)
+                        {
+                            if (!satellites[i].is_active)
+                                continue;
+                            Vector3 grid[FP_RINGS + 1][FP_PTS];
+                            if (ComputeFootprintGrid(&satellites[i], grid))
+                                draw_footprint_2d(grid);
+                        }
+                    }
+                    else if (active_sat && has_footprint && active_sat->is_active)
+                    {
+                        draw_footprint_2d(fp_grid);
                     }
                 }
 
@@ -1442,7 +1465,7 @@ int main(void)
                     Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
-                    if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
+                    if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat) && ToolSettingGetBool(&cfg, LAYERS_KEY_FUTURE_ORBITS, true))
                     {
                         int segments = fmin(4000, fmax(50, (int)(400 * cfg.orbits_to_draw)));
                         Vector2 track_pts[4001];
@@ -1695,15 +1718,14 @@ int main(void)
             DrawSphere(sun_pos_3d, sun_radius * 1.5f, (Color){ 255, 255, 220, 255 });
 
             /* 3d footprint triangles */
-            if (cfg.show_ground_coverage && active_sat && has_footprint && active_sat->is_active && !(is_pov_mode && selected_sat != NULL))
-            {
+            auto draw_footprint_3d = [&](const Vector3 grid[FP_RINGS + 1][FP_PTS]) {
                 for (int i = 0; i < FP_RINGS; i++)
                 {
                     for (int k = 0; k < FP_PTS; k++)
                     {
                         int next = (k + 1) % FP_PTS;
-                        Vector3 p1 = Vector3Scale(fp_grid[i][k], 1.02f / DRAW_SCALE), p2 = Vector3Scale(fp_grid[i][next], 1.02f / DRAW_SCALE);
-                        Vector3 p3 = Vector3Scale(fp_grid[i + 1][k], 1.02f / DRAW_SCALE), p4 = Vector3Scale(fp_grid[i + 1][next], 1.02f / DRAW_SCALE);
+                        Vector3 p1 = Vector3Scale(grid[i][k], 1.02f / DRAW_SCALE), p2 = Vector3Scale(grid[i][next], 1.02f / DRAW_SCALE);
+                        Vector3 p3 = Vector3Scale(grid[i + 1][k], 1.02f / DRAW_SCALE), p4 = Vector3Scale(grid[i + 1][next], 1.02f / DRAW_SCALE);
                         DrawTriangle3D(p1, p3, p2, g_theme.world.footprint_bg);
                         DrawTriangle3D(p2, p3, p4, g_theme.world.footprint_bg);
                     }
@@ -1711,7 +1733,26 @@ int main(void)
                 for (int k = 0; k < FP_PTS; k++)
                 {
                     int next = (k + 1) % FP_PTS;
-                    DrawLine3D(Vector3Scale(fp_grid[FP_RINGS][k], 1.02f / DRAW_SCALE), Vector3Scale(fp_grid[FP_RINGS][next], 1.02f / DRAW_SCALE), g_theme.world.footprint_border);
+                    DrawLine3D(Vector3Scale(grid[FP_RINGS][k], 1.02f / DRAW_SCALE), Vector3Scale(grid[FP_RINGS][next], 1.02f / DRAW_SCALE), g_theme.world.footprint_border);
+                }
+            };
+
+            if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
+            {
+                if (gc_mode == LAYERS_GC_MODE_ALL)
+                {
+                    for (int i = 0; i < sat_count; i++)
+                    {
+                        if (!satellites[i].is_active)
+                            continue;
+                        Vector3 grid[FP_RINGS + 1][FP_PTS];
+                        if (ComputeFootprintGrid(&satellites[i], grid))
+                            draw_footprint_3d(grid);
+                    }
+                }
+                else if (active_sat && has_footprint && active_sat->is_active)
+                {
+                    draw_footprint_3d(fp_grid);
                 }
             }
 
