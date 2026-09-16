@@ -529,6 +529,9 @@ int main(void)
     Satellite *selected_sat = NULL;
     TargetLock active_lock = LOCK_EARTH;
     double last_left_click_time = 0.0;
+    Vector2 left_press_pos = {0};
+    bool left_press_over_ui = false;
+    bool left_drag_active = false;
 
     /* apply vsync / fps limit at startup so the window state matches the config */
     if (cfg.hint_vsync)
@@ -887,6 +890,22 @@ int main(void)
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
 
+        /* Classify the held left button as a click or a camera drag. Trackpads
+         * have no way to hold a right button while moving, so left-drag is the
+         * only workable pan/orbit gesture there; once a press passes the
+         * threshold the click is swallowed on release so dragging the view does
+         * not also select whatever sat happened to be under the cursor. */
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            left_press_pos = GetMousePosition();
+            left_press_over_ui = over_ui;
+            left_drag_active = false;
+        }
+        if (!left_press_over_ui && IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+            Vector2Distance(GetMousePosition(), left_press_pos) > 4.0f * cfg.ui_scale)
+            left_drag_active = true;
+        const bool left_dragging = left_drag_active && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+
         /* vsync config check */
         if (cfg.hint_vsync != IsWindowState(FLAG_VSYNC_HINT))
         {
@@ -909,7 +928,7 @@ int main(void)
         {
             if (!over_ui)
             {
-                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT)))
+                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || left_dragging || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT)))
                 {
                     target_camera2d_target = Vector2Add(target_camera2d_target, Vector2Scale(mouseDelta, -1.0f / target_camera2d_zoom));
                     active_lock = LOCK_NONE;
@@ -967,7 +986,7 @@ int main(void)
             /* handle picking and camera in 3d mode */
             if (!over_ui)
             {
-                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || left_dragging)
                 {
                     if (IsKeyDown(KEY_LEFT_SHIFT))
                     {
@@ -1079,8 +1098,9 @@ int main(void)
             }
         }
 
-        /* selection and double click for planet locking */
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        /* selection and double click for planet locking; fires on release so a
+         * camera drag that started on a satellite does not count as a click */
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
         {
             if (!over_ui)
             {
