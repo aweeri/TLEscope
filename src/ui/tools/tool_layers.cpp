@@ -49,25 +49,26 @@ typedef struct
     int cfg_offset;           /* offsetof(AppConfig, field), or -1 */
     const char *settings_key; /* tool-settings key, or NULL */
     bool placeholder;         /* true = UI only, no render effect yet */
+    const char *mode_key;     /* tool-settings key for a Sel/All scope combo, or NULL */
 } LayerDef;
 
 static const LayerDef s_layers[] = {
     /* -- Universal (both 2D map and 3D globe) ------------------------------ */
-    { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false },
-    { "Markers",           ICON_FA_MAP_PIN,     "Show ground markers (L)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_markers), NULL, false },
-    { "Highlight Sunlit",   ICON_FA_BOLT,       "Highlight sunlit portions of orbits", LAYER_UNIVERSAL, (int)offsetof(AppConfig, highlight_sunlit), NULL, false },
-    { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false },
-    { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false },
-    { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false },
+    { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false, NULL },
+    { "Markers",           ICON_FA_MAP_PIN,     "Show ground markers (L)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_markers), NULL, false, NULL },
+    { "Highlight Sunlit",   ICON_FA_BOLT,       "Highlight sunlit portions of orbits", LAYER_UNIVERSAL, (int)offsetof(AppConfig, highlight_sunlit), NULL, false, NULL },
+    { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false, NULL },
+    { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false, LAYERS_KEY_GC_MODE },
+    { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false, NULL },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
-    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false, NULL },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false, NULL },
 
     /* -- 3D globe only ----------------------------------------------------- */
-    { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false },
-    { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false },
-    { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false },
+    { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false, NULL },
+    { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false, NULL },
+    { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false, NULL },
 };
 
 #define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
@@ -118,9 +119,24 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     auto DrawLayerDef = [&](const LayerDef *def) {
         bool val = GetLayerValue(def);
         bool prev = val;
+        float row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the combo */
         DrawLayerCheckbox(def->label, &val, def->icon, def->tooltip);
         if (val != prev)
             SetLayerValue(def, val);
+
+        /* optional right-aligned Sel/All scope combo, mirroring the Labels row */
+        if (def->mode_key)
+        {
+            const float combo_w = 60.0f;
+            ImGui::SameLine(row_avail - combo_w);
+            ImGui::SetNextItemWidth(combo_w);
+            int mode = ToolSettingGetInt(cfg, def->mode_key, LAYERS_GC_MODE_SELECTED);
+            const char *modes[] = { "Sel", "All" };
+            if (ImGui::Combo("##layer_mode", &mode, modes, 2))
+                ToolSettingSetInt(cfg, def->mode_key, mode);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Sel: only the active satellite's footprint; All: footprints for all active satellites");
+        }
     };
 
     /* -- Universal: shown in both 2D map and 3D globe ----------------------- */
@@ -156,11 +172,37 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
     if (is_2d)
     {
+        /* Future Orbits: master toggle + slider, styled to match the other layer rows (icon cell + label) */
+        bool future_orbits_enabled = ToolSettingGetBool(cfg, LAYERS_KEY_FUTURE_ORBITS, true);
+        bool future_orbits_prev = future_orbits_enabled;
+        float future_row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the slider */
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(future_orbits_enabled ? g_theme.ui.ui_accent : g_theme.ui.text_secondary));
+        ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+        const char *icon = ICON_FA_CLOCK_ROTATE_LEFT;
+        ImVec2 icon_sz = ImGui::CalcTextSize(icon);
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + (icon_w - icon_sz.x) * 0.5f, pos.y), col, icon);
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(icon_w, ImGui::GetFrameHeight()));
+        ImGui::SameLine();
+        ImGui::Checkbox("Future Orbits", &future_orbits_enabled);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Show the predicted future orbit track on the 2D map");
+        if (future_orbits_enabled != future_orbits_prev)
+            ToolSettingSetBool(cfg, LAYERS_KEY_FUTURE_ORBITS, future_orbits_enabled);
+
+        /* right-align the slider on the row, like the Labels Sel/All dropdown above */
+        const float slider_w = 140.0f;
+        ImGui::SameLine(future_row_avail - slider_w);
+        ImGui::SetNextItemWidth(slider_w);
+        ImGui::BeginDisabled(!future_orbits_enabled);
         float future_orbits = cfg->orbits_to_draw;
-        if (ImGui::SliderFloat("Future Orbits", &future_orbits, 0.25f, 10.0f, "%.2f"))
+        if (ImGui::SliderFloat("##future_orbits", &future_orbits, 0.25f, 10.0f, "%.2f"))
             cfg->orbits_to_draw = future_orbits;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Number of predicted orbits shown on the 2D map");
+        ImGui::EndDisabled();
     }
 
     ImGui::PopTextWrapPos();
