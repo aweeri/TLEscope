@@ -13,6 +13,7 @@
 
 #include <raylib.h>
 #include <stddef.h> /* offsetof */
+#include <string.h> /* strcmp */
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
@@ -52,6 +53,15 @@ typedef struct
     const char *mode_key;     /* tool-settings key for a Sel/All scope combo, or NULL */
 } LayerDef;
 
+/* persisted lat/lon grid keys (ToolSettings store, see tools_settings.h) */
+#define GRID_KEY_ENABLED "layers.latlon_grid"
+#define GRID_KEY_SPACING "layers.latlon_grid_spacing"
+
+static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
+static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60°" };
+#define GRID_SPACING_COUNT (sizeof(GRID_SPACINGS) / sizeof(GRID_SPACINGS[0]))
+#define GRID_SPACING_DEFAULT 2 /* index of 30° in GRID_SPACINGS */
+
 static const LayerDef s_layers[] = {
     /* -- Universal (both 2D map and 3D globe) ------------------------------ */
     { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false, NULL },
@@ -62,8 +72,8 @@ static const LayerDef s_layers[] = {
     { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false, NULL },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false, NULL },
-    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false, NULL },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
     { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false, NULL },
@@ -72,6 +82,15 @@ static const LayerDef s_layers[] = {
 };
 
 #define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
+
+static int GridSpacingIndex(AppConfig *cfg)
+{
+    const int spacing = ToolSettingGetInt(cfg, GRID_KEY_SPACING, GRID_SPACINGS[GRID_SPACING_DEFAULT]);
+    for (size_t i = 0; i < GRID_SPACING_COUNT; i++)
+        if (GRID_SPACINGS[i] == spacing)
+            return (int)i;
+    return GRID_SPACING_DEFAULT;
+}
 
 void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 {
@@ -167,8 +186,24 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     const LayerScope active_scope = is_2d ? LAYER_2D : LAYER_3D;
     DrawSectionHeader(is_2d ? "2D Map" : "3D Globe");
     for (size_t i = 0; i < LAYER_COUNT; i++)
-        if (s_layers[i].scope == active_scope)
-            DrawLayerDef(&s_layers[i]);
+    {
+        if (s_layers[i].scope != active_scope)
+            continue;
+
+        const float row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the combo */
+        DrawLayerDef(&s_layers[i]);
+
+        if (s_layers[i].settings_key && strcmp(s_layers[i].settings_key, GRID_KEY_ENABLED) == 0)
+        {
+            int spacing = GridSpacingIndex(cfg);
+            ImGui::SameLine(row_avail - combo_w);
+            ImGui::SetNextItemWidth(combo_w);
+            if (ImGui::Combo("##grid_spacing", &spacing, GRID_SPACING_LABELS, (int)GRID_SPACING_COUNT))
+                ToolSettingSetInt(cfg, GRID_KEY_SPACING, GRID_SPACINGS[spacing]);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Spacing between grid lines, in degrees");
+        }
+    }
 
     if (is_2d)
     {
@@ -242,7 +277,7 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         }
     }
 
-    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.latlon_grid", false))
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
     {
         float zoom = sctx->camera2d->zoom;
         if (zoom < 0.10f)
@@ -256,7 +291,11 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         Color strong_color = g_theme.ui.text_main;
         strong_color.a = (unsigned char)(strong_color.a * 0.28f);
 
-        for (int lon = -150; lon <= 150; lon += 30)
+        const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
+
+        /* lines fall on multiples of the spacing from the prime meridian/equator, never on the map edges */
+        const int lon_max = (179 / spacing) * spacing;
+        for (int lon = -lon_max; lon <= lon_max; lon += spacing)
         {
             const float x = ((float)lon / 360.0f) * sctx->map_w;
             const bool prime_meridian = lon == 0;
@@ -267,7 +306,8 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
                 prime_meridian ? strong_color : thin_color);
         }
 
-        for (int lat = -60; lat <= 60; lat += 30)
+        const int lat_max = (89 / spacing) * spacing;
+        for (int lat = -lat_max; lat <= lat_max; lat += spacing)
         {
             const float y = -((float)lat / 180.0f) * sctx->map_h;
             const bool equator = lat == 0;
