@@ -61,7 +61,7 @@ static const LayerDef s_layers[] = {
     { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", true },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -167,6 +167,30 @@ static Vector2 MapDetailToWorld(MapDetailPoint point, float map_w, float map_h)
 
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.coast_lines", false))
+    {
+        float zoom = sctx->camera2d->zoom;
+        if (zoom < 0.10f)
+            zoom = 0.10f;
+
+        const float line_width = 1.0f / zoom;
+
+        Color coast_color = g_theme.ui.text_main;
+        coast_color.a = (unsigned char)(coast_color.a * 0.5f);
+
+        for (int i = 0; i < MAP_COAST_LINE_COUNT; i++)
+        {
+            const MapDetailLine *line = &MAP_COAST_LINES[i];
+            const int end = line->start + line->count;
+            for (int p = line->start; p + 1 < end; p++)
+            {
+                Vector2 a = MapDetailToWorld(MAP_COAST_POINTS[p], sctx->map_w, sctx->map_h);
+                Vector2 b = MapDetailToWorld(MAP_COAST_POINTS[p + 1], sctx->map_w, sctx->map_h);
+                DrawLineEx(a, b, line_width, coast_color);
+            }
+        }
+    }
+
     if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.latlon_grid", false))
     {
         float zoom = sctx->camera2d->zoom;
