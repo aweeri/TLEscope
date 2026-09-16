@@ -56,7 +56,7 @@ APP_DIR     ?= /usr/share/applications
 
 # macOS (Apple Silicon / Intel)
 CC_MACOS = clang++
-LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
+LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework QuartzCore
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
 SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/util/version.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp $(wildcard src/ui/tools/tool_*.cpp)
@@ -140,7 +140,7 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-macos: raylib $(SRC) $(CJSON_SRC) | bin
+bin/TLEscope-macos: raylib $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $(filter-out raylib,$^) $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
