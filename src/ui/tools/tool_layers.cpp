@@ -56,6 +56,7 @@ typedef struct
 /* persisted lat/lon grid keys (ToolSettings store, see tools_settings.h) */
 #define GRID_KEY_ENABLED "layers.latlon_grid"
 #define GRID_KEY_SPACING "layers.latlon_grid_spacing"
+#define COUNTRY_BORDERS_KEY "layers.country_borders"
 
 static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
 static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60°" };
@@ -73,6 +74,7 @@ static const LayerDef s_layers[] = {
 
     /* -- 2D map only ------------------------------------------------------- */
     { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
+    { "Country Borders",   ICON_FA_ROUTE,       "Show country borders on the map", LAYER_2D, -1, COUNTRY_BORDERS_KEY, false, NULL },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -273,6 +275,33 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
                 Vector2 a = MapDetailToWorld(MAP_COAST_POINTS[p], sctx->map_w, sctx->map_h);
                 Vector2 b = MapDetailToWorld(MAP_COAST_POINTS[p + 1], sctx->map_w, sctx->map_h);
                 DrawLineEx(a, b, line_width, coast_color);
+            }
+        }
+    }
+
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, COUNTRY_BORDERS_KEY, false))
+    {
+        float zoom = sctx->camera2d->zoom;
+        if (zoom < 0.10f)
+            zoom = 0.10f;
+
+        const float line_width = 0.8f / zoom;
+        Color border_color = g_theme.ui.text_main;
+        border_color.a = (unsigned char)(border_color.a * 0.20f);
+
+        for (int i = 0; i < MAP_BORDER_LINE_COUNT; i++)
+        {
+            const MapDetailLine *line = &MAP_BORDER_LINES[i];
+            const int end = line->start + line->count;
+            for (int p = line->start; p + 1 < end; p++)
+            {
+                Vector2 a = MapDetailToWorld(MAP_BORDER_POINTS[p], sctx->map_w, sctx->map_h);
+                Vector2 b = MapDetailToWorld(MAP_BORDER_POINTS[p + 1], sctx->map_w, sctx->map_h);
+                float dx = a.x - b.x;
+                if (dx < 0.0f)
+                    dx = -dx;
+                if (dx <= sctx->map_w * 0.45f)
+                    DrawLineEx(a, b, line_width, border_color);
             }
         }
     }
