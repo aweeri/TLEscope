@@ -153,6 +153,15 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         if (s_layers[i].scope == active_scope)
             DrawLayerDef(&s_layers[i]);
 
+    if (is_2d)
+    {
+        float future_orbits = cfg->orbits_to_draw;
+        if (ImGui::SliderFloat("Future Orbits", &future_orbits, 0.25f, 10.0f, "%.2f"))
+            cfg->orbits_to_draw = future_orbits;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Number of predicted orbits shown on the 2D map");
+    }
+
     ImGui::PopTextWrapPos();
 }
 
