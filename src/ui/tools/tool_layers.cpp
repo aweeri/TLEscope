@@ -51,6 +51,12 @@ typedef struct
     bool placeholder;         /* true = UI only, no render effect yet */
 } LayerDef;
 
+static const char GRID_ENABLED_KEY[] = "layers.latlon_grid";
+static const char GRID_SPACING_KEY[] = "layers.latlon_grid_spacing";
+static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
+static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60°" };
+#define GRID_SPACING_COUNT (sizeof(GRID_SPACINGS) / sizeof(GRID_SPACINGS[0]))
+
 static const LayerDef s_layers[] = {
     /* -- Universal (both 2D map and 3D globe) ------------------------------ */
     { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false },
@@ -62,7 +68,7 @@ static const LayerDef s_layers[] = {
 
     /* -- 2D map only ------------------------------------------------------- */
     { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
-    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a 30-degree latitude/longitude grid on the map", LAYER_2D, -1, "layers.latlon_grid", false },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a configurable latitude/longitude coordinate grid on the map", LAYER_2D, -1, GRID_ENABLED_KEY, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
     { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false },
@@ -71,6 +77,20 @@ static const LayerDef s_layers[] = {
 };
 
 #define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
+
+static int GridSpacingIndex(int spacing)
+{
+    for (size_t i = 0; i < GRID_SPACING_COUNT; i++)
+        if (GRID_SPACINGS[i] == spacing)
+            return (int)i;
+    return 2; /* 30 degrees */
+}
+
+static int GetGridSpacing(AppConfig *cfg)
+{
+    const int spacing = ToolSettingGetInt(cfg, GRID_SPACING_KEY, 30);
+    return GRID_SPACINGS[GridSpacingIndex(spacing)];
+}
 
 void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 {
@@ -151,8 +171,24 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     const LayerScope active_scope = is_2d ? LAYER_2D : LAYER_3D;
     DrawSectionHeader(is_2d ? "2D Map" : "3D Globe");
     for (size_t i = 0; i < LAYER_COUNT; i++)
-        if (s_layers[i].scope == active_scope)
-            DrawLayerDef(&s_layers[i]);
+    {
+        if (s_layers[i].scope != active_scope)
+            continue;
+
+        const float row_avail = ImGui::GetContentRegionAvail().x;
+        DrawLayerDef(&s_layers[i]);
+
+        if (is_2d && s_layers[i].settings_key == GRID_ENABLED_KEY)
+        {
+            int spacing_index = GridSpacingIndex(ToolSettingGetInt(cfg, GRID_SPACING_KEY, 30));
+            ImGui::SameLine(row_avail - combo_w);
+            ImGui::SetNextItemWidth(combo_w);
+            if (ImGui::Combo("##grid_spacing", &spacing_index, GRID_SPACING_LABELS, (int)GRID_SPACING_COUNT))
+                ToolSettingSetInt(cfg, GRID_SPACING_KEY, GRID_SPACINGS[spacing_index]);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Angular coordinate spacing; this equirectangular map does not preserve equal physical distance");
+        }
+    }
 
     if (is_2d)
     {
@@ -200,7 +236,7 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         }
     }
 
-    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, "layers.latlon_grid", false))
+    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, GRID_ENABLED_KEY, false))
     {
         float zoom = sctx->camera2d->zoom;
         if (zoom < 0.10f)
@@ -214,8 +250,11 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         Color strong_color = g_theme.ui.text_main;
         strong_color.a = (unsigned char)(strong_color.a * 0.28f);
 
-        for (int lon = -150; lon <= 150; lon += 30)
+        const int spacing = GetGridSpacing(cfg);
+        const int lon_steps = (180 - 1) / spacing;
+        for (int step = -lon_steps; step <= lon_steps; step++)
         {
+            const int lon = step * spacing;
             const float x = ((float)lon / 360.0f) * sctx->map_w;
             const bool prime_meridian = lon == 0;
             DrawLineEx(
@@ -225,8 +264,10 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
                 prime_meridian ? strong_color : thin_color);
         }
 
-        for (int lat = -60; lat <= 60; lat += 30)
+        const int lat_steps = (90 - 1) / spacing;
+        for (int step = -lat_steps; step <= lat_steps; step++)
         {
+            const int lat = step * spacing;
             const float y = -((float)lat / 180.0f) * sctx->map_h;
             const bool equator = lat == 0;
             DrawLineEx(
