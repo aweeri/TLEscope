@@ -697,6 +697,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
      * whenever cfg->reload_theme triggers a theme switch. */
     static bool imgui_inited = false;
     static float last_ui_scale = 0.0f;
+    static float last_dpi_scale = 0.0f;
+    const float dpi_scale = GetWindowScaleDPI().y;
     if (!imgui_inited) {
         rlImGuiBeginInitImGui();
         rlImGuiEndInitImGui();
@@ -706,10 +708,12 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
         imgui_inited = true;
         last_ui_scale = cfg->ui_scale;
+        last_dpi_scale = dpi_scale;
     }
-    else if (cfg->ui_scale != last_ui_scale)
+    else if (cfg->ui_scale != last_ui_scale || dpi_scale != last_dpi_scale)
     {
         last_ui_scale = cfg->ui_scale;
+        last_dpi_scale = dpi_scale;
         /* the UI scale is baked into the font atlas, so a scale change
          * requires rebuilding the fonts (not just re-applying the style) */
         ThemeRebuildImGuiFonts(&g_theme, cfg->ui_scale);

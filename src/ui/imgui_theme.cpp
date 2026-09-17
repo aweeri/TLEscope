@@ -165,6 +165,9 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     font_cfg.FontDataOwnedByAtlas = true;
     font_cfg.MergeMode = false;
     font_cfg.PixelSnapH = true;
+    /* Keep logical font metrics unchanged; rasterize for the framebuffer's
+     * pixel density. raylib/rlImGui handle window and input scaling. */
+    font_cfg.RasterizerDensity = GetWindowScaleDPI().y;
     io.Fonts->AddFontFromFileTTF(font_path, t->font.size * ui_scale, &font_cfg, NULL);
 
     /* merge FontAwesome icons */
@@ -172,6 +175,7 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     icons_cfg.MergeMode = true;
     icons_cfg.FontDataOwnedByAtlas = true;
     icons_cfg.PixelSnapH = true;
+    icons_cfg.RasterizerDensity = font_cfg.RasterizerDensity;
     static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
     io.Fonts->AddFontFromMemoryCompressedTTF(
         fa_solid_900_compressed_data,

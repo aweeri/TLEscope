@@ -76,6 +76,8 @@ $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp
 
 all: linux
 
+build/main.o: src/render/map_view.h
+
 # Build raylib from the git submodule into a static library (lib/raylib/src/libraylib.a)
 # Extra args can be passed via RAYLIB_MAKE_ARGS, e.g. for cross-compiling:
 #   make raylib RAYLIB_MAKE_ARGS="CC=aarch64-linux-gnu-gcc PLATFORM_OS=LINUX"
