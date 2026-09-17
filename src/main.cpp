@@ -28,6 +28,7 @@
 #include "render/shaders.h"
 #include "render/coverage_shaders.h"
 #include "render/coverage_mesh.h"
+#include "render/map_view.h"
 
 /* application state and resources */
 static AppConfig cfg = []() -> AppConfig {
@@ -352,7 +353,7 @@ int main(void)
     NotifyLoadSettings(&cfg);  /* restore persisted notification toggles */
 
     /* window setup and msaa */
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
 
 #ifndef TLESCOPE_VERSION
 #define TLESCOPE_VERSION "vUnknown"
@@ -1401,7 +1402,7 @@ int main(void)
         /* 2d projection rendering */
         if (is_2d_view)
         {
-            BeginMode2D(Camera2DParams);
+            BeginMapMode2D(Camera2DParams);
             if (cfg.show_night_lights)
             {
                 BeginShaderMode(shader2D);
