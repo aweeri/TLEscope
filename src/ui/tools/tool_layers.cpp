@@ -12,11 +12,14 @@
 #include "map_detail_data.h"
 
 #include <raylib.h>
-#include <math.h>   /* fabsf, fmaxf */
+#include <raymath.h> /* DEG2RAD for the 3D sphere mapping */
+#include <rlgl.h>    /* batched line submission for the 3D overlays */
+#include <math.h>    /* fabsf, fmaxf, cosf, sinf */
 #include <stddef.h> /* offsetof */
 #include <stdio.h>  /* snprintf */
 #include <float.h>  /* FLT_MAX */
 #include <string.h> /* strcmp */
+#include <vector>
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
@@ -56,9 +59,10 @@ typedef struct
     const char *mode_key;     /* tool-settings key for a Sel/All scope combo, or NULL */
 } LayerDef;
 
-/* persisted lat/lon grid keys (ToolSettings store, see tools_settings.h) */
+/* persisted map overlay keys (ToolSettings store, see tools_settings.h) */
 #define GRID_KEY_ENABLED "layers.latlon_grid"
 #define GRID_KEY_SPACING "layers.latlon_grid_spacing"
+#define COAST_KEY_ENABLED "layers.coast_lines"
 #define BORDER_KEY_ENABLED "layers.country_borders"
 
 static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
@@ -74,10 +78,10 @@ static const LayerDef s_layers[] = {
     { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false, NULL },
     { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false, LAYERS_KEY_GC_MODE },
     { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false, NULL },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map and globe", LAYER_UNIVERSAL, -1, COAST_KEY_ENABLED, false, NULL },
+    { "Country Borders",   ICON_FA_DRAW_POLYGON, "Show country borders on the map and globe", LAYER_UNIVERSAL, -1, BORDER_KEY_ENABLED, false, NULL },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map", LAYER_2D, -1, "layers.coast_lines", false },
-    { "Country Borders",   ICON_FA_DRAW_POLYGON, "Show country borders on the map", LAYER_2D, -1, BORDER_KEY_ENABLED, false },
     { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
@@ -282,17 +286,108 @@ static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *p
     }
 }
 
+/* -- 3D globe rendering of the same overlays ------------------------------- */
+
+/* radial lift (km) that clears the 80x80 Earth mesh's faceting (its chord sag
+ * is ~6 km) so the lines sit above the surface instead of z-fighting it */
+#define MAP_DETAIL_LIFT_KM 6.5f
+
+#define DETAIL_POINT_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
+
+/** Earth-fixed sphere positions (rotation 0) for one MapDetail point set */
+static std::vector<Vector3> BuildDetailSphereVerts(const MapDetailPoint *points, int count)
+{
+    const float r = (EARTH_RADIUS_KM + MAP_DETAIL_LIFT_KM) / DRAW_SCALE;
+    std::vector<Vector3> verts(count);
+    for (int i = 0; i < count; i++)
+    {
+        const float lat = (points[i].lat100 / 100.0f) * DEG2RAD;
+        const float lon = (points[i].lon100 / 100.0f) * DEG2RAD;
+        const float cl = cosf(lat);
+        verts[i] = { cl * cosf(lon) * r, sinf(lat) * r, -cl * sinf(lon) * r };
+    }
+    return verts;
+}
+
+/** one batched line pass for a precomputed point set, spun with the globe */
+static void DrawDetailLines3D(const std::vector<Vector3> &verts,
+                              const MapDetailLine *lines, int line_count,
+                              Color color, float rot_rad)
+{
+    if (verts.empty())
+        return;
+
+    const float cr = cosf(rot_rad);
+    const float sr = sinf(rot_rad);
+
+    rlBegin(RL_LINES);
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    for (int i = 0; i < line_count; i++)
+    {
+        const int end = lines[i].start + lines[i].count;
+        for (int p = lines[i].start; p + 1 < end; p++)
+        {
+            const Vector3 a = verts[p];
+            const Vector3 b = verts[p + 1];
+            /* rotate about +Y by the globe's sidereal angle (matches earthModel) */
+            rlVertex3f(a.x * cr + a.z * sr, a.y, -a.x * sr + a.z * cr);
+            rlVertex3f(b.x * cr + b.z * sr, b.y, -b.x * sr + b.z * cr);
+        }
+    }
+    rlEnd();
+}
+
+/**
+ * Draws coastlines/borders on the 3D globe. The sphere positions are built
+ * once; each frame only the sidereal rotation is applied and the segments are
+ * submitted as one batched RL_LINES pass, so depth testing occludes the far
+ * side against the Earth model drawn before the scene hooks.
+ */
+static void DrawMapDetailLines3D(const SceneContext *sctx, AppConfig *cfg)
+{
+    const bool show_coast = ToolSettingGetBool(cfg, COAST_KEY_ENABLED, false);
+    const bool show_border = ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false);
+    if (!show_coast && !show_border)
+        return;
+
+    static const std::vector<Vector3> coast_verts =
+        BuildDetailSphereVerts(MAP_COAST_POINTS, DETAIL_POINT_COUNT(MAP_COAST_POINTS));
+    static const std::vector<Vector3> border_verts =
+        BuildDetailSphereVerts(MAP_BORDER_POINTS, DETAIL_POINT_COUNT(MAP_BORDER_POINTS));
+
+    const float rot_rad = (float)((sctx->gmst_deg + sctx->earth_rotation_offset) * DEG2RAD);
+
+    rlDrawRenderBatchActive();
+    if (show_coast)
+    {
+        Color c = g_theme.ui.text_main;
+        c.a = (unsigned char)(c.a * 0.5f);
+        DrawDetailLines3D(coast_verts, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, c, rot_rad);
+    }
+    if (show_border)
+    {
+        Color c = g_theme.ui.text_main;
+        c.a = (unsigned char)(c.a * 0.20f);
+        DrawDetailLines3D(border_verts, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, c, rot_rad);
+    }
+    rlDrawRenderBatchActive();
+}
+
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
     if (sctx->is_2d_view && sctx->camera2d)
     {
         const float zoom = fmaxf(sctx->camera2d->zoom, 0.10f);
 
-        if (ToolSettingGetBool(cfg, "layers.coast_lines", false))
+        if (ToolSettingGetBool(cfg, COAST_KEY_ENABLED, false))
             DrawMapDetailLines(sctx, MAP_COAST_POINTS, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, 1.0f / zoom, 0.5f);
 
         if (ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false))
             DrawMapDetailLines(sctx, MAP_BORDER_POINTS, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, 0.8f / zoom, 0.20f);
+    }
+    else if (!sctx->is_2d_view)
+    {
+        DrawMapDetailLines3D(sctx, cfg);
     }
 
     if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
