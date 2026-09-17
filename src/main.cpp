@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <algorithm>
 #include <math.h>
 #include <raylib.h>
 #include <raymath.h>
@@ -25,6 +26,8 @@
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
 #include "render/shaders.h"
+#include "render/coverage_shaders.h"
+#include "render/coverage_mesh.h"
 
 /* application state and resources */
 static AppConfig cfg = []() -> AppConfig {
@@ -50,6 +53,56 @@ static Font customFont;
 static Texture2D satIcon, markerIcon, earthTexture, moonTexture, cloudTexture, earthNightTexture, skyboxTexture;
 static Texture2D periMark, apoMark;
 static Model earthModel, moonModel, cloudModel, atmosphereModel, skyboxModel;
+
+/* Ground coverage shader resources */
+static struct {
+    Shader shader3D;
+    Shader shader2D;
+    
+    /* Uniform locations for 3D shader */
+    int satPosLoc;
+    int colorLoc;
+    int borderColorLoc;
+    int depthBiasLoc;
+    int edgeFalloffLoc;
+    int cameraPosLoc;
+    
+    /* Uniform locations for 2D shader */
+    int colorLoc2D;
+    int borderColorLoc2D;
+    int edgeFalloffLoc2D;
+} g_coverage_shaders;
+
+/* Fraction of the highlight color blended into the coverage fill; half-way
+ * stays subtle, and alpha is preserved so the fill remains see-through. */
+#define COVERAGE_SELECT_TINT 0.50f
+#define COVERAGE_HOVER_TINT  0.50f
+
+/** Blends `tint` into `base` by `amount` while preserving `base`'s alpha so
+ *  the footprint stays transparent. */
+static Color CoverageTintFill(Color base, Color tint, float amount)
+{
+    Color out;
+    out.r = (unsigned char)(base.r + (tint.r - base.r) * amount);
+    out.g = (unsigned char)(base.g + (tint.g - base.g) * amount);
+    out.b = (unsigned char)(base.b + (tint.b - base.b) * amount);
+    out.a = base.a;
+    return out;
+}
+
+/** Selected-coverage fill: blend the selection color into `base` while
+ *  preserving `base`'s alpha so the footprint stays transparent. */
+static Color CoverageSelectFill(Color base)
+{
+    return CoverageTintFill(base, g_theme.world.sat_selected, COVERAGE_SELECT_TINT);
+}
+
+/** Hovered-coverage fill: blend the hover color into `base` while preserving
+ *  `base`'s alpha so the footprint stays transparent. */
+static Color CoverageHoverFill(Color base)
+{
+    return CoverageTintFill(base, g_theme.world.sat_highlighted, COVERAGE_HOVER_TINT);
+}
 
 /** manual mesh generation for the planetary spheres */
 static Mesh GenEarthMesh(float radius, int slices, int rings)
@@ -464,6 +517,30 @@ int main(void)
     SetShaderValue(shader2D, GetShaderLocation(shader2D, "moonRadius"), &draw_moon_radius, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shaderCloud, GetShaderLocation(shaderCloud, "earthRadius"), &draw_cloud_radius, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shaderCloud, GetShaderLocation(shaderCloud, "moonRadius"), &draw_moon_radius, SHADER_UNIFORM_FLOAT);
+
+    /* Ground coverage shaders */
+    LOG_INFO("Compiling ground coverage shaders...");
+    g_coverage_shaders.shader3D = LoadShaderFromMemory(CoverageShaders::vsCoverage3D, CoverageShaders::fsCoverage3D);
+    g_coverage_shaders.shader2D = LoadShaderFromMemory(NULL, CoverageShaders::fsCoverage2D);
+    
+    g_coverage_shaders.satPosLoc = GetShaderLocation(g_coverage_shaders.shader3D, "satPosition");
+    g_coverage_shaders.colorLoc = GetShaderLocation(g_coverage_shaders.shader3D, "coverageColor");
+    g_coverage_shaders.borderColorLoc = GetShaderLocation(g_coverage_shaders.shader3D, "borderColor");
+    g_coverage_shaders.depthBiasLoc = GetShaderLocation(g_coverage_shaders.shader3D, "depthBias");
+    g_coverage_shaders.edgeFalloffLoc = GetShaderLocation(g_coverage_shaders.shader3D, "edgeFalloff");
+    g_coverage_shaders.cameraPosLoc = GetShaderLocation(g_coverage_shaders.shader3D, "cameraPos");
+    
+    g_coverage_shaders.colorLoc2D = GetShaderLocation(g_coverage_shaders.shader2D, "coverageColor");
+    g_coverage_shaders.borderColorLoc2D = GetShaderLocation(g_coverage_shaders.shader2D, "borderColor");
+    g_coverage_shaders.edgeFalloffLoc2D = GetShaderLocation(g_coverage_shaders.shader2D, "edgeFalloff");
+    
+    /* Set static uniforms */
+    float depthBias = 0.00001f;
+    /* Hard, crisp edge by default (0 = pure ~1 px fwidth()-based anti-aliasing). */
+    float edgeFalloff = 0.0f;
+    SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.depthBiasLoc, &depthBias, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.edgeFalloffLoc, &edgeFalloff, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_coverage_shaders.shader2D, g_coverage_shaders.edgeFalloffLoc2D, &edgeFalloff, SHADER_UNIFORM_FLOAT);
 
     DrawLoadingScreen(0.95f, "Finalizing UI...", logoTex);
     LOG_INFO("Finalizing UI textures...");
@@ -1290,37 +1367,9 @@ int main(void)
             Camera3DParams.up = upVec;
         }
 
-/* calculate radio footprint (visibility cone) */
-#define FP_RINGS 12
-#define FP_PTS 120
-
-        /* compute a footprint grid for a satellite; returns false if none exists */
-        auto ComputeFootprintGrid = [](const Satellite *sat, Vector3 grid[FP_RINGS + 1][FP_PTS]) -> bool {
-            if (!sat || !sat->is_active)
-                return false;
-            float r = Vector3Length(sat->current_pos);
-            if (r <= EARTH_RADIUS_KM)
-                return false;
-            float theta = acosf(EARTH_RADIUS_KM / r);
-            Vector3 s_norm = Vector3Normalize(sat->current_pos);
-            Vector3 up = fabsf(s_norm.y) > 0.99f ? (Vector3){1, 0, 0} : (Vector3){0, 1, 0};
-            Vector3 u = Vector3Normalize(Vector3CrossProduct(up, s_norm));
-            Vector3 v = Vector3CrossProduct(s_norm, u);
-            for (int i = 0; i <= FP_RINGS; i++)
-            {
-                float a = theta * ((float)i / FP_RINGS);
-                float d_plane = EARTH_RADIUS_KM * cosf(a), r_circle = EARTH_RADIUS_KM * sinf(a);
-                for (int k = 0; k < FP_PTS; k++)
-                {
-                    float alpha = (2.0f * PI * k) / FP_PTS;
-                    grid[i][k] = Vector3Add(Vector3Scale(s_norm, d_plane), Vector3Add(Vector3Scale(u, cosf(alpha) * r_circle), Vector3Scale(v, sinf(alpha) * r_circle)));
-                }
-            }
-            return true;
-        };
-
-        Vector3 fp_grid[FP_RINGS + 1][FP_PTS];
-        bool has_footprint = ComputeFootprintGrid(active_sat, fp_grid);
+/* maximum cached coverage cap tessellation (matches COVERAGE_LOD_HIGH) */
+#define FP2D_MAX_RINGS 12
+#define FP2D_MAX_SEGS 60
 
         /* ground coverage scope: Sel (active satellite only) or All (every active satellite) */
         int gc_mode = ToolSettingGetInt(&cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
@@ -1398,76 +1447,219 @@ int main(void)
             {
                 BeginScissorMode(sc_x, sc_y, sc_w, sc_h);
 
-                /* draw 2d footprint */
-                auto draw_footprint_2d = [&](const Vector3 grid[FP_RINGS + 1][FP_PTS]) {
-                    for (int i = 0; i < FP_RINGS; i++)
-                    {
-                        for (int k = 0; k < FP_PTS; k++)
-                        {
-                            int next = (k + 1) % FP_PTS;
-                            float x1, y1, x2, y2, x3, y3, x4, y4;
-                            get_map_coordinates(grid[i][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
-                            get_map_coordinates(grid[i][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
-                            get_map_coordinates(grid[i + 1][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x3, &y3);
-                            get_map_coordinates(grid[i + 1][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x4, &y4);
-
-                            if (x2 - x1 > map_w * 0.6f)
-                                x2 -= map_w;
-                            else if (x2 - x1 < -map_w * 0.6f)
-                                x2 += map_w;
-                            if (x3 - x1 > map_w * 0.6f)
-                                x3 -= map_w;
-                            else if (x3 - x1 < -map_w * 0.6f)
-                                x3 += map_w;
-                            if (x4 - x1 > map_w * 0.6f)
-                                x4 -= map_w;
-                            else if (x4 - x1 < -map_w * 0.6f)
-                                x4 += map_w;
-
-                            for (int offset_i = -1; offset_i <= 1; offset_i++)
-                            {
-                                float x_off = offset_i * map_w;
-                                DrawTriangle((Vector2){x1 + x_off, y1}, (Vector2){x3 + x_off, y3}, (Vector2){x2 + x_off, y2}, g_theme.world.footprint_bg);
-                                DrawTriangle((Vector2){x2 + x_off, y2}, (Vector2){x3 + x_off, y3}, (Vector2){x4 + x_off, y4}, g_theme.world.footprint_bg);
-                            }
-                        }
-                    }
-                    for (int k = 0; k < FP_PTS; k++)
-                    {
-                        int next = (k + 1) % FP_PTS;
-                        float x1, y1, x2, y2;
-                        get_map_coordinates(grid[FP_RINGS][k], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x1, &y1);
-                        get_map_coordinates(grid[FP_RINGS][next], gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &x2, &y2);
-                        if (x2 - x1 > map_w * 0.6f)
-                            x2 -= map_w;
-                        else if (x2 - x1 < -map_w * 0.6f)
-                            x2 += map_w;
-                        for (int offset_i = -1; offset_i <= 1; offset_i++)
-                        {
-                            if (fabs(x2 - x1) < map_w * 0.6f)
-                            {
-                                DrawLineEx((Vector2){x1 + offset_i * map_w, y1}, (Vector2){x2 + offset_i * map_w, y2}, 2.0f / Camera2DParams.zoom, g_theme.world.footprint_border);
-                            }
-                        }
-                    }
-                };
-
                 if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
                 {
-                    if (gc_mode == LAYERS_GC_MODE_ALL)
+                    Vector4 gc_color_2d = {
+                        g_theme.world.footprint_bg.r / 255.0f,
+                        g_theme.world.footprint_bg.g / 255.0f,
+                        g_theme.world.footprint_bg.b / 255.0f,
+                        g_theme.world.footprint_bg.a / 255.0f
+                    };
+                    SetShaderValue(g_coverage_shaders.shader2D, g_coverage_shaders.colorLoc2D,
+                                   &gc_color_2d, SHADER_UNIFORM_VEC4);
+
+                    Vector4 gc_border_2d = {
+                        g_theme.world.footprint_border.r / 255.0f,
+                        g_theme.world.footprint_border.g / 255.0f,
+                        g_theme.world.footprint_border.b / 255.0f,
+                        g_theme.world.footprint_border.a / 255.0f
+                    };
+                    SetShaderValue(g_coverage_shaders.shader2D, g_coverage_shaders.borderColorLoc2D,
+                                   &gc_border_2d, SHADER_UNIFORM_VEC4);
+
+                    /* visible map region (camera view ∩ map rect) for culling */
+                    Vector2 vis_a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, Camera2DParams);
+                    Vector2 vis_b = GetScreenToWorld2D((Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()}, Camera2DParams);
+                    float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
+                    float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
+                    float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
+                    float clip_max_y = fminf(fmaxf(vis_a.y, vis_b.y), map_h * 0.5f);
+
+                    if (clip_min_x < clip_max_x && clip_min_y < clip_max_y)
                     {
-                        for (int i = 0; i < sat_count; i++)
+                        int gc_first = 0;
+                        int gc_last = sat_count;
+
+                        /* emit one satellite's cap (all visible wrap copies) */
+                        auto draw_coverage_2d = [&](const Satellite *sat) {
+                            if (!sat->is_active)
+                                return;
+
+                            float sat_r = Vector3Length(sat->current_pos);
+                            if (sat_r <= EARTH_RADIUS_KM)
+                                return;
+
+                            float theta = acosf(EARTH_RADIUS_KM / sat_r);
+                            Vector3 s_norm = Vector3Normalize(sat->current_pos);
+
+                            /* cap centre on the map (sub-satellite point) */
+                            float cx, cy;
+                            get_map_coordinates(sat->current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &cx, &cy);
+
+ 
+                            float phi_c = acosf(fminf(fmaxf(s_norm.y, -1.0f), 1.0f));
+                            float dlon_max = PI;
+                            if (phi_c >= theta && phi_c <= PI - theta)
+                                dlon_max = asinf(fminf(1.0f, sinf(theta) / sinf(phi_c)));
+                            float rx = (dlon_max / (2.0f * PI)) * map_w + 1.0f;
+                            float ry = (theta / PI) * map_h + 1.0f;
+
+                            /* which of the three map-wrap copies are on screen? */
+                            bool copy_visible[3] = {false, false, false};
+                            bool any_visible = false;
+                            for (int oi = -1; oi <= 1; oi++)
+                            {
+                                float x_off = oi * map_w;
+                                if (cx + x_off - rx < clip_max_x && cx + x_off + rx > clip_min_x &&
+                                    cy - ry < clip_max_y && cy + ry > clip_min_y)
+                                {
+                                    copy_visible[oi + 1] = true;
+                                    any_visible = true;
+                                }
+                            }
+                            if (!any_visible)
+                                return;
+
+                            /* cached cap geometry + 2D LOD (no per-frame rebuild) */
+                            CoverageMeshLOD lod = SelectCoverageLOD2D(sat, Camera2DParams.zoom, map_w);
+                            const CoverageCapData *cap = GetCachedCoverageCap(sat_r - EARTH_RADIUS_KM, lod);
+                            if (!cap || cap->rings < 1 || cap->segments < 3)
+                                return;
+
+                            /* basis matching the cached mesh (local +Y = sub-satellite) */
+                            Vector3 basis_up = fabsf(s_norm.y) > 0.99f ? (Vector3){1, 0, 0} : (Vector3){0, 1, 0};
+                            Vector3 basis_u = Vector3Normalize(Vector3CrossProduct(basis_up, s_norm));
+                            Vector3 basis_v = Vector3CrossProduct(s_norm, basis_u);
+
+                            int rings = cap->rings;
+                            int segments = cap->segments;
+                            float proj_x[FP2D_MAX_RINGS + 1][FP2D_MAX_SEGS];
+                            float proj_y[FP2D_MAX_RINGS + 1][FP2D_MAX_SEGS];
+
+                            /* project each cap vertex once, not four times per quad */
+                            for (int ring = 0; ring <= rings; ring++)
+                            {
+                                for (int seg = 0; seg < segments; seg++)
+                                {
+                                    const float *L = &cap->vertices[(ring * segments + seg) * 3];
+                                    Vector3 world_draw = Vector3Add(
+                                        Vector3Add(Vector3Scale(basis_u, L[0]), Vector3Scale(s_norm, L[1])),
+                                        Vector3Scale(basis_v, L[2]));
+                                    Vector3 pos_km = Vector3Scale(world_draw, DRAW_SCALE);
+                                    get_map_coordinates(pos_km, gmst_deg, cfg.earth_rotation_offset, map_w, map_h,
+                                                        &proj_x[ring][seg], &proj_y[ring][seg]);
+                                }
+                            }
+
+                            for (int ring = 0; ring < rings; ring++)
+                            {
+                                float r_inner = (float)ring / rings;
+                                float r_outer = (float)(ring + 1) / rings;
+                                for (int seg = 0; seg < segments; seg++)
+                                {
+                                    int next = (seg + 1) % segments;
+                                    float x1 = proj_x[ring][seg],      y1 = proj_y[ring][seg];
+                                    float x2 = proj_x[ring][next],     y2 = proj_y[ring][next];
+                                    float x3 = proj_x[ring + 1][seg],  y3 = proj_y[ring + 1][seg];
+                                    float x4 = proj_x[ring + 1][next], y4 = proj_y[ring + 1][next];
+
+                                    /* anchor to x1 so the antimeridian seam stays contiguous */
+                                    if (x2 - x1 > map_w * 0.6f)
+                                        x2 -= map_w;
+                                    else if (x2 - x1 < -map_w * 0.6f)
+                                        x2 += map_w;
+                                    if (x3 - x1 > map_w * 0.6f)
+                                        x3 -= map_w;
+                                    else if (x3 - x1 < -map_w * 0.6f)
+                                        x3 += map_w;
+                                    if (x4 - x1 > map_w * 0.6f)
+                                        x4 -= map_w;
+                                    else if (x4 - x1 < -map_w * 0.6f)
+                                        x4 += map_w;
+
+
+                                    float qmin_x = fminf(fminf(x1, x2), fminf(x3, x4));
+                                    float qmax_x = fmaxf(fmaxf(x1, x2), fmaxf(x3, x4));
+                                    float qmin_y = fminf(fminf(y1, y2), fminf(y3, y4));
+                                    float qmax_y = fmaxf(fmaxf(y1, y2), fmaxf(y3, y4));
+
+                                    for (int oi = 0; oi < 3; oi++)
+                                    {
+
+                                        if (!copy_visible[oi])
+                                            continue;
+                                        float x_off = (oi - 1) * map_w;
+                                        if (qmin_x + x_off >= clip_max_x || qmax_x + x_off <= clip_min_x ||
+                                            qmin_y >= clip_max_y || qmax_y <= clip_min_y)
+                                            continue;
+                                        rlColor4ub(255, 255, 255, 255);
+                                        rlTexCoord2f(r_inner, 0.0f); rlVertex2f(x1 + x_off, y1);
+                                        rlTexCoord2f(r_outer, 0.0f); rlVertex2f(x3 + x_off, y3);
+                                        rlTexCoord2f(r_inner, 0.0f); rlVertex2f(x2 + x_off, y2);
+                                        rlTexCoord2f(r_inner, 0.0f); rlVertex2f(x2 + x_off, y2);
+                                        rlTexCoord2f(r_outer, 0.0f); rlVertex2f(x3 + x_off, y3);
+                                        rlTexCoord2f(r_outer, 0.0f); rlVertex2f(x4 + x_off, y4);
+                                    }
+                                }
+                            }
+                        };
+
+                        auto draw_highlighted_2d = [&](const Satellite *sat, Color fill, Color border) {
+                            Vector4 gc_fill = {
+                                fill.r / 255.0f,
+                                fill.g / 255.0f,
+                                fill.b / 255.0f,
+                                fill.a / 255.0f
+                            };
+                            SetShaderValue(g_coverage_shaders.shader2D,
+                                           g_coverage_shaders.colorLoc2D,
+                                           &gc_fill, SHADER_UNIFORM_VEC4);
+
+                            Vector4 gc_border = {
+                                border.r / 255.0f,
+                                border.g / 255.0f,
+                                border.b / 255.0f,
+                                border.a / 255.0f
+                            };
+                            SetShaderValue(g_coverage_shaders.shader2D,
+                                           g_coverage_shaders.borderColorLoc2D,
+                                           &gc_border, SHADER_UNIFORM_VEC4);
+
+                            BeginShaderMode(g_coverage_shaders.shader2D);
+                            rlBegin(RL_TRIANGLES);
+                            draw_coverage_2d(sat);
+                            rlEnd();
+                            EndShaderMode();
+                        };
+
+                        if (gc_mode == LAYERS_GC_MODE_ALL)
                         {
-                            if (!satellites[i].is_active)
-                                continue;
-                            Vector3 grid[FP_RINGS + 1][FP_PTS];
-                            if (ComputeFootprintGrid(&satellites[i], grid))
-                                draw_footprint_2d(grid);
+                            BeginShaderMode(g_coverage_shaders.shader2D);
+                            rlBegin(RL_TRIANGLES);
+                            for (int i = gc_first; i < gc_last; i++)
+                            {
+                                const Satellite *sat = &satellites[i];
+                                if (sat == selected_sat || sat == hovered_sat)
+                                    continue; /* highlighted in a batch below */
+                                draw_coverage_2d(sat);
+                            }
+                            rlEnd();
+                            EndShaderMode();
                         }
-                    }
-                    else if (active_sat && has_footprint && active_sat->is_active)
-                    {
-                        draw_footprint_2d(fp_grid);
+
+                        if (hovered_sat != NULL && hovered_sat != selected_sat && hovered_sat->is_active)
+                        {
+                            draw_highlighted_2d(hovered_sat,
+                                                CoverageHoverFill(g_theme.world.footprint_bg),
+                                                g_theme.world.sat_highlighted);
+                        }
+
+                        if (selected_sat != NULL && selected_sat->is_active)
+                        {
+                            draw_highlighted_2d(selected_sat,
+                                                CoverageSelectFill(g_theme.world.footprint_bg),
+                                                g_theme.world.sat_selected);
+                        }
                     }
                 }
 
@@ -1710,7 +1902,11 @@ int main(void)
                 cloudModel.materials[0].shader = defaultCloudShader;
             }
 
+            rlDrawRenderBatchActive();
+            rlDisableDepthMask();
             DrawModel(cloudModel, Vector3Zero(), 1.0f, WHITE);
+            rlDrawRenderBatchActive();
+            rlEnableDepthMask();
         }
 
         /* atmospheric layer rendering */
@@ -1719,7 +1915,13 @@ int main(void)
             atmosphereModel.transform = MatrixRotateY(earth_rot_rad);
             SetShaderValue(shaderAtmosphere, sunDirLocAtmosphere, &sunEcef, SHADER_UNIFORM_VEC3);
             SetShaderValue(shaderAtmosphere, viewPosLocAtmosphere, &viewEcef, SHADER_UNIFORM_VEC3);
+            /* Same reasoning as the cloud shell: the atmosphere is a transparent
+             * glow and must not occlude the ground coverage. */
+            rlDrawRenderBatchActive();
+            rlDisableDepthMask();
             DrawModel(atmosphereModel, Vector3Zero(), 1.0f, WHITE);
+            rlDrawRenderBatchActive();
+            rlEnableDepthMask();
         }
 
         Vector3 sunDirWorld = Vector3Normalize(calculate_sun_position(current_epoch));
@@ -1737,43 +1939,117 @@ int main(void)
             DrawSphere(sun_pos_3d, sun_radius * 3.0f, ApplyAlpha((Color){ 255, 240, 200, 255 }, 0.25f));
             DrawSphere(sun_pos_3d, sun_radius * 1.5f, (Color){ 255, 255, 220, 255 });
 
-            /* 3d footprint triangles */
-            auto draw_footprint_3d = [&](const Vector3 grid[FP_RINGS + 1][FP_PTS]) {
-                for (int i = 0; i < FP_RINGS; i++)
-                {
-                    for (int k = 0; k < FP_PTS; k++)
-                    {
-                        int next = (k + 1) % FP_PTS;
-                        Vector3 p1 = Vector3Scale(grid[i][k], 1.02f / DRAW_SCALE), p2 = Vector3Scale(grid[i][next], 1.02f / DRAW_SCALE);
-                        Vector3 p3 = Vector3Scale(grid[i + 1][k], 1.02f / DRAW_SCALE), p4 = Vector3Scale(grid[i + 1][next], 1.02f / DRAW_SCALE);
-                        DrawTriangle3D(p1, p3, p2, g_theme.world.footprint_bg);
-                        DrawTriangle3D(p2, p3, p4, g_theme.world.footprint_bg);
-                    }
-                }
-                for (int k = 0; k < FP_PTS; k++)
-                {
-                    int next = (k + 1) % FP_PTS;
-                    DrawLine3D(Vector3Scale(grid[FP_RINGS][k], 1.02f / DRAW_SCALE), Vector3Scale(grid[FP_RINGS][next], 1.02f / DRAW_SCALE), g_theme.world.footprint_border);
-                }
-            };
-
+            /* Shader-based ground coverage rendering (3D) */
             if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
             {
+                SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.cameraPosLoc,
+                               &Camera3DParams.position, SHADER_UNIFORM_VEC3);
+                
+                Satellite *visible_sats[MAX_SATELLITES];
+                int visible_count = 0;
+                
                 if (gc_mode == LAYERS_GC_MODE_ALL)
                 {
                     for (int i = 0; i < sat_count; i++)
                     {
                         if (!satellites[i].is_active)
                             continue;
-                        Vector3 grid[FP_RINGS + 1][FP_PTS];
-                        if (ComputeFootprintGrid(&satellites[i], grid))
-                            draw_footprint_3d(grid);
+                        if (IsCoverageVisible(&satellites[i], Camera3DParams))
+                        {
+                            visible_sats[visible_count++] = &satellites[i];
+                        }
                     }
                 }
-                else if (active_sat && has_footprint && active_sat->is_active)
+                else
                 {
-                    draw_footprint_3d(fp_grid);
+                    /* Sel mode: selected sat, plus hovered as extra highlight */
+                    if (selected_sat && selected_sat->is_active &&
+                        IsCoverageVisible(selected_sat, Camera3DParams))
+                    {
+                        visible_sats[visible_count++] = selected_sat;
+                    }
+                    if (hovered_sat && hovered_sat != selected_sat && hovered_sat->is_active &&
+                        IsCoverageVisible(hovered_sat, Camera3DParams))
+                    {
+                        visible_sats[visible_count++] = hovered_sat;
+                    }
                 }
+                
+                std::sort(visible_sats, visible_sats + visible_count, [&](Satellite *a, Satellite *b) {
+                    auto rank = [&](Satellite *s) -> int {
+                        if (s == selected_sat) return 2; /* selected draws last */
+                        if (s == hovered_sat)  return 1; /* hovered just below */
+                        return 0;
+                    };
+                    int rank_a = rank(a);
+                    int rank_b = rank(b);
+                    if (rank_a != rank_b)
+                        return rank_a < rank_b;
+                    float dist_a = Vector3Distance(Camera3DParams.position,
+                                                   Vector3Scale(a->current_pos, 1.0f/DRAW_SCALE));
+                    float dist_b = Vector3Distance(Camera3DParams.position,
+                                                   Vector3Scale(b->current_pos, 1.0f/DRAW_SCALE));
+                    return dist_a > dist_b;  // Farther first
+                });
+                
+                /* Disable depth writes for proper alpha blending */
+                rlDisableDepthMask();
+                rlSetBlendMode(BLEND_ALPHA);
+                
+                for (int i = 0; i < visible_count; i++)
+                {
+                    Satellite *sat = visible_sats[i];
+                    
+                    float theta, radius;
+                    CalculateCoverageParams(sat, &theta, &radius);
+                    if (theta <= 0.0f) continue;
+                    
+                    CoverageMeshLOD lod = SelectCoverageLOD(sat, Camera3DParams);
+                    
+                    float altitude_km = Vector3Length(sat->current_pos) - EARTH_RADIUS_KM;
+                    Model *coverage_model = GetCachedCoverageMesh(altitude_km, lod, g_coverage_shaders.shader3D);
+                    
+                    /* mesh is an Earth-centred cap; shader reorients it from this pos */
+                    Vector3 sat_pos_draw = Vector3Scale(sat->current_pos, 1.0f / DRAW_SCALE);
+                    SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.satPosLoc,
+                                   &sat_pos_draw, SHADER_UNIFORM_VEC3);
+                    
+                    /* selection tint wins over hover when both apply */
+                    Color fill_col   = g_theme.world.footprint_bg;
+                    Color border_col = g_theme.world.footprint_border;
+                    if (sat == selected_sat)
+                    {
+                        fill_col   = CoverageSelectFill(g_theme.world.footprint_bg);
+                        border_col = g_theme.world.sat_selected;
+                    }
+                    else if (sat == hovered_sat)
+                    {
+                        fill_col   = CoverageHoverFill(g_theme.world.footprint_bg);
+                        border_col = g_theme.world.sat_highlighted;
+                    }
+
+                    Vector4 color = {
+                        fill_col.r / 255.0f,
+                        fill_col.g / 255.0f,
+                        fill_col.b / 255.0f,
+                        fill_col.a / 255.0f
+                    };
+                    SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.colorLoc,
+                                   &color, SHADER_UNIFORM_VEC4);
+
+                    Vector4 border = {
+                        border_col.r / 255.0f,
+                        border_col.g / 255.0f,
+                        border_col.b / 255.0f,
+                        border_col.a / 255.0f
+                    };
+                    SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.borderColorLoc,
+                                   &border, SHADER_UNIFORM_VEC4);
+                    
+                    DrawModel(*coverage_model, Vector3Zero(), 1.0f, WHITE);
+                }
+                
+                rlEnableDepthMask();
             }
 
             for (int i = 0; i < sat_count; i++)
@@ -2101,6 +2377,10 @@ int main(void)
     UnloadModel(moonModel);
     UnloadShader(shaderAtmosphere);
     UnloadModel(atmosphereModel);
+    /* ground coverage resources */
+    ClearCoverageMeshCache();
+    UnloadShader(g_coverage_shaders.shader3D);
+    UnloadShader(g_coverage_shaders.shader2D);
     UnloadFont(customFont);
 
     /* persist layout state before shutdown */
