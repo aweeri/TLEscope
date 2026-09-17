@@ -11,6 +11,7 @@
 #include "ui.h"
 #include "ui_layout.h"
 #include "labels.h"
+#include "tools/tools.h"
 #include "notifications.h"
 #include "core/astro.h"
 #include "io/rotator.h"
@@ -729,6 +730,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* begin rlImGui frame */
     rlImGuiBegin();
+
+    /* map grid value labels, drawn first so satellite/marker labels win */
+    DrawMapGridLabels(ctx, cfg);
 
     /* scene label overlay: drawn into the background draw list so labels
      * render on top of the raylib scene but behind all ImGui windows */

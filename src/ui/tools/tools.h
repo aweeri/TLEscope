@@ -34,4 +34,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg);
 void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg);
 
+/* screen-space ImGui overlay hook (runs after rlImGuiBegin, see ui.cpp) */
+void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg);
+
 #endif /* TOOLS_H */

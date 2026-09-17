@@ -14,6 +14,8 @@
 #include <raylib.h>
 #include <math.h>   /* fabsf, fmaxf */
 #include <stddef.h> /* offsetof */
+#include <stdio.h>  /* snprintf */
+#include <float.h>  /* FLT_MAX */
 #include <string.h> /* strcmp */
 
 #include "imgui.h"
@@ -362,5 +364,108 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         LayoutSetSidebarVisible(SIDEBAR_LEFT, saved_left);
         LayoutSetSidebarVisible(SIDEBAR_RIGHT, saved_right);
         LayoutSetBottomBarVisible(saved_bottom);
+    }
+}
+
+/**
+ * Numeric lat/lon labels for the 2D grid.
+ *
+ * Drawn as a screen-space ImGui overlay (after rlImGuiBegin) rather than in the
+ * world-space grid pass, because the raylib custom font has no '°' glyph while
+ * the ImGui atlas does. Latitude values sit on the left edge of the visible
+ * map, longitude values along its top edge; both follow panning and are culled
+ * when their grid line leaves the view.
+ */
+void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
+{
+    if (!ctx || !cfg || !ctx->camera2d)
+        return;
+    if (!ctx->is_2d_view || !*ctx->is_2d_view)
+        return;
+    if (!ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
+        return;
+
+    ImDrawList *dl = ImGui::GetBackgroundDrawList();
+    ImFont *font = ImGui::GetFont();
+    if (!dl || !font)
+        return;
+
+    const float map_w = ctx->map_w;
+    const float map_h = ctx->map_h;
+    const float screen_w = (float)GetScreenWidth();
+    const float screen_h = (float)GetScreenHeight();
+
+    /* visible map region (camera view ∩ map rect), used for culling and as
+     * the edge the labels hug when the full map is on screen */
+    Vector2 vis_a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, *ctx->camera2d);
+    Vector2 vis_b = GetScreenToWorld2D((Vector2){screen_w, screen_h}, *ctx->camera2d);
+    const float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
+    const float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
+    const float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
+    const float clip_max_y = fminf(fmaxf(vis_a.y, vis_b.y), map_h * 0.5f);
+    if (clip_min_x >= clip_max_x || clip_min_y >= clip_max_y)
+        return;
+
+    const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
+
+    const float font_size = font->FontSize * 0.8f;
+    Color label_col = g_theme.ui.text_main;
+    label_col.a = (unsigned char)(label_col.a * 0.7f);
+    const ImU32 col = IM_COL32(label_col.r, label_col.g, label_col.b, label_col.a);
+    const ImU32 shadow_col = IM_COL32(0, 0, 0, 160);
+    const float pad = 4.0f * cfg->ui_scale;
+
+    char buf[16];
+
+    /* latitude labels down the left edge of the visible map */
+    const int lat_max = (89 / spacing) * spacing;
+    for (int lat = -lat_max; lat <= lat_max; lat += spacing)
+    {
+        const float y = -((float)lat / 180.0f) * map_h;
+        if (y < clip_min_y || y > clip_max_y)
+            continue;
+
+        if (lat > 0)
+            snprintf(buf, sizeof(buf), "%d°N", lat);
+        else if (lat < 0)
+            snprintf(buf, sizeof(buf), "%d°S", -lat);
+        else
+            snprintf(buf, sizeof(buf), "0°");
+
+        Vector2 sp = GetWorldToScreen2D((Vector2){clip_min_x, y}, *ctx->camera2d);
+        ImVec2 tsz = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, buf);
+        ImVec2 pos(sp.x + pad, sp.y - tsz.y * 0.5f);
+        if (pos.y + tsz.y < 0.0f || pos.y > screen_h)
+            continue;
+
+        dl->AddText(font, font_size, ImVec2(pos.x + 1.0f, pos.y + 1.0f), shadow_col, buf);
+        dl->AddText(font, font_size, pos, col, buf);
+    }
+
+    /* longitude labels along the top edge of the visible map */
+    const int lon_max = (179 / spacing) * spacing;
+    for (int lon = -lon_max; lon <= lon_max; lon += spacing)
+    {
+        const float x = ((float)lon / 360.0f) * map_w;
+        if (x < clip_min_x || x > clip_max_x)
+            continue;
+
+        if (lon > 0)
+            snprintf(buf, sizeof(buf), "%d°E", lon);
+        else if (lon < 0)
+            snprintf(buf, sizeof(buf), "%d°W", -lon);
+        else
+            snprintf(buf, sizeof(buf), "0°");
+
+        Vector2 sp = GetWorldToScreen2D((Vector2){x, clip_min_y}, *ctx->camera2d);
+        ImVec2 tsz = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, buf);
+        ImVec2 pos(sp.x - tsz.x * 0.5f, sp.y + pad);
+        if (pos.x < 0.0f || pos.x + tsz.x > screen_w)
+            continue;
+        if (pos.y + tsz.y < 0.0f || pos.y > screen_h)
+            continue;
+
+        dl->AddText(font, font_size, ImVec2(pos.x + 1.0f, pos.y + 1.0f), shadow_col, buf);
+        dl->AddText(font, font_size, pos, col, buf);
     }
 }
