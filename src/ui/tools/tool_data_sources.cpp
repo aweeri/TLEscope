@@ -28,6 +28,36 @@
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
 
+static bool PasteTleHasNameLine(const char *data)
+{
+    const char *p = data;
+    while (*p)
+    {
+        const char *lines[3] = {0};
+        int n = 0;
+
+        /* collect up to three significant lines (skip blanks and comments) */
+        while (n < 3)
+        {
+            while (*p == '\r' || *p == '\n') p++;
+            if (!*p) break;
+            if (*p == '#')
+            {
+                while (*p && *p != '\n') p++;
+                continue;
+            }
+            lines[n++] = p;
+            while (*p && *p != '\n') p++;
+        }
+
+        if (n == 0) break;
+        if (n < 3) return false;                    /* incomplete block */
+        if (lines[0][0] == '1' && lines[0][1] == ' ')
+            return false;                           /* first line is an element line - no name */
+    }
+    return true;
+}
+
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
@@ -211,7 +241,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         static char s_paste_buf[4096] = "";
 
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-            "Accepted formats: TLE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
+            "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
 
         /* thin by default (1 line), expands as content is pasted */
         float paste_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
@@ -236,6 +266,10 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         if (has_content)
             paste_fmt = DetectDataFormat(s_paste_buf, strlen(s_paste_buf));
 
+        /* 3LE requires a name line; element-only input is rejected */
+        bool tle_missing_name = has_content && (paste_fmt == FORMAT_TLE) &&
+                                !PasteTleHasNameLine(s_paste_buf);
+
         bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
 
         if (!can_add)
@@ -243,29 +277,40 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::Button(ICON_FA_PLUS "##add_custom_paste", ImVec2(paste_btn_w, paste_btn_w)))
         {
-            /* build a short preview for the name */
-            char preview[64];
-            const char *nl = strchr(s_paste_buf, '\n');
-            if (nl)
+            if (tle_missing_name)
             {
-                int len = (int)(nl - s_paste_buf);
-                if (len > 55) len = 55;
-                strncpy(preview, s_paste_buf, len);
-                preview[len] = '\0';
+                /* reject element-only 3LE input: a name line is mandatory */
+                NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION,
+                           "Invalid 3LE: a name line is required "
+                           "(name, then line 1 and line 2)");
+                LOG_DEBUG("Rejected 3LE paste: missing name line");
             }
             else
             {
-                strncpy(preview, s_paste_buf, 55);
-                preview[55] = '\0';
-            }
+                /* build a short preview for the name */
+                char preview[64];
+                const char *nl = strchr(s_paste_buf, '\n');
+                if (nl)
+                {
+                    int len = (int)(nl - s_paste_buf);
+                    if (len > 55) len = 55;
+                    strncpy(preview, s_paste_buf, len);
+                    preview[len] = '\0';
+                }
+                else
+                {
+                    strncpy(preview, s_paste_buf, 55);
+                    preview[55] = '\0';
+                }
 
-            if (!DataSelectionAdd(SOURCE_CUSTOM_PASTE, preview, preview, s_paste_buf, paste_fmt))
-            {
-                LOG_DEBUG("Paste entry already in selection list");
-            }
-            else
-            {
-                s_paste_buf[0] = '\0'; /* clear on success */
+                if (!DataSelectionAdd(SOURCE_CUSTOM_PASTE, preview, preview, s_paste_buf, paste_fmt))
+                {
+                    LOG_DEBUG("Paste entry already in selection list");
+                }
+                else
+                {
+                    s_paste_buf[0] = '\0'; /* clear on success */
+                }
             }
         }
 
@@ -275,8 +320,17 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         if (has_content)
         {
             if (paste_fmt != FORMAT_UNKNOWN)
-                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s",
-                                   FormatToString(paste_fmt));
+            {
+                const char *fmt_label = (paste_fmt == FORMAT_TLE) ? "3LE"
+                                                                  : FormatToString(paste_fmt);
+                if (tle_missing_name)
+                    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                                       "Detected: %s - missing name line "
+                                       "(name, line 1, line 2 required)", fmt_label);
+                else
+                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s",
+                                       fmt_label);
+            }
             else
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
                                    "Format unknown - not a valid orbital data format");

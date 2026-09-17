@@ -56,6 +56,16 @@ static int parse_payload(const AsyncFetchJob *job, const char *data, size_t size
                     j = 0;
                     while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
                     l2[j] = '\0'; if (*ptr == '\n') ptr++;
+
+                    /* a valid 3LE block requires a name line (line 0);
+                     * reject element-only input so no satellite is added */
+                    if (!(l0[0] != '1' && l1[0] == '1' && l1[1] == ' ' &&
+                          l2[0] == '2' && l2[1] == ' '))
+                    {
+                        LOG_WARN("Skipping pasted 3LE block without a name line");
+                        continue;
+                    }
+
                     OrbitalDataMeta meta = {0};
                     snprintf(meta.source_name, sizeof(meta.source_name), "paste:%.31s", job->name);
                     meta.format = FORMAT_TLE;
