@@ -60,7 +60,6 @@ static bool PasteTleHasNameLine(const char *data)
 
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 {
-    (void)ctx;
     float avail_w = ImGui::GetContentRegionAvail().x;
     ImGui::PushTextWrapPos(0.0f);
 
@@ -420,9 +419,14 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
     if (s_pull_running)
     {
-        /* once all jobs have been drained, the pull is complete */
-        if (!AsyncFetchBusy())
+        /* Wait until both worker jobs and queued results are drained. */
+        if (!AsyncFetchBusy() && !AsyncFetchHasResults())
         {
+            /* Fetched records start inactive. Restore only NORAD ids that were
+             * active before this refresh; genuinely new records stay inactive. */
+            LoadSatSelection(cfg);
+            SaveOrbitalData("data.json", satellites, sat_count);
+
             s_pull_running = false;
             s_pull_total = 0;
             NotifyPush(NOTIFY_SUCCESS, ICON_FA_DOWNLOAD,
@@ -456,29 +460,37 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
     if (ImGui::Button("Pull All Selected Sources", ImVec2(avail_w, 30)))
     {
-        /* clear the slate and queue every selected source as an async job */
-        sat_count = 0;
         s_pull_total = DataSelectionCount();
-        s_pull_running = (s_pull_total > 0);
-
-        for (int i = 0; i < s_pull_total; i++)
-        {
-            DataSourceSelection *s = DataSelectionAt(i);
-            if (!s) break;
-
-            AsyncFetchJob job;
-            memset(&job, 0, sizeof(job));
-            job.type = (AsyncJobType)s->type;
-            strncpy(job.name, s->name, sizeof(job.name) - 1);
-            strncpy(job.identifier, s->identifier, sizeof(job.identifier) - 1);
-            strncpy(job.paste_data, s->paste_data, sizeof(job.paste_data) - 1);
-            job.format = s->format;
-
-            AsyncFetchSubmit(&job);
-        }
-
         if (s_pull_total == 0)
+        {
             LOG_INFO("No sources selected to pull");
+        }
+        else
+        {
+            /* Snapshot the active NORAD ids before replacing the catalogue. */
+            SaveSatSelection(cfg);
+            if (ctx && ctx->selected_sat)
+                *ctx->selected_sat = NULL;
+
+            sat_count = 0;
+            s_pull_running = true;
+
+            for (int i = 0; i < s_pull_total; i++)
+            {
+                DataSourceSelection *s = DataSelectionAt(i);
+                if (!s) break;
+
+                AsyncFetchJob job;
+                memset(&job, 0, sizeof(job));
+                job.type = (AsyncJobType)s->type;
+                strncpy(job.name, s->name, sizeof(job.name) - 1);
+                strncpy(job.identifier, s->identifier, sizeof(job.identifier) - 1);
+                strncpy(job.paste_data, s->paste_data, sizeof(job.paste_data) - 1);
+                job.format = s->format;
+
+                AsyncFetchSubmit(&job);
+            }
+        }
     }
 
     if (pull_disabled)
