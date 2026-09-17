@@ -256,7 +256,7 @@ bool add_satellite_from_tle_to(Satellite *sats, int *count,
     bstar_buf[8] = '\0';
     sat->bstar = ParseFixedEponential(bstar_buf, 0, NULL);
 
-    sat->is_active = true;
+    sat->is_active = false;
 
     // store metadata
     if (meta)
@@ -328,7 +328,7 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
     sat->mean_motion = (mean_motion_revday * 2.0 * PI) / 86400.0;
     sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
     sat->bstar = bstar;
-    sat->is_active = true;
+    sat->is_active = false;
 
     // store metadata
     if (meta)

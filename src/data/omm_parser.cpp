@@ -64,21 +64,11 @@ static double json_double_value(const char *json, const char *key, double def)
 {
     char buf[64] = {0};
     const char *ptr = json_string_value(json, key, buf, sizeof(buf));
-    if (!ptr && buf[0] == '\0')
-    {
-        // try numeric value (not quoted)
-        char needle[64];
-        snprintf(needle, sizeof(needle), "\"%s\"", key);
-        const char *p = strstr(json, needle);
-        if (!p) return def;
-        p = strchr(p, ':');
-        if (!p) return def;
-        p++;
-        while (*p && isspace((unsigned char)*p)) p++;
-        return strtod(p, NULL);
-    }
-    if (buf[0] == '\0') return def;
-    return strtod(buf, NULL);
+    if (!ptr) return def;
+    const char *number = buf[0] ? buf : ptr;
+    char *end = NULL;
+    double value = strtod(number, &end);
+    return end == number ? def : value;
 }
 
 static long json_long_value(const char *json, const char *key, long def)
@@ -100,14 +90,26 @@ static long json_long_value(const char *json, const char *key, long def)
     return strtol(buf, NULL, 10);
 }
 
-/** converts OMM epoch string (YYYY-MM-DD HH:MM:SS.FFFFFF) to our epoch format (YYYYDDD.FFFF) */
+/** converts a UTC OMM timestamp (ISO T or space separator) to YYYYDDD.FFFF */
 static double omm_epoch_to_epoch(const char *epoch_str)
 {
     if (!epoch_str || !*epoch_str) return 0;
 
     int year = 0, month = 0, day = 0, hour = 0, min = 0;
     double sec = 0.0;
-    sscanf(epoch_str, "%d-%d-%d %d:%d:%lf", &year, &month, &day, &hour, &min, &sec);
+    char separator = '\0';
+    int end = 0;
+    if (sscanf(epoch_str, "%d-%d-%d%c%d:%d:%lf%n", &year, &month, &day,
+               &separator, &hour, &min, &sec, &end) != 7 ||
+        (separator != 'T' && separator != ' ') ||
+        year < 1 || month < 1 || month > 12 || hour < 0 || hour > 23 ||
+        min < 0 || min > 59 || !isfinite(sec) || sec < 0.0 || sec >= 60.0)
+        return 0;
+
+    const char *tail = epoch_str + end;
+    if (*tail == 'Z') tail++;
+    while (isspace((unsigned char)*tail)) tail++;
+    if (*tail != '\0') return 0;
 
     if (year < 100) year += 2000;
 
@@ -115,6 +117,7 @@ static double omm_epoch_to_epoch(const char *epoch_str)
     int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
         days_in_month[1] = 29;
+    if (day < 1 || day > days_in_month[month - 1]) return 0;
 
     int doy = 0;
     for (int m = 0; m < month - 1; m++)
@@ -172,6 +175,14 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
                     json_string_value(obj_text, "EPOCH", epoch_str, sizeof(epoch_str));
 
                     double epoch = omm_epoch_to_epoch(epoch_str);
+                    if (epoch == 0)
+                    {
+                        LOG_WARN("Skipping OMM satellite %s: invalid epoch '%s'", name, epoch_str);
+                        free(obj_text);
+                        obj_start = -1;
+                        ptr++;
+                        continue;
+                    }
                     double inclination = json_double_value(obj_text, "INCLINATION", 0.0);
                     double raan = json_double_value(obj_text, "RA_OF_ASC_NODE", 0.0);
                     double eccentricity = json_double_value(obj_text, "ECCENTRICITY", 0.0);
@@ -374,6 +385,13 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         // epoch
         csv_get_column(buf, col_epoch, val, sizeof(val));
         double epoch = omm_epoch_to_epoch(val);
+        if (epoch == 0)
+        {
+            LOG_WARN("Skipping OMM satellite %s: invalid epoch '%s'", name, val);
+            ptr = eol;
+            if (*ptr == '\n') ptr++;
+            continue;
+        }
 
         // inclination
         csv_get_column(buf, col_incl, val, sizeof(val));

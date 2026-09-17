@@ -139,7 +139,7 @@ static bool read_satellite(const char *text, Satellite *sat)
     sat->mean_motion = read_double(text, "mean_motion", 0.0);
     sat->semi_major_axis = read_double(text, "semi_major_axis", 0.0);
     sat->bstar = read_double(text, "bstar", 0.0);
-    sat->is_active = read_bool(text, "is_active", true);
+    sat->is_active = read_bool(text, "is_active", false);
 
     // Parse nested data_meta
     const char *meta = strstr(text, "\"data_meta\"");
