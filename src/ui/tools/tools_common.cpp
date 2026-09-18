@@ -1,10 +1,8 @@
-/*
- * tools_common.cpp - Shared helpers and state for tool panels
- *
- * Contains the data-source selection (shopping-cart) persistence and the
- * small UI helpers (InfoRow, RA/Dec formatting, case-insensitive search)
- * that several tool panels rely on.
- */
+// tools_common.cpp - Shared helpers and state for tool panels
+//
+// Contains the data-source selection (shopping-cart) persistence and the
+// small UI helpers (InfoRow, RA/Dec formatting, case-insensitive search)
+// that several tool panels rely on.
 
 #include "tools_common.h"
 #include "core/theme.h"
@@ -18,22 +16,23 @@
 #include <cmath>
 
 #include <raylib.h>
+#include <nlohmann/json.hpp>
 
 #include "imgui.h"
 
-/* -- Shared state ---------------------------------------------------------- */
+// -- Shared state -----------------------------------------------------------
 
 bool log_auto_scroll = true;
-bool log_show_timestamps = false;  /* timestamps hidden by default (cleaner) */
+bool log_show_timestamps = false;  // timestamps hidden by default (cleaner)
 
-/* -- Helpers --------------------------------------------------------------- */
+// -- Helpers ----------------------------------------------------------------
 
 ImVec4 ThemeColor(const Color &c)
 {
     return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
 }
 
-/** case-insensitive substring search; returns true if substr is found in str */
+// case-insensitive substring search; returns true if substr is found in str
 bool str_contains_ic(const char *str, const char *substr)
 {
     if (!str || !substr) return false;
@@ -50,12 +49,12 @@ bool str_contains_ic(const char *str, const char *substr)
     return false;
 }
 
-/* -- Data Source Selection List (shopping-cart model) ---------------------- */
+// -- Data Source Selection List (shopping-cart model) -----------------------
 
 static DataSourceSelection g_data_selections[MAX_DATA_SOURCE_SELECTIONS];
 static int g_data_selection_count = 0;
 
-/** helper: check if a selection already exists (type + identifier match) */
+// helper: check if a selection already exists (type + identifier match)
 static bool selection_exists(SourceType type, const char *identifier)
 {
     for (int i = 0; i < g_data_selection_count; i++)
@@ -67,7 +66,7 @@ static bool selection_exists(SourceType type, const char *identifier)
     return false;
 }
 
-/** helper: add a selection, returns true if added */
+// helper: add a selection, returns true if added
 static bool selection_add(SourceType type, const char *name, const char *identifier,
                           const char *paste_data, OrbitalDataFormat format)
 {
@@ -86,7 +85,7 @@ static bool selection_add(SourceType type, const char *name, const char *identif
     return true;
 }
 
-/** helper: remove a selection by index */
+// helper: remove a selection by index
 static void selection_remove(int idx)
 {
     if (idx < 0 || idx >= g_data_selection_count) return;
@@ -95,7 +94,7 @@ static void selection_remove(int idx)
     g_data_selection_count--;
 }
 
-/* -- Public accessors (used by the Data Sources tool) ---------------------- */
+// -- Public accessors (used by the Data Sources tool) -----------------------
 
 int DataSelectionCount(void) { return g_data_selection_count; }
 DataSourceSelection *DataSelectionAt(int idx)
@@ -109,42 +108,53 @@ bool DataSelectionAdd(SourceType type, const char *name, const char *identifier,
 }
 void DataSelectionRemove(int idx) { selection_remove(idx); }
 
-/* -- Data source selection persistence (section 11) ------------------------- */
+// -- Data source selection persistence (section 11) --------------------------
 
-/** persist the shopping-cart selections to data_selections.json */
+// helper: copy a string value from a JSON node into a fixed-size char buffer
+static void copy_str(char *dst, size_t dst_size, const std::string &src)
+{
+    if (!dst || dst_size == 0) return;
+    size_t n = src.size();
+    if (n > dst_size - 1) n = dst_size - 1;
+    memcpy(dst, src.data(), n);
+    dst[n] = '\0';
+}
+
+// persist the shopping-cart selections to data_selections.json
 void SaveDataSelections(void)
 {
+    LOG_INFO("Saving %d data source selections", g_data_selection_count);
+
+    nlohmann::json root;
+    root["version"] = 1;
+    root["selection_count"] = g_data_selection_count;
+    nlohmann::json selections = nlohmann::json::array();
+    for (int i = 0; i < g_data_selection_count; i++)
+    {
+        DataSourceSelection *s = &g_data_selections[i];
+        nlohmann::json e;
+        e["type"] = (int)s->type;
+        e["name"] = s->name;
+        e["identifier"] = s->identifier;
+        e["paste_data"] = s->paste_data;
+        e["format"] = (int)s->format;
+        selections.push_back(e);
+    }
+    root["selections"] = selections;
+
+    std::string text = root.dump(2);
     FILE *f = fopen("data_selections.json", "w");
     if (!f)
     {
         LOG_ERROR("Failed to save data selections to data_selections.json");
         return;
     }
-    LOG_INFO("Saving %d data source selections", g_data_selection_count);
-
-    fprintf(f, "{\n");
-    fprintf(f, "  \"version\": 1,\n");
-    fprintf(f, "  \"selection_count\": %d,\n", g_data_selection_count);
-    fprintf(f, "  \"selections\": [\n");
-
-    for (int i = 0; i < g_data_selection_count; i++)
-    {
-        DataSourceSelection *s = &g_data_selections[i];
-        fprintf(f, "    {\n");
-        fprintf(f, "      \"type\": %d,\n", (int)s->type);
-        fprintf(f, "      \"name\": \"%s\",\n", s->name);
-        fprintf(f, "      \"identifier\": \"%s\",\n", s->identifier);
-        fprintf(f, "      \"paste_data\": \"%s\",\n", s->paste_data);
-        fprintf(f, "      \"format\": %d\n", (int)s->format);
-        fprintf(f, "    }%s\n", (i == g_data_selection_count - 1) ? "" : ",");
-    }
-
-    fprintf(f, "  ]\n");
-    fprintf(f, "}\n");
+    fwrite(text.data(), 1, text.size(), f);
+    fwrite("\n", 1, 1, f);
     fclose(f);
 }
 
-/** restore the shopping-cart selections from data_selections.json */
+// restore the shopping-cart selections from data_selections.json
 void LoadDataSelections(void)
 {
     g_data_selection_count = 0;
@@ -156,85 +166,54 @@ void LoadDataSelections(void)
     if (!text)
         return;
 
-    const char *array_start = strstr(text, "\"selections\"");
-    if (!array_start)
+    nlohmann::json root;
+    try
     {
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &e)
+    {
+        LOG_ERROR("Failed to parse data_selections.json: %s", e.what());
         UnloadFileText(text);
         return;
-    }
-
-    const char *ptr = strchr(array_start, '[');
-    if (!ptr)
-    {
-        UnloadFileText(text);
-        return;
-    }
-
-    int brace_depth = 0;
-    int obj_start = -1;
-
-    while (*ptr && g_data_selection_count < MAX_DATA_SOURCE_SELECTIONS)
-    {
-        if (*ptr == '{')
-        {
-            if (brace_depth == 0) obj_start = (int)(ptr - text);
-            brace_depth++;
-        }
-        else if (*ptr == '}')
-        {
-            brace_depth--;
-            if (brace_depth == 0 && obj_start >= 0)
-            {
-                int obj_len = (int)(ptr - text) - obj_start + 1;
-                char *obj_text = (char*)malloc(obj_len + 1);
-                if (obj_text)
-                {
-                    strncpy(obj_text, text + obj_start, obj_len);
-                    obj_text[obj_len] = '\0';
-
-                    DataSourceSelection *s = &g_data_selections[g_data_selection_count];
-                    memset(s, 0, sizeof(DataSourceSelection));
-
-                    /* type */
-                    const char *v = strstr(obj_text, "\"type\"");
-                    if (v) { v = strchr(v, ':'); if (v) s->type = (SourceType)atoi(v + 1); }
-
-                    /* name */
-                    v = strstr(obj_text, "\"name\"");
-                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) sscanf(v + 1, "%63[^\"]", s->name); } }
-
-                    /* identifier */
-                    v = strstr(obj_text, "\"identifier\"");
-                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) sscanf(v + 1, "%63[^\"]", s->identifier); } }
-
-                    /* paste_data */
-                    v = strstr(obj_text, "\"paste_data\"");
-                    if (v) { v = strchr(v, ':'); if (v) { v = strchr(v, '"'); if (v) { int i = 0; v++; while (*v && *v != '"' && i < 4095) s->paste_data[i++] = *v++; s->paste_data[i] = '\0'; } } }
-
-                    /* format */
-                    v = strstr(obj_text, "\"format\"");
-                    if (v) { v = strchr(v, ':'); if (v) s->format = (OrbitalDataFormat)atoi(v + 1); }
-
-                    free(obj_text);
-                    g_data_selection_count++;
-                }
-                obj_start = -1;
-            }
-        }
-        else if (*ptr == ']' && brace_depth == 0)
-        {
-            break;
-        }
-        ptr++;
     }
 
     UnloadFileText(text);
+
+    auto selections_it = root.find("selections");
+    if (selections_it == root.end() || !selections_it->is_array())
+        return;
+
+    for (const auto &e : *selections_it)
+    {
+        if (g_data_selection_count >= MAX_DATA_SOURCE_SELECTIONS) break;
+        if (!e.is_object()) continue;
+
+        DataSourceSelection *s = &g_data_selections[g_data_selection_count];
+        memset(s, 0, sizeof(DataSourceSelection));
+
+        // type
+        if (e.contains("type") && e["type"].is_number())
+            s->type = (SourceType)e["type"].get<int>();
+
+        // name / identifier / paste_data
+        copy_str(s->name, sizeof(s->name), e.value("name", std::string()));
+        copy_str(s->identifier, sizeof(s->identifier), e.value("identifier", std::string()));
+        copy_str(s->paste_data, sizeof(s->paste_data), e.value("paste_data", std::string()));
+
+        // format
+        if (e.contains("format") && e["format"].is_number())
+            s->format = (OrbitalDataFormat)e["format"].get<int>();
+
+        g_data_selection_count++;
+    }
+
     LOG_INFO("Loaded %d data source selections", g_data_selection_count);
 }
 
-/* -- RA/Dec format helpers ------------------------------------------------- */
+// -- RA/Dec format helpers --------------------------------------------------
 
-/** convert degrees to hours:minutes:seconds (RA) */
+// convert degrees to hours:minutes:seconds (RA)
 static void deg_to_hms(double deg, int *h, int *m, double *s)
 {
     double hours = deg / 15.0;
@@ -246,7 +225,7 @@ static void deg_to_hms(double deg, int *h, int *m, double *s)
     *s = (rem - *m) * 60.0;
 }
 
-/** convert degrees to degrees:arcminutes:arcseconds (Dec) */
+// convert degrees to degrees:arcminutes:arcseconds (Dec)
 static void deg_to_dms(double deg, int *d, int *m, double *s)
 {
     int sign = (deg < 0.0) ? -1 : 1;
@@ -258,18 +237,18 @@ static void deg_to_dms(double deg, int *d, int *m, double *s)
     *d *= sign;
 }
 
-/** format RA degrees into a HMS string buffer; returns the buffer */
+// format RA degrees into a HMS string buffer; returns the buffer
 static const char *format_ra_str(double ra_deg, int format)
 {
     static char buf[48];
     if (format == 0)
     {
-        /* decimal degrees */
+        // decimal degrees
         snprintf(buf, sizeof(buf), "%.4f\xc2\xb0", ra_deg);
     }
     else
     {
-        /* hours:minutes:seconds */
+        // hours:minutes:seconds
         int h, m;
         double s;
         deg_to_hms(ra_deg, &h, &m, &s);
@@ -278,18 +257,18 @@ static const char *format_ra_str(double ra_deg, int format)
     return buf;
 }
 
-/** format Dec degrees into a DMS string buffer; returns the buffer */
+// format Dec degrees into a DMS string buffer; returns the buffer
 static const char *format_dec_str(double dec_deg, int format)
 {
     static char buf[48];
     if (format == 0)
     {
-        /* decimal degrees */
+        // decimal degrees
         snprintf(buf, sizeof(buf), "%+.4f\xc2\xb0", dec_deg);
     }
     else
     {
-        /* degrees:arcminutes:arcseconds */
+        // degrees:arcminutes:arcseconds
         int d, m;
         double s;
         deg_to_dms(dec_deg, &d, &m, &s);
@@ -300,14 +279,14 @@ static const char *format_dec_str(double dec_deg, int format)
     return buf;
 }
 
-/** draw a clickable RA or Dec value that cycles format on click */
+// draw a clickable RA or Dec value that cycles format on click
 void DrawClickableRADec(const char *label, double deg_value,
                         int *format_var, bool is_ra)
 {
     ImGui::Text("%s", label);
     ImGui::SameLine();
 
-    /* build the formatted string */
+    // build the formatted string
     const char *val_str = is_ra ? format_ra_str(deg_value, *format_var)
                                 : format_dec_str(deg_value, *format_var);
 
@@ -315,14 +294,14 @@ void DrawClickableRADec(const char *label, double deg_value,
 
     if (ImGui::IsItemHovered())
     {
-        /* highlight on hover to indicate clickability */
+        // highlight on hover to indicate clickability
         ImGui::SetTooltip("Click to switch format");
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             *format_var = (*format_var + 1) % 2;
     }
 }
 
-/** helper: draw a two-column table row (label | value) */
+// helper: draw a two-column table row (label | value)
 void InfoRow(const char *label, const char *fmt, ...)
 {
     ImGui::TableNextRow();

@@ -2,7 +2,7 @@ GIT_VERSION     := $(shell scripts/version.sh describe 2>/dev/null || echo "vUnk
 GIT_VERSION_NUM := $(shell scripts/version.sh num 2>/dev/null || echo "0.0.0.0")
 
 CC_LINUX = g++
-CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/cjson -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/nlohmann/include -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 
 # raylib is built from the git submodule (lib/raylib)
 RAYLIB_SRC   = lib/raylib/src
@@ -62,9 +62,8 @@ DIST_MACOS = dist/TLEscope-macOS-Portable
 SRC          = src/main.cpp src/core/astro.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/util/version.cpp src/render/coverage_mesh.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp $(wildcard src/ui/tools/tool_*.cpp)
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
-CJSON_SRC    = lib/cjson/cJSON.c
-OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o) $(CJSON_SRC:lib/cjson/%.c=build/%.o)
-OBJ_WIN      = $(SRC:src/%.cpp=build_win/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build_win/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build_win/%.o) $(CJSON_SRC:lib/cjson/%.c=build_win/%.o)
+OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
+OBJ_WIN      = $(SRC:src/%.cpp=build_win/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build_win/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build_win/%.o)
 
 # a progress bar!
 TOTAL_OBJ := $(words $(OBJ))
@@ -142,7 +141,7 @@ bin/TLEscope: $(OBJ) | bin
 	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-macos: raylib $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) $(CJSON_SRC) | bin
+bin/TLEscope-macos: raylib $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $(filter-out raylib,$^) $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
@@ -167,10 +166,6 @@ build/%.o: lib/rlImGui/%.cpp | build
 	@mkdir -p $(@D)
 	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -c $< -o $@
 
-build/%.o: lib/cjson/%.c | build
-	@mkdir -p $(@D)
-	@scripts/progress.sh $(CC_LINUX) $(CXXFLAGS_LIN) -x c++ -c $< -o $@
-
 build_win/%.o: src/%.cpp | build_win
 	@mkdir -p $(@D)
 	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
@@ -182,10 +177,6 @@ build_win/%.o: lib/imgui/%.cpp | build_win
 build_win/%.o: lib/rlImGui/%.cpp | build_win
 	@mkdir -p $(@D)
 	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
-
-build_win/%.o: lib/cjson/%.c | build_win
-	@mkdir -p $(@D)
-	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -x c++ -c $< -o $@
 
 build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh scripts/version.sh | build_win
 	@mkdir -p $(@D)

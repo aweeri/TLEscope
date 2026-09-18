@@ -1,18 +1,18 @@
 #include "theme.h"
 #include "util/log.h"
-#include "cJSON.h"
+#include <nlohmann/json.hpp>
 
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 
-/* global theme instance */
+// global theme instance
 Theme g_theme = {0};
 
-/* ------------------------------------------------------------------ */
-/* color helpers                                                       */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// color helpers
+// ------------------------------------------------------------------
 
 Color ThemeMix(Color a, Color b, float t)
 {
@@ -33,11 +33,11 @@ Color ThemeAlpha(Color c, float a)
     return c;
 }
 
-/* ------------------------------------------------------------------ */
-/* parsing helpers                                                     */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// parsing helpers
+// ------------------------------------------------------------------
 
-/** parse "#RRGGBB" or "#RRGGBBAA" into a raylib Color, else fallback */
+// parse "#RRGGBB" or "#RRGGBBAA" into a raylib Color, else fallback
 static Color ParseHexColor(const char *hexStr, Color fallback)
 {
     if (!hexStr || hexStr[0] != '#')
@@ -53,41 +53,42 @@ static Color ParseHexColor(const char *hexStr, Color fallback)
     return (Color){(unsigned char)r, (unsigned char)g, (unsigned char)b, (unsigned char)a};
 }
 
-/** parse a color key from a JSON section, falling back to `fallback` */
-static void ParseColorField(cJSON *section, const char *key, Color *dst, Color fallback)
+// parse a color key from a JSON section, falling back to `fallback`
+static void ParseColorField(const nlohmann::json &section, const char *key, Color *dst, Color fallback)
 {
-    cJSON *item = section ? cJSON_GetObjectItem(section, key) : NULL;
-    if (cJSON_IsString(item) && item->valuestring)
-        *dst = ParseHexColor(item->valuestring, fallback);
+    auto it = section.find(key);
+    if (it != section.end() && it->is_string())
+        *dst = ParseHexColor(it->get_ref<const std::string &>().c_str(), fallback);
     else
         *dst = fallback;
 }
 
-/** parse a float key from a JSON section */
-static void ParseFloatField(cJSON *section, const char *key, float *dst, float fallback)
+// parse a float key from a JSON section
+static void ParseFloatField(const nlohmann::json &section, const char *key, float *dst, float fallback)
 {
-    cJSON *item = section ? cJSON_GetObjectItem(section, key) : NULL;
-    if (cJSON_IsNumber(item))
-        *dst = (float)item->valuedouble;
+    auto it = section.find(key);
+    if (it != section.end() && it->is_number())
+        *dst = it->get<float>();
     else
         *dst = fallback;
 }
 
-/** parse a string key from a JSON section into a fixed buffer */
-static void ParseStringField(cJSON *section, const char *key, char *dst, size_t dstSize,
+// parse a string key from a JSON section into a fixed buffer
+static void ParseStringField(const nlohmann::json &section, const char *key, char *dst, size_t dstSize,
                              const char *fallback)
 {
-    cJSON *item = section ? cJSON_GetObjectItem(section, key) : NULL;
-    const char *value = cJSON_IsString(item) ? item->valuestring : fallback;
+    auto it = section.find(key);
+    const char *value = (it != section.end() && it->is_string())
+        ? it->get_ref<const std::string &>().c_str() : fallback;
     if (value)
     {
         snprintf(dst, dstSize, "%s", value);
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* defaults                                                            */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// defaults
+// ------------------------------------------------------------------
 
 void ThemeInitDefaults(Theme *t)
 {
@@ -98,7 +99,7 @@ void ThemeInitDefaults(Theme *t)
     snprintf(t->author, sizeof(t->author), "TLEscope");
     snprintf(t->description, sizeof(t->description), "Default TLEscope dark theme");
 
-    /* world colors (match themes/default/theme.json) */
+    // world colors (match themes/default/theme.json)
     t->world.bg               = ParseHexColor("#101010FF", BLACK);
     t->world.orbit            = ParseHexColor("#D3D3D326", WHITE);
     t->world.orbit_active     = ParseHexColor("#FFFFFFFF", WHITE);
@@ -110,7 +111,7 @@ void ThemeInitDefaults(Theme *t)
     t->world.footprint_fill   = ParseHexColor("#FFFFFF22", WHITE);
     t->world.footprint_border = ParseHexColor("#FFFFFF88", WHITE);
 
-    /* compact semantic UI palette (match themes/default/theme.json) */
+    // compact semantic UI palette (match themes/default/theme.json)
     t->ui.text    = ParseHexColor("#FFFFFFFF", WHITE);
     t->ui.text_dim = ParseHexColor("#D3D3D3FF", LIGHTGRAY);
     t->ui.bg      = ParseHexColor("#1E1E1EFF", DARKGRAY);
@@ -119,13 +120,13 @@ void ThemeInitDefaults(Theme *t)
     t->ui.accent  = ParseHexColor("#66FF66FF", GREEN);
     t->ui.overlay = ParseHexColor("#00000080", BLACK);
 
-    /* notification toast accents */
+    // notification toast accents
     t->ui.info    = ParseHexColor("#66CCFFFF", SKYBLUE);
     t->ui.success = ParseHexColor("#66FF66FF", GREEN);
     t->ui.warning = ParseHexColor("#FFAA00FF", ORANGE);
     t->ui.error   = ParseHexColor("#FF5555FF", RED);
 
-    /* style (mirrors the previous hardcoded ImGui style) */
+    // style (mirrors the previous hardcoded ImGui style)
     t->style.window_rounding    = 3.0f;
     t->style.frame_rounding     = 2.0f;
     t->style.child_rounding     = 3.0f;
@@ -151,13 +152,13 @@ void ThemeInitDefaults(Theme *t)
     t->style.indent_spacing     = 20.0f;
     t->style.columns_min_spacing = 6.0f;
 
-    /* font */
+    // font
     snprintf(t->font.file, sizeof(t->font.file), "font.ttf");
     t->font.size       = 16.0f;
     t->font.icon_size  = 14.0f;
     t->font.raylib_size = 64.0f;
 
-    /* textures */
+    // textures
     snprintf(t->textures.earth,        sizeof(t->textures.earth),        "earth.png");
     snprintf(t->textures.earth_night,  sizeof(t->textures.earth_night),  "earth_night.png");
     snprintf(t->textures.clouds,       sizeof(t->textures.clouds),       "clouds.png");
@@ -168,9 +169,9 @@ void ThemeInitDefaults(Theme *t)
     snprintf(t->textures.smallmark,    sizeof(t->textures.smallmark),    "smallmark.png");
 }
 
-/* ------------------------------------------------------------------ */
-/* loading                                                             */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// loading
+// ------------------------------------------------------------------
 
 bool ThemeLoad(const char *theme_name, Theme *t)
 {
@@ -192,103 +193,107 @@ bool ThemeLoad(const char *theme_name, Theme *t)
         return true;
     }
 
-    cJSON *root = cJSON_Parse(text);
-    UnloadFileText(text);
-
-    if (!root)
+    nlohmann::json root;
+    try
     {
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &e)
+    {
+        UnloadFileText(text);
+        (void)e;
         LOG_ERROR("Failed to parse theme JSON: %s", theme_path);
         return true;
     }
+    UnloadFileText(text);
 
-    cJSON *meta = cJSON_GetObjectItem(root, "meta");
-    cJSON *world = cJSON_GetObjectItem(root, "world");
-    cJSON *ui = cJSON_GetObjectItem(root, "ui");
-    cJSON *style = cJSON_GetObjectItem(root, "style");
-    cJSON *font = cJSON_GetObjectItem(root, "font");
-    cJSON *textures = cJSON_GetObjectItem(root, "textures");
+    const nlohmann::json root_meta     = root.value("meta", nlohmann::json::object());
+    const nlohmann::json root_world    = root.value("world", nlohmann::json::object());
+    const nlohmann::json root_ui       = root.value("ui", nlohmann::json::object());
+    const nlohmann::json root_style    = root.value("style", nlohmann::json::object());
+    const nlohmann::json root_font     = root.value("font", nlohmann::json::object());
+    const nlohmann::json root_textures = root.value("textures", nlohmann::json::object());
 
-    /* meta */
-    ParseStringField(meta, "name", t->name, sizeof(t->name), t->name);
-    ParseStringField(meta, "display_name", t->display_name, sizeof(t->display_name), t->name);
-    ParseStringField(meta, "author", t->author, sizeof(t->author), t->author);
-    ParseStringField(meta, "description", t->description, sizeof(t->description), t->description);
+    // meta
+    ParseStringField(root_meta, "name", t->name, sizeof(t->name), t->name);
+    ParseStringField(root_meta, "display_name", t->display_name, sizeof(t->display_name), t->name);
+    ParseStringField(root_meta, "author", t->author, sizeof(t->author), t->author);
+    ParseStringField(root_meta, "description", t->description, sizeof(t->description), t->description);
 
-    /* world colors */
-    ParseColorField(world, "bg", &t->world.bg, t->world.bg);
-    ParseColorField(world, "orbit", &t->world.orbit, t->world.orbit);
-    ParseColorField(world, "orbit_active", &t->world.orbit_active, t->world.orbit_active);
-    ParseColorField(world, "sat", &t->world.sat, t->world.sat);
-    ParseColorField(world, "sat_hover", &t->world.sat_hover, t->world.sat_hover);
-    ParseColorField(world, "sat_selected", &t->world.sat_selected, t->world.sat_selected);
-    ParseColorField(world, "periapsis", &t->world.periapsis, t->world.periapsis);
-    ParseColorField(world, "apoapsis", &t->world.apoapsis, t->world.apoapsis);
-    ParseColorField(world, "footprint_fill", &t->world.footprint_fill, t->world.footprint_fill);
-    ParseColorField(world, "footprint_border", &t->world.footprint_border, t->world.footprint_border);
+    // world colors
+    ParseColorField(root_world, "bg", &t->world.bg, t->world.bg);
+    ParseColorField(root_world, "orbit", &t->world.orbit, t->world.orbit);
+    ParseColorField(root_world, "orbit_active", &t->world.orbit_active, t->world.orbit_active);
+    ParseColorField(root_world, "sat", &t->world.sat, t->world.sat);
+    ParseColorField(root_world, "sat_hover", &t->world.sat_hover, t->world.sat_hover);
+    ParseColorField(root_world, "sat_selected", &t->world.sat_selected, t->world.sat_selected);
+    ParseColorField(root_world, "periapsis", &t->world.periapsis, t->world.periapsis);
+    ParseColorField(root_world, "apoapsis", &t->world.apoapsis, t->world.apoapsis);
+    ParseColorField(root_world, "footprint_fill", &t->world.footprint_fill, t->world.footprint_fill);
+    ParseColorField(root_world, "footprint_border", &t->world.footprint_border, t->world.footprint_border);
 
-    /* compact UI palette */
-    ParseColorField(ui, "text", &t->ui.text, t->ui.text);
-    ParseColorField(ui, "text_dim", &t->ui.text_dim, t->ui.text_dim);
-    ParseColorField(ui, "bg", &t->ui.bg, t->ui.bg);
-    ParseColorField(ui, "surface", &t->ui.surface, t->ui.surface);
-    ParseColorField(ui, "border", &t->ui.border, t->ui.border);
-    ParseColorField(ui, "accent", &t->ui.accent, t->ui.accent);
-    ParseColorField(ui, "overlay", &t->ui.overlay, t->ui.overlay);
-    ParseColorField(ui, "info", &t->ui.info, t->ui.info);
-    ParseColorField(ui, "success", &t->ui.success, t->ui.success);
-    ParseColorField(ui, "warning", &t->ui.warning, t->ui.warning);
-    ParseColorField(ui, "error", &t->ui.error, t->ui.error);
+    // compact UI palette
+    ParseColorField(root_ui, "text", &t->ui.text, t->ui.text);
+    ParseColorField(root_ui, "text_dim", &t->ui.text_dim, t->ui.text_dim);
+    ParseColorField(root_ui, "bg", &t->ui.bg, t->ui.bg);
+    ParseColorField(root_ui, "surface", &t->ui.surface, t->ui.surface);
+    ParseColorField(root_ui, "border", &t->ui.border, t->ui.border);
+    ParseColorField(root_ui, "accent", &t->ui.accent, t->ui.accent);
+    ParseColorField(root_ui, "overlay", &t->ui.overlay, t->ui.overlay);
+    ParseColorField(root_ui, "info", &t->ui.info, t->ui.info);
+    ParseColorField(root_ui, "success", &t->ui.success, t->ui.success);
+    ParseColorField(root_ui, "warning", &t->ui.warning, t->ui.warning);
+    ParseColorField(root_ui, "error", &t->ui.error, t->ui.error);
 
-    /* style */
-    ParseFloatField(style, "window_rounding", &t->style.window_rounding, t->style.window_rounding);
-    ParseFloatField(style, "frame_rounding", &t->style.frame_rounding, t->style.frame_rounding);
-    ParseFloatField(style, "child_rounding", &t->style.child_rounding, t->style.child_rounding);
-    ParseFloatField(style, "popup_rounding", &t->style.popup_rounding, t->style.popup_rounding);
-    ParseFloatField(style, "grab_rounding", &t->style.grab_rounding, t->style.grab_rounding);
-    ParseFloatField(style, "scrollbar_rounding", &t->style.scrollbar_rounding, t->style.scrollbar_rounding);
-    ParseFloatField(style, "tab_rounding", &t->style.tab_rounding, t->style.tab_rounding);
-    ParseFloatField(style, "window_border_size", &t->style.window_border_size, t->style.window_border_size);
-    ParseFloatField(style, "frame_border_size", &t->style.frame_border_size, t->style.frame_border_size);
-    ParseFloatField(style, "popup_border_size", &t->style.popup_border_size, t->style.popup_border_size);
-    ParseFloatField(style, "window_padding_x", &t->style.window_padding_x, t->style.window_padding_x);
-    ParseFloatField(style, "window_padding_y", &t->style.window_padding_y, t->style.window_padding_y);
-    ParseFloatField(style, "frame_padding_x", &t->style.frame_padding_x, t->style.frame_padding_x);
-    ParseFloatField(style, "frame_padding_y", &t->style.frame_padding_y, t->style.frame_padding_y);
-    ParseFloatField(style, "item_spacing_x", &t->style.item_spacing_x, t->style.item_spacing_x);
-    ParseFloatField(style, "item_spacing_y", &t->style.item_spacing_y, t->style.item_spacing_y);
-    ParseFloatField(style, "item_inner_spacing_x", &t->style.item_inner_spacing_x, t->style.item_inner_spacing_x);
-    ParseFloatField(style, "item_inner_spacing_y", &t->style.item_inner_spacing_y, t->style.item_inner_spacing_y);
-    ParseFloatField(style, "scrollbar_size", &t->style.scrollbar_size, t->style.scrollbar_size);
-    ParseFloatField(style, "grab_min_size", &t->style.grab_min_size, t->style.grab_min_size);
-    ParseFloatField(style, "window_title_align_x", &t->style.window_title_align_x, t->style.window_title_align_x);
-    ParseFloatField(style, "button_text_align_x", &t->style.button_text_align_x, t->style.button_text_align_x);
-    ParseFloatField(style, "indent_spacing", &t->style.indent_spacing, t->style.indent_spacing);
-    ParseFloatField(style, "columns_min_spacing", &t->style.columns_min_spacing, t->style.columns_min_spacing);
+    // style
+    ParseFloatField(root_style, "window_rounding", &t->style.window_rounding, t->style.window_rounding);
+    ParseFloatField(root_style, "frame_rounding", &t->style.frame_rounding, t->style.frame_rounding);
+    ParseFloatField(root_style, "child_rounding", &t->style.child_rounding, t->style.child_rounding);
+    ParseFloatField(root_style, "popup_rounding", &t->style.popup_rounding, t->style.popup_rounding);
+    ParseFloatField(root_style, "grab_rounding", &t->style.grab_rounding, t->style.grab_rounding);
+    ParseFloatField(root_style, "scrollbar_rounding", &t->style.scrollbar_rounding, t->style.scrollbar_rounding);
+    ParseFloatField(root_style, "tab_rounding", &t->style.tab_rounding, t->style.tab_rounding);
+    ParseFloatField(root_style, "window_border_size", &t->style.window_border_size, t->style.window_border_size);
+    ParseFloatField(root_style, "frame_border_size", &t->style.frame_border_size, t->style.frame_border_size);
+    ParseFloatField(root_style, "popup_border_size", &t->style.popup_border_size, t->style.popup_border_size);
+    ParseFloatField(root_style, "window_padding_x", &t->style.window_padding_x, t->style.window_padding_x);
+    ParseFloatField(root_style, "window_padding_y", &t->style.window_padding_y, t->style.window_padding_y);
+    ParseFloatField(root_style, "frame_padding_x", &t->style.frame_padding_x, t->style.frame_padding_x);
+    ParseFloatField(root_style, "frame_padding_y", &t->style.frame_padding_y, t->style.frame_padding_y);
+    ParseFloatField(root_style, "item_spacing_x", &t->style.item_spacing_x, t->style.item_spacing_x);
+    ParseFloatField(root_style, "item_spacing_y", &t->style.item_spacing_y, t->style.item_spacing_y);
+    ParseFloatField(root_style, "item_inner_spacing_x", &t->style.item_inner_spacing_x, t->style.item_inner_spacing_x);
+    ParseFloatField(root_style, "item_inner_spacing_y", &t->style.item_inner_spacing_y, t->style.item_inner_spacing_y);
+    ParseFloatField(root_style, "scrollbar_size", &t->style.scrollbar_size, t->style.scrollbar_size);
+    ParseFloatField(root_style, "grab_min_size", &t->style.grab_min_size, t->style.grab_min_size);
+    ParseFloatField(root_style, "window_title_align_x", &t->style.window_title_align_x, t->style.window_title_align_x);
+    ParseFloatField(root_style, "button_text_align_x", &t->style.button_text_align_x, t->style.button_text_align_x);
+    ParseFloatField(root_style, "indent_spacing", &t->style.indent_spacing, t->style.indent_spacing);
+    ParseFloatField(root_style, "columns_min_spacing", &t->style.columns_min_spacing, t->style.columns_min_spacing);
 
-    /* font */
-    ParseStringField(font, "file", t->font.file, sizeof(t->font.file), t->font.file);
-    ParseFloatField(font, "size", &t->font.size, t->font.size);
-    ParseFloatField(font, "icon_size", &t->font.icon_size, t->font.icon_size);
-    ParseFloatField(font, "raylib_size", &t->font.raylib_size, t->font.raylib_size);
+    // font
+    ParseStringField(root_font, "file", t->font.file, sizeof(t->font.file), t->font.file);
+    ParseFloatField(root_font, "size", &t->font.size, t->font.size);
+    ParseFloatField(root_font, "icon_size", &t->font.icon_size, t->font.icon_size);
+    ParseFloatField(root_font, "raylib_size", &t->font.raylib_size, t->font.raylib_size);
 
-    /* textures */
-    ParseStringField(textures, "earth", t->textures.earth, sizeof(t->textures.earth), t->textures.earth);
-    ParseStringField(textures, "earth_night", t->textures.earth_night, sizeof(t->textures.earth_night), t->textures.earth_night);
-    ParseStringField(textures, "clouds", t->textures.clouds, sizeof(t->textures.clouds), t->textures.clouds);
-    ParseStringField(textures, "skybox", t->textures.skybox, sizeof(t->textures.skybox), t->textures.skybox);
-    ParseStringField(textures, "moon", t->textures.moon, sizeof(t->textures.moon), t->textures.moon);
-    ParseStringField(textures, "sat_icon", t->textures.sat_icon, sizeof(t->textures.sat_icon), t->textures.sat_icon);
-    ParseStringField(textures, "marker_icon", t->textures.marker_icon, sizeof(t->textures.marker_icon), t->textures.marker_icon);
-    ParseStringField(textures, "smallmark", t->textures.smallmark, sizeof(t->textures.smallmark), t->textures.smallmark);
+    // textures
+    ParseStringField(root_textures, "earth", t->textures.earth, sizeof(t->textures.earth), t->textures.earth);
+    ParseStringField(root_textures, "earth_night", t->textures.earth_night, sizeof(t->textures.earth_night), t->textures.earth_night);
+    ParseStringField(root_textures, "clouds", t->textures.clouds, sizeof(t->textures.clouds), t->textures.clouds);
+    ParseStringField(root_textures, "skybox", t->textures.skybox, sizeof(t->textures.skybox), t->textures.skybox);
+    ParseStringField(root_textures, "moon", t->textures.moon, sizeof(t->textures.moon), t->textures.moon);
+    ParseStringField(root_textures, "sat_icon", t->textures.sat_icon, sizeof(t->textures.sat_icon), t->textures.sat_icon);
+    ParseStringField(root_textures, "marker_icon", t->textures.marker_icon, sizeof(t->textures.marker_icon), t->textures.marker_icon);
+    ParseStringField(root_textures, "smallmark", t->textures.smallmark, sizeof(t->textures.smallmark), t->textures.smallmark);
 
-    cJSON_Delete(root);
     LOG_INFO("Theme loaded: %s (%s)", t->name, t->display_name);
     return true;
 }
 
-/* ------------------------------------------------------------------ */
-/* asset resolution                                                    */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// asset resolution
+// ------------------------------------------------------------------
 
 const char *ThemeAssetPath(const char *file)
 {
@@ -303,9 +308,9 @@ const char *ThemeAssetPath(const char *file)
     return path;
 }
 
-/* ------------------------------------------------------------------ */
-/* discovery                                                           */
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// discovery
+// ------------------------------------------------------------------
 
 static int ThemeNameCompare(const char *a, const char *b)
 {
@@ -321,14 +326,14 @@ bool ThemeDiscover(ThemeList *list)
     list->names[0] = '\0';
     list->names[1] = '\0';
 
-    /* LoadDirectoryFiles returns both files and directories (no filter).
-     * NOTE: LoadDirectoryFilesEx's filter is a file-extension filter, not a
-     * directory-type filter, so it cannot be used to select directories. */
+    // LoadDirectoryFiles returns both files and directories (no filter).
+    // NOTE: LoadDirectoryFilesEx's filter is a file-extension filter, not a
+    // directory-type filter, so it cannot be used to select directories.
     FilePathList dirs = LoadDirectoryFiles("themes");
     if (dirs.count == 0)
     {
         UnloadDirectoryFiles(dirs);
-        /* fall back to at least "default" so the UI is usable */
+        // fall back to at least "default" so the UI is usable
         snprintf(list->names, sizeof(list->names), "default");
         list->count = 1;
         return true;
@@ -342,7 +347,7 @@ bool ThemeDiscover(ThemeList *list)
         const char *path = dirs.paths[i];
         if (!path)
             continue;
-        /* only directories that contain a theme.json are themes */
+        // only directories that contain a theme.json are themes
         if (!DirectoryExists(path))
             continue;
         char check[256];
@@ -359,7 +364,7 @@ bool ThemeDiscover(ThemeList *list)
 
     UnloadDirectoryFiles(dirs);
 
-    /* simple insertion sort (stable, few entries) */
+    // simple insertion sort (stable, few entries)
     for (int i = 1; i < n; i++)
     {
         char key[64];
@@ -373,7 +378,7 @@ bool ThemeDiscover(ThemeList *list)
         snprintf(sorted[j + 1], sizeof(sorted[j + 1]), "%s", key);
     }
 
-    /* build \0-separated list */
+    // build \0-separated list
     int offset = 0;
     for (int i = 0; i < n; i++)
     {
@@ -385,7 +390,7 @@ bool ThemeDiscover(ThemeList *list)
         list->count++;
     }
     if (offset + 1 < (int)sizeof(list->names))
-        list->names[offset] = '\0'; /* double-null terminate */
+        list->names[offset] = '\0'; // double-null terminate
 
     return list->count > 0;
 }

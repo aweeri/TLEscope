@@ -7,22 +7,21 @@
 #include <string.h>
 #include <time.h>
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
-/* -- Built-in Source Lists ------------------------------------------------- */
+// -- Built-in Source Lists --------------------------------------------------
 
 #define CELESTRAK_BASE "https://celestrak.org/NORAD/elements/gp.php"
 
-/*
- * CelesTrak GROUP values are stored directly in DataSource::id.  This keeps
- * the user-visible catalog and the API query in one auditable table instead
- * of relying on a second, position-dependent index-to-group mapping.
- *
- * This list mirrors the ordinary GROUP= datasets advertised on CelesTrak's
- * Current GP Element Sets page.  Special queries such as GPZ/GPZ-PLUS and
- * filtered views such as OLDEST/DOCKED/MOVERS are intentionally not groups.
- */
+// CelesTrak GROUP values are stored directly in DataSource::id.  This keeps
+// the user-visible catalog and the API query in one auditable table instead
+// of relying on a second, position-dependent index-to-group mapping.
+//
+// This list mirrors the ordinary GROUP= datasets advertised on CelesTrak's
+// Current GP Element Sets page.  Special queries such as GPZ/GPZ-PLUS and
+// filtered views such as OLDEST/DOCKED/MOVERS are intentionally not groups.
 const DataSource CELESTRAK_SOURCES[] = {
-    /* Special-interest satellites */
+    // Special-interest satellites
     {"last-30-days",       "Last 30 Days' Launches",                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"stations",           "Space Stations",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"visual",             "100 Brightest",                             CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -32,7 +31,7 @@ const DataSource CELESTRAK_SOURCES[] = {
     {"iridium-33-debris",  "IRIDIUM 33 Debris",                         CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"cosmos-2251-debris", "COSMOS 2251 Debris",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 
-    /* Weather and Earth resources */
+    // Weather and Earth resources
     {"weather",            "Weather",                                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"resource",           "Earth Resources",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"sar",                "Synthetic Aperture Radar",                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -43,7 +42,7 @@ const DataSource CELESTRAK_SOURCES[] = {
     {"planet",             "Planet",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"spire",              "Spire",                                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 
-    /* Communications satellites */
+    // Communications satellites
     {"geo",                "Active Geosynchronous",                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"intelsat",           "Intelsat",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"ses",                "SES",                                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -62,7 +61,7 @@ const DataSource CELESTRAK_SOURCES[] = {
     {"x-comm",             "Experimental Comm",                          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"other-comm",         "Other Comm",                                 CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 
-    /* Navigation satellites */
+    // Navigation satellites
     {"gnss",               "GNSS",                                       CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"gps-ops",            "GPS Operational",                            CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"glo-ops",            "GLONASS Operational",                        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -70,13 +69,13 @@ const DataSource CELESTRAK_SOURCES[] = {
     {"beidou",             "Beidou",                                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"sbas",               "Satellite-Based Augmentation System",        CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 
-    /* Scientific satellites */
+    // Scientific satellites
     {"science",            "Space & Earth Science",                      CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"geodetic",           "Geodetic",                                   CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"engineering",        "Engineering",                                CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"education",          "Education",                                  CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
 
-    /* Miscellaneous satellites */
+    // Miscellaneous satellites
     {"misc",               "Miscellaneous",                              CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"military",           "Miscellaneous Military",                     CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
     {"radar",              "Radar Calibration",                          CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -115,7 +114,7 @@ const DataSource RETLECTOR_SOURCES[] = {
 };
 const int NUM_RETLECTOR_SOURCES = sizeof(RETLECTOR_SOURCES) / sizeof(RETLECTOR_SOURCES[0]);
 
-/* -- Retlector group name mapping ----------------------------------------- */
+// -- Retlector group name mapping ------------------------------------------
 
 static const char* retlector_group_for_index(int idx)
 {
@@ -131,7 +130,7 @@ static const char* retlector_group_for_index(int idx)
     return groups[idx];
 }
 
-/* -- Celestrak URL builder ------------------------------------------------- */
+// -- Celestrak URL builder --------------------------------------------------
 
 static bool celestrak_build_url(const DataSource *source, OrbitalDataFormat format,
                                  char *url, size_t url_size)
@@ -153,7 +152,7 @@ static bool celestrak_build_url(const DataSource *source, OrbitalDataFormat form
     return true;
 }
 
-/* -- Retlector URL builder ------------------------------------------------- */
+// -- Retlector URL builder --------------------------------------------------
 
 static bool retlector_build_url(const DataSource *source, OrbitalDataFormat format,
                                  char *url, size_t url_size)
@@ -175,7 +174,7 @@ static bool retlector_build_url(const DataSource *source, OrbitalDataFormat form
     return true;
 }
 
-/* -- Provider Registry ----------------------------------------------------- */
+// -- Provider Registry ------------------------------------------------------
 
 static const DataProvider celestrak_provider = {
     .name = "Celestrak",
@@ -198,7 +197,7 @@ const DataProvider* GetProvider(ProviderType type)
     }
 }
 
-/* -- libcurl memory callback ----------------------------------------------- */
+// -- libcurl memory callback ------------------------------------------------
 
 struct MemoryBuf {
     char *memory;
@@ -221,7 +220,7 @@ static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *u
     return realsize;
 }
 
-/* -- HTTP Fetch ------------------------------------------------------------ */
+// -- HTTP Fetch -------------------------------------------------------------
 
 static FetchResult http_fetch(const char *url)
 {
@@ -284,7 +283,7 @@ static FetchResult http_fetch(const char *url)
     return result;
 }
 
-/* -- High-Level Fetch ------------------------------------------------------ */
+// -- High-Level Fetch -------------------------------------------------------
 
 FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
 {
@@ -351,21 +350,16 @@ void FreeFetchResult(FetchResult *result)
     }
 }
 
-/* -- Retlector Group List Fetch -------------------------------------------- */
+// -- Retlector Group List Fetch ---------------------------------------------
 
-/** helper: find matching closing brace, handling nested braces */
-static const char* find_matching_brace(const char *open_brace)
+// helper: copy a string value from a JSON node into a fixed-size char buffer
+static void copy_str(char *dst, size_t dst_size, const std::string &src)
 {
-    if (!open_brace || *open_brace != '{') return NULL;
-    int depth = 1;
-    const char *p = open_brace + 1;
-    while (*p && depth > 0)
-    {
-        if (*p == '{') depth++;
-        else if (*p == '}') depth--;
-        if (depth > 0) p++;
-    }
-    return (depth == 0) ? p : NULL;
+    if (!dst || dst_size == 0) return;
+    size_t n = src.size();
+    if (n > dst_size - 1) n = dst_size - 1;
+    memcpy(dst, src.data(), n);
+    dst[n] = '\0';
 }
 
 int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups)
@@ -380,169 +374,54 @@ int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups)
         return -1;
     }
 
-    // parse the JSON response manually
     // expected format: {"count": N, "groups": [{...}, ...]}
     // each group object has nested objects (e.g. "endpoints": {...})
-    const char *data = result.data;
-    const char *groups_array = strstr(data, "\"groups\"");
-    if (!groups_array)
+    nlohmann::json root;
+    try
+    {
+        root = nlohmann::json::parse(result.data, result.data + result.size);
+    }
+    catch (const std::exception &e)
+    {
+        LOG_ERROR("Retlector API returned invalid JSON: %s", e.what());
+        FreeFetchResult(&result);
+        return -1;
+    }
+
+    auto groups_it = root.find("groups");
+    if (groups_it == root.end() || !groups_it->is_array())
     {
         LOG_ERROR("Retlector API response missing 'groups' array");
         FreeFetchResult(&result);
         return -1;
     }
 
-    const char *array_start = strchr(groups_array, '[');
-    if (!array_start)
-    {
-        FreeFetchResult(&result);
-        return -1;
-    }
-
     int count = 0;
-    const char *curr = array_start + 1;
-    while (curr && *curr && *curr != ']' && count < max_groups)
+    for (const auto &obj : *groups_it)
     {
-        // skip whitespace and commas
-        while (*curr && (*curr == ' ' || *curr == '\n' || *curr == '\r' || *curr == '\t' || *curr == ','))
-            curr++;
-        if (!curr || *curr != '{') break;
+        if (count >= max_groups) break;
 
-        // find the matching closing brace (handles nested objects)
-        const char *obj_end = find_matching_brace(curr);
-        if (!obj_end) break;
+        std::string name;
+        if (obj.contains("name") && obj["name"].is_string())
+            name = obj["name"].get<std::string>();
+        if (name.empty()) continue;
 
-        // extract fields from this object using the full object text
-        // we create a temporary null-terminated copy for strstr safety
-        size_t obj_len = obj_end - curr + 1;
-        char *obj_text = (char*)malloc(obj_len + 1);
-        if (!obj_text) break;
-        strncpy(obj_text, curr, obj_len);
-        obj_text[obj_len] = '\0';
-
-        char name_buf[64] = {0};
-        char status_buf[16] = {0};
-        char status_label_buf[32] = {0};
-        char last_updated_buf[32] = {0};
-        int age_seconds = 0;
-        int cache_duration = 0;
-
-        // parse "name"
-        const char *name_key = strstr(obj_text, "\"name\"");
-        if (name_key)
-        {
-            const char *colon = strchr(name_key, ':');
-            if (colon)
-            {
-                const char *q = strchr(colon, '"');
-                if (q)
-                {
-                    q++;
-                    int i = 0;
-                    while (*q && *q != '"' && i < 63) name_buf[i++] = *q++;
-                    name_buf[i] = '\0';
-                }
-            }
-        }
-
-        // parse "status"
-        const char *status_key = strstr(obj_text, "\"status\"");
-        if (status_key)
-        {
-            const char *colon = strchr(status_key, ':');
-            if (colon)
-            {
-                const char *q = strchr(colon, '"');
-                if (q)
-                {
-                    q++;
-                    int i = 0;
-                    while (*q && *q != '"' && i < 15) status_buf[i++] = *q++;
-                    status_buf[i] = '\0';
-                }
-            }
-        }
-
-        // parse "statusLabel"
-        const char *sl_key = strstr(obj_text, "\"statusLabel\"");
-        if (sl_key)
-        {
-            const char *colon = strchr(sl_key, ':');
-            if (colon)
-            {
-                const char *q = strchr(colon, '"');
-                if (q)
-                {
-                    q++;
-                    int i = 0;
-                    while (*q && *q != '"' && i < 31) status_label_buf[i++] = *q++;
-                    status_label_buf[i] = '\0';
-                }
-            }
-        }
-
-        // parse "lastUpdated"
-        const char *lu_key = strstr(obj_text, "\"lastUpdated\"");
-        if (lu_key)
-        {
-            const char *colon = strchr(lu_key, ':');
-            if (colon)
-            {
-                const char *q = strchr(colon, '"');
-                if (q)
-                {
-                    q++;
-                    int i = 0;
-                    while (*q && *q != '"' && i < 31) last_updated_buf[i++] = *q++;
-                    last_updated_buf[i] = '\0';
-                }
-            }
-        }
-
-        // parse "ageSeconds"
-        const char *age_key = strstr(obj_text, "\"ageSeconds\"");
-        if (age_key)
-        {
-            const char *colon = strchr(age_key, ':');
-            if (colon)
-            {
-                colon++;
-                while (*colon == ' ') colon++;
-                age_seconds = atoi(colon);
-            }
-        }
-
-        // parse "cacheDurationSeconds"
-        const char *cd_key = strstr(obj_text, "\"cacheDurationSeconds\"");
-        if (cd_key)
-        {
-            const char *colon = strchr(cd_key, ':');
-            if (colon)
-            {
-                colon++;
-                while (*colon == ' ') colon++;
-                cache_duration = atoi(colon);
-            }
-        }
-
-        // populate the group entry
-        if (name_buf[0])
-        {
-            RetlectorGroup *g = &groups[count];
-            strncpy(g->name, name_buf, sizeof(g->name) - 1);
-            snprintf(g->csv_endpoint, sizeof(g->csv_endpoint),
-                     "https://retlector.eu/%s/csv", name_buf);
-            strncpy(g->status, status_buf, sizeof(g->status) - 1);
-            strncpy(g->status_label, status_label_buf, sizeof(g->status_label) - 1);
-            strncpy(g->last_updated, last_updated_buf, sizeof(g->last_updated) - 1);
-            g->age_seconds = age_seconds;
-            g->cache_duration_seconds = cache_duration;
-            g->selected = false;
-            count++;
-        }
-
-        free(obj_text);
-        curr = obj_end + 1;
+        RetlectorGroup *g = &groups[count];
+        copy_str(g->name, sizeof(g->name), name);
+        snprintf(g->csv_endpoint, sizeof(g->csv_endpoint),
+                 "https://retlector.eu/%s/csv", name.c_str());
+        copy_str(g->status, sizeof(g->status),
+                 obj.value("status", std::string()));
+        copy_str(g->status_label, sizeof(g->status_label),
+                 obj.value("statusLabel", std::string()));
+        copy_str(g->last_updated, sizeof(g->last_updated),
+                 obj.value("lastUpdated", std::string()));
+        g->age_seconds = (obj.contains("ageSeconds") && obj["ageSeconds"].is_number())
+                             ? obj["ageSeconds"].get<int>() : 0;
+        g->cache_duration_seconds = (obj.contains("cacheDurationSeconds") && obj["cacheDurationSeconds"].is_number())
+                             ? obj["cacheDurationSeconds"].get<int>() : 0;
+        g->selected = false;
+        count++;
     }
 
     LOG_INFO("Fetched %d retlector groups from API", count);
@@ -550,7 +429,7 @@ int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups)
     return count;
 }
 
-/* -- Format Detection ------------------------------------------------------ */
+// -- Format Detection -------------------------------------------------------
 
 OrbitalDataFormat DetectDataFormat(const char *data, size_t size)
 {
@@ -654,7 +533,7 @@ OrbitalDataFormat DetectDataFormat(const char *data, size_t size)
     return FORMAT_UNKNOWN;
 }
 
-/* -- Custom URL Fetch with Auto-Detect ------------------------------------- */
+// -- Custom URL Fetch with Auto-Detect --------------------------------------
 
 FetchResult FetchFromCustomURL(const char *url)
 {

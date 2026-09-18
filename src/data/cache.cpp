@@ -5,16 +5,17 @@
 #include <string.h>
 #include <mutex>
 #include <raylib.h>
+#include <nlohmann/json.hpp>
 
-/* -- Static cache storage -------------------------------------------------- */
+// -- Static cache storage ---------------------------------------------------
 
 static CacheEntry cache[MAX_CACHE_ENTRIES];
 static int cache_count = 0;
 
-/* guards all cache state so worker threads can safely call CacheGet/CachePut */
+// guards all cache state so worker threads can safely call CacheGet/CachePut
 static std::mutex s_cache_mutex;
 
-/* -- Simple URL hash (djb2) ------------------------------------------------ */
+// -- Simple URL hash (djb2) -------------------------------------------------
 
 static void hash_url(const char *url, char *out, size_t out_size)
 {
@@ -25,7 +26,7 @@ static void hash_url(const char *url, char *out, size_t out_size)
     snprintf(out, out_size, "%016lx", hash);
 }
 
-/* -- Public API ------------------------------------------------------------ */
+// -- Public API -------------------------------------------------------------
 
 bool IsCacheValid(const CacheEntry *entry)
 {
@@ -134,29 +135,29 @@ bool CacheSave(const char *filename)
 {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
 
-    FILE *f = fopen(filename, "w");
-    if (!f) return false;
-
-    fprintf(f, "{\n");
-    fprintf(f, "  \"cache_entries\": %d,\n", cache_count);
-    fprintf(f, "  \"entries\": [\n");
+    nlohmann::json root;
+    root["cache_entries"] = cache_count;
+    nlohmann::json entries = nlohmann::json::array();
     for (int i = 0; i < cache_count; i++)
     {
         if (!cache[i].valid) continue;
-        fprintf(f, "    {\n");
-        fprintf(f, "      \"url_hash\": \"%s\",\n", cache[i].url_hash);
-        fprintf(f, "      \"fetch_time\": %ld,\n", (long)cache[i].fetch_time);
-        fprintf(f, "      \"format\": %d,\n", (int)cache[i].format);
-        fprintf(f, "      \"data_size\": %zu,\n", cache[i].data_size);
-        // store data as base64 or hex? for simplicity, skip data persistence for now.
-        fprintf(f, "      \"data\": \"\"\n");
-        fprintf(f, "    }");
-        if (i < cache_count - 1) fprintf(f, ",");
-        fprintf(f, "\n");
+        nlohmann::json e;
+        e["url_hash"] = cache[i].url_hash;
+        e["fetch_time"] = (long)cache[i].fetch_time;
+        e["format"] = (int)cache[i].format;
+        e["data_size"] = cache[i].data_size;
+        // data is stored empty for now; actual data is re-fetched on next launch
+        e["data"] = "";
+        entries.push_back(e);
     }
-    fprintf(f, "  ]\n");
-    fprintf(f, "}\n");
+    root["entries"] = entries;
 
+    std::string text = root.dump(4);
+    FILE *f = fopen(filename, "w");
+    if (!f) return false;
+
+    fwrite(text.data(), 1, text.size(), f);
+    fwrite("\n", 1, 1, f);
     fclose(f);
     return true;
 }

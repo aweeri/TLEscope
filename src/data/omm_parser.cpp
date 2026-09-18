@@ -2,95 +2,39 @@
 #include "core/astro.h"
 #include "util/log.h"
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
 
-/**
- * @brief JSON OMM Parser
- *
- * Parses satellite orbital data in JSON OMM (Orbital Mean-Elements Message) format.
- * This is the modern standard for distributing TLE-equivalent data.
- */
+#include <nlohmann/json.hpp>
 
-/**
- * @brief Expected JSON format (CCSDS OMM)
- *
- * @code
- * [
- *   {
- *     "OBJECT_NAME": "ISS (ZARYA)",
- *     "OBJECT_ID": "1998-067A",
- *     "EPOCH": "2024-01-15 12:00:00.000000",
- *     "MEAN_MOTION": 15.50123456,
- *     "ECCENTRICITY": 0.0001234,
- *     "INCLINATION": 51.6400,
- *     "RA_OF_ASC_NODE": 120.0000,
- *     "ARG_OF_PERICENTER": 200.0000,
- *     "MEAN_ANOMALY": 300.0000,
- *     "BSTAR": 0.00012345,
- *     "NORAD_CAT_ID": 25544,
- *     "EPOCH_MICROSECONDS": 0
- *   },
- *   ...
- * ]
- * @endcode
- */
+//
+// JSON OMM Parser
+//
+// Parses satellite orbital data in JSON OMM (Orbital Mean-Elements Message) format.
+// This is the modern standard for distributing TLE-equivalent data.
+//
+// Expected JSON format (CCSDS OMM):
+//  [
+//    {
+//      "OBJECT_NAME": "ISS (ZARYA)",
+//      "OBJECT_ID": "1998-067A",
+//      "EPOCH": "2024-01-15 12:00:00.000000",
+//      "MEAN_MOTION": 15.50123456,
+//      "ECCENTRICITY": 0.0001234,
+//      "INCLINATION": 51.6400,
+//      "RA_OF_ASC_NODE": 120.0000,
+//      "ARG_OF_PERICENTER": 200.0000,
+//      "MEAN_ANOMALY": 300.0000,
+//      "BSTAR": 0.00012345,
+//      "NORAD_CAT_ID": 25544,
+//      "EPOCH_MICROSECONDS": 0
+//    },
+//    ...
+//  ]
 
-/** simple JSON string value extractor */
-static const char* json_string_value(const char *json, const char *key, char *buf, size_t buf_size)
-{
-    if (!json || !key) return NULL;
-    char needle[64];
-    snprintf(needle, sizeof(needle), "\"%s\"", key);
-    const char *ptr = strstr(json, needle);
-    if (!ptr) return NULL;
-    ptr = strchr(ptr, ':');
-    if (!ptr) return NULL;
-    ptr++;
-    while (*ptr && isspace((unsigned char)*ptr)) ptr++;
-    if (*ptr == '"')
-    {
-        ptr++;
-        size_t i = 0;
-        while (*ptr && *ptr != '"' && i < buf_size - 1) buf[i++] = *ptr++;
-        buf[i] = '\0';
-    }
-    return ptr;
-}
-
-static double json_double_value(const char *json, const char *key, double def)
-{
-    char buf[64] = {0};
-    const char *ptr = json_string_value(json, key, buf, sizeof(buf));
-    if (!ptr) return def;
-    const char *number = buf[0] ? buf : ptr;
-    char *end = NULL;
-    double value = strtod(number, &end);
-    return end == number ? def : value;
-}
-
-static long json_long_value(const char *json, const char *key, long def)
-{
-    char buf[64] = {0};
-    json_string_value(json, key, buf, sizeof(buf));
-    if (buf[0] == '\0')
-    {
-        char needle[64];
-        snprintf(needle, sizeof(needle), "\"%s\"", key);
-        const char *p = strstr(json, needle);
-        if (!p) return def;
-        p = strchr(p, ':');
-        if (!p) return def;
-        p++;
-        while (*p && isspace((unsigned char)*p)) p++;
-        return strtol(p, NULL, 10);
-    }
-    return strtol(buf, NULL, 10);
-}
-
-/** converts a UTC OMM timestamp (ISO T or space separator) to YYYYDDD.FFFF */
+// converts a UTC OMM timestamp (ISO T or space separator) to YYYYDDD.FFFF
 static double omm_epoch_to_epoch(const char *epoch_str)
 {
     if (!epoch_str || !*epoch_str) return 0;
@@ -136,108 +80,109 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
     (void)sats;
     if (!json || !count || !sats) return 0;
 
-    int parsed = 0;
-    const char *ptr = json;
-    int brace_depth = 0;
-    int obj_start = -1;
-
-    while (*ptr && parsed < max)
+    nlohmann::json root;
+    try
     {
-        if (*ptr == '{')
-        {
-            if (brace_depth == 0)
-                obj_start = (int)(ptr - json);
-            brace_depth++;
-        }
-        else if (*ptr == '}')
-        {
-            brace_depth--;
-            if (brace_depth == 0 && obj_start >= 0)
-            {
-                int obj_len = (int)(ptr - json) - obj_start + 1;
-                char *obj_text = (char*)malloc(obj_len + 1);
-                if (obj_text)
-                {
-                    strncpy(obj_text, json + obj_start, obj_len);
-                    obj_text[obj_len] = '\0';
-
-                    // extract fields
-                    char name[64] = {0};
-                    char norad_id[16] = {0};
-                    char intl_desig[16] = {0};
-                    char epoch_str[32] = {0};
-
-                    json_string_value(obj_text, "OBJECT_NAME", name, sizeof(name));
-                    long norad = json_long_value(obj_text, "NORAD_CAT_ID", 0);
-                    snprintf(norad_id, sizeof(norad_id), "%ld", norad);
-                    json_string_value(obj_text, "OBJECT_ID", intl_desig, sizeof(intl_desig));
-                    LOG_DEBUG("Parsed OMM JSON sat: %s (NORAD: %s)", name, norad_id);
-                    json_string_value(obj_text, "EPOCH", epoch_str, sizeof(epoch_str));
-
-                    double epoch = omm_epoch_to_epoch(epoch_str);
-                    if (epoch == 0)
-                    {
-                        LOG_WARN("Skipping OMM satellite %s: invalid epoch '%s'", name, epoch_str);
-                        free(obj_text);
-                        obj_start = -1;
-                        ptr++;
-                        continue;
-                    }
-                    double inclination = json_double_value(obj_text, "INCLINATION", 0.0);
-                    double raan = json_double_value(obj_text, "RA_OF_ASC_NODE", 0.0);
-                    double eccentricity = json_double_value(obj_text, "ECCENTRICITY", 0.0);
-                    double arg_perigee = json_double_value(obj_text, "ARG_OF_PERICENTER", 0.0);
-                    double mean_anomaly = json_double_value(obj_text, "MEAN_ANOMALY", 0.0);
-                    double mean_motion = json_double_value(obj_text, "MEAN_MOTION", 0.0);
-                    double bstar = json_double_value(obj_text, "BSTAR", 0.0);
-
-                    // handle microsecond precision
-                    long epoch_us = json_long_value(obj_text, "EPOCH_MICROSECONDS", 0);
-                    if (epoch_us > 0)
-                        epoch += (double)epoch_us / 86400000000.0;
-
-                    OrbitalDataMeta meta = {0};
-                    if (source_name)
-                        strncpy(meta.source_name, source_name, sizeof(meta.source_name) - 1);
-                    meta.format = fmt;
-                    meta.fetch_time = time(NULL);
-                    meta.epoch_time = (time_t)get_unix_from_epoch(epoch);
-
-                    if (add_satellite_from_omm_elements_to(
-                            sats, count, name, norad_id, intl_desig, epoch,
-                            inclination, raan, eccentricity, arg_perigee,
-                            mean_anomaly, mean_motion, bstar, &meta))
-                    {
-                        parsed++;
-                    }
-
-                    free(obj_text);
-                }
-                obj_start = -1;
-            }
-        }
-        else if (*ptr == ']' && brace_depth == 0)
-        {
-            break;
-        }
-        ptr++;
+        root = nlohmann::json::parse(json);
+    }
+    catch (const std::exception &)
+    {
+        LOG_WARN("OMM JSON: failed to parse JSON document");
+        return 0;
+    }
+    if (!root.is_array())
+    {
+        LOG_WARN("OMM JSON: expected a top-level array of objects");
+        return 0;
     }
 
-    /* NOTE: add_satellite_from_omm_elements already increments sat_count,
-     * so we do NOT do *count += parsed here to avoid double-counting. */
+    int parsed = 0;
+    for (size_t i = 0; i < root.size() && parsed < max; i++)
+    {
+        if (!root[i].is_object())
+            continue;
+        const nlohmann::json &o = root[i];
+
+        // extract fields
+        char name[64] = {0};
+        char norad_id[16] = {0};
+        char intl_desig[16] = {0};
+        char epoch_str[32] = {0};
+
+        auto get_s = [&o](const char *key, char *buf, size_t buf_size) {
+            auto it = o.find(key);
+            if (it != o.end() && it->is_string())
+                snprintf(buf, buf_size, "%s", it->get_ref<const std::string &>().c_str());
+        };
+        auto get_d = [&o](const char *key, double def) -> double {
+            auto it = o.find(key);
+            if (it != o.end() && it->is_number())
+                return it->get<double>();
+            return def;
+        };
+        auto get_l = [&o](const char *key, long def) -> long {
+            auto it = o.find(key);
+            if (it != o.end() && it->is_number())
+                return it->get<long long>();
+            return def;
+        };
+
+        get_s("OBJECT_NAME", name, sizeof(name));
+        long norad = get_l("NORAD_CAT_ID", 0);
+        snprintf(norad_id, sizeof(norad_id), "%ld", norad);
+        get_s("OBJECT_ID", intl_desig, sizeof(intl_desig));
+        LOG_DEBUG("Parsed OMM JSON sat: %s (NORAD: %s)", name, norad_id);
+        get_s("EPOCH", epoch_str, sizeof(epoch_str));
+
+        double epoch = omm_epoch_to_epoch(epoch_str);
+        if (epoch == 0)
+        {
+            LOG_WARN("Skipping OMM satellite %s: invalid epoch '%s'", name, epoch_str);
+            continue;
+        }
+        double inclination = get_d("INCLINATION", 0.0);
+        double raan = get_d("RA_OF_ASC_NODE", 0.0);
+        double eccentricity = get_d("ECCENTRICITY", 0.0);
+        double arg_perigee = get_d("ARG_OF_PERICENTER", 0.0);
+        double mean_anomaly = get_d("MEAN_ANOMALY", 0.0);
+        double mean_motion = get_d("MEAN_MOTION", 0.0);
+        double bstar = get_d("BSTAR", 0.0);
+
+        // handle microsecond precision
+        long epoch_us = get_l("EPOCH_MICROSECONDS", 0);
+        if (epoch_us > 0)
+            epoch += (double)epoch_us / 86400000000.0;
+
+        OrbitalDataMeta meta = {0};
+        if (source_name)
+            strncpy(meta.source_name, source_name, sizeof(meta.source_name) - 1);
+        meta.format = fmt;
+        meta.fetch_time = time(NULL);
+        meta.epoch_time = (time_t)get_unix_from_epoch(epoch);
+
+        if (add_satellite_from_omm_elements_to(
+                sats, count, name, norad_id, intl_desig, epoch,
+                inclination, raan, eccentricity, arg_perigee,
+                mean_anomaly, mean_motion, bstar, &meta))
+        {
+            parsed++;
+        }
+    }
+
+    // NOTE: add_satellite_from_omm_elements already increments sat_count,
+    // so we do NOT do *count += parsed here to avoid double-counting.
     return parsed;
 }
 
-/**
- * @brief CSV OMM Parser
- *
- * Expected CSV format (CCSDS OMM):
- * OBJECT_NAME,OBJECT_ID,EPOCH,INCLINATION,RA_OF_ASC_NODE,ECCENTRICITY,ARG_OF_PERICENTER,MEAN_ANOMALY,MEAN_MOTION,BSTAR,NORAD_CAT_ID
- * "ISS (ZARYA)","1998-067A","2024-01-15 12:00:00.000000",51.6400,120.0000,0.0001234,200.0000,300.0000,15.50123456,0.00012345,25544
- * ...
- */
+//
+// CSV OMM Parser
+//
+// Expected CSV format (CCSDS OMM):
+// OBJECT_NAME,OBJECT_ID,EPOCH,INCLINATION,RA_OF_ASC_NODE,ECCENTRICITY,ARG_OF_PERICENTER,MEAN_ANOMALY,MEAN_MOTION,BSTAR,NORAD_CAT_ID
+// "ISS (ZARYA)","1998-067A","2024-01-15 12:00:00.000000",51.6400,120.0000,0.0001234,200.0000,300.0000,15.50123456,0.00012345,25544
+// ...
 
-/** find column index in CSV header */
+// find column index in CSV header
 static int csv_find_column(const char *header, const char *name)
 {
     if (!header || !name) return -1;
@@ -268,7 +213,7 @@ static int csv_find_column(const char *header, const char *name)
     return -1;
 }
 
-/** get value at column index from a CSV line */
+// get value at column index from a CSV line
 static const char* csv_get_column(const char *line, int col_idx, char *buf, size_t buf_size)
 {
     if (!line || col_idx < 0) return NULL;
@@ -456,7 +401,7 @@ int ParseOMMCsv(const char *csv, size_t size, Satellite *sats, int *count, int m
         if (*ptr == '\n') ptr++;
     }
 
-    /* NOTE: add_satellite_from_omm_elements already increments sat_count,
-     * so we do NOT do *count += parsed here to avoid double-counting. */
+    // NOTE: add_satellite_from_omm_elements already increments sat_count,
+    // so we do NOT do *count += parsed here to avoid double-counting.
     return parsed;
 }

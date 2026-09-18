@@ -1,10 +1,10 @@
-// Validate all themes/*/theme.json against the schema using the actual cJSON parser.
-// Build: g++ -std=c++20 -Ilib/cjson scripts/validate_themes.cpp lib/cjson/cJSON.c -o build/validate_themes
+// Validate all themes/*/theme.json against the schema using nlohmann/json.
+// Build: g++ -std=c++20 -Ilib -Ilib/nlohmann/include scripts/validate_themes.cpp -o build/validate_themes
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
-#include "cJSON.h"
+#include <nlohmann/json.hpp>
 
 static int g_failures = 0;
 
@@ -22,28 +22,30 @@ static bool is_color(const char *s)
     return true;
 }
 
-static void check_keys(cJSON *root, const char *section, const std::vector<const char *> &keys)
+static void check_keys(const nlohmann::json &root, const char *section, const std::vector<const char *> &keys)
 {
-    cJSON *sec = cJSON_GetObjectItem(root, section);
-    if (!sec)
+    auto sec_it = root.find(section);
+    if (sec_it == root.end() || !sec_it->is_object())
     {
         printf("  FAIL: missing section '%s'\n", section);
         g_failures++;
         return;
     }
+    const nlohmann::json &sec = *sec_it;
     for (const char *k : keys)
     {
-        cJSON *item = cJSON_GetObjectItem(sec, k);
-        if (!item)
+        auto item = sec.find(k);
+        if (item == sec.end())
         {
             printf("  FAIL: missing '%s.%s'\n", section, k);
             g_failures++;
         }
-        else if ((strcmp(section, "world") == 0 || strcmp(section, "ui") == 0) && cJSON_IsString(item))
+        else if ((strcmp(section, "world") == 0 || strcmp(section, "ui") == 0) && item->is_string())
         {
-            if (!is_color(item->valuestring))
+            const char *val = item->get_ref<const std::string &>().c_str();
+            if (!is_color(val))
             {
-                printf("  FAIL: '%s.%s' is not #RRGGBBAA: '%s'\n", section, k, item->valuestring);
+                printf("  FAIL: '%s.%s' is not #RRGGBBAA: '%s'\n", section, k, val);
                 g_failures++;
             }
         }
@@ -66,10 +68,14 @@ static void validate(const char *path)
     fread(&text[0], 1, (size_t)sz, f);
     fclose(f);
 
-    cJSON *root = cJSON_Parse(text.c_str());
-    if (!root)
+    nlohmann::json root;
+    try
     {
-        printf("FAIL %s: parse error at %s\n", path, cJSON_GetErrorPtr() ? cJSON_GetErrorPtr() : "?");
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &e)
+    {
+        printf("FAIL %s: parse error: %s\n", path, e.what());
         g_failures++;
         return;
     }
@@ -94,15 +100,14 @@ static void validate(const char *path)
         "earth", "earth_night", "clouds", "skybox", "moon",
         "sat_icon", "marker_icon", "smallmark"});
 
-    cJSON *meta = cJSON_GetObjectItem(root, "meta");
-    if (!meta)
+    auto meta_it = root.find("meta");
+    if (meta_it == root.end())
     {
         printf("  FAIL: missing section 'meta'\n");
         g_failures++;
     }
 
     printf("%s\n", g_failures == before ? "OK" : "FAIL");
-    cJSON_Delete(root);
 }
 
 int main(int argc, char **argv)

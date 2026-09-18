@@ -7,7 +7,9 @@
 #include <ctype.h>
 #include <raylib.h>
 
-/* -- Format string conversion ----------------------------------------------- */
+#include <nlohmann/json.hpp>
+
+// -- Format string conversion -----------------------------------------------
 
 const char* FormatToString(OrbitalDataFormat fmt)
 {
@@ -33,137 +35,84 @@ OrbitalDataFormat StringToFormat(const char *str)
     return FORMAT_UNKNOWN;
 }
 
-/* -- Manual JSON helpers (mirrors config.cpp approach) ---------------------- */
-
-static const char* find_key(const char *text, const char *key)
+static void copy_str(char *dst, size_t dst_size, const std::string &src)
 {
-    if (!text || !key) return NULL;
-    char needle[64];
-    snprintf(needle, sizeof(needle), "\"%s\"", key);
-    const char *ptr = strstr(text, needle);
-    if (!ptr) return NULL;
-    ptr = strchr(ptr, ':');
-    return ptr ? ptr + 1 : NULL;
+    snprintf(dst, dst_size, "%s", src.c_str());
 }
 
-static char* read_string(const char *text, const char *key, char *buf, size_t buf_size)
+// -- Satellite serialization ------------------------------------------------
+
+static void write_satellite(nlohmann::json &arr, const Satellite *sat, int index)
 {
-    const char *val = find_key(text, key);
-    if (!val) { buf[0] = '\0'; return buf; }
-    while (*val && isspace((unsigned char)*val)) val++;
-    if (*val != '"') { buf[0] = '\0'; return buf; }
-    val++;
-    size_t i = 0;
-    while (*val && *val != '"' && i < buf_size - 1) buf[i++] = *val++;
-    buf[i] = '\0';
-    return buf;
+    nlohmann::json j = nlohmann::json::object();
+    j["index"] = index;
+    j["name"] = sat->name;
+    j["norad_id"] = sat->norad_id;
+    j["norad_id_num"] = sat->norad_id_num;
+    j["intl_designator"] = sat->intl_designator;
+    j["epoch_days"] = sat->epoch_days;
+    j["epoch_unix"] = sat->epoch_unix;
+    j["inclination"] = sat->inclination;
+    j["raan"] = sat->raan;
+    j["eccentricity"] = sat->eccentricity;
+    j["arg_perigee"] = sat->arg_perigee;
+    j["mean_anomaly"] = sat->mean_anomaly;
+    j["mean_motion"] = sat->mean_motion;
+    j["semi_major_axis"] = sat->semi_major_axis;
+    j["bstar"] = sat->bstar;
+    j["is_active"] = sat->is_active;
+    j["data_meta"] = nlohmann::json{
+        {"source_name", sat->data_meta.source_name},
+        {"format", FormatToString(sat->data_meta.format)},
+        {"fetch_time", (long)sat->data_meta.fetch_time},
+        {"epoch_time", (long)sat->data_meta.epoch_time}};
+    arr.push_back(j);
 }
 
-static int read_int(const char *text, const char *key, int def)
-{
-    const char *val = find_key(text, key);
-    if (!val) return def;
-    while (*val && isspace((unsigned char)*val)) val++;
-    return (int)strtol(val, NULL, 10);
-}
-
-static long read_long(const char *text, const char *key, long def)
-{
-    const char *val = find_key(text, key);
-    if (!val) return def;
-    while (*val && isspace((unsigned char)*val)) val++;
-    return strtol(val, NULL, 10);
-}
-
-static double read_double(const char *text, const char *key, double def)
-{
-    const char *val = find_key(text, key);
-    if (!val) return def;
-    while (*val && isspace((unsigned char)*val)) val++;
-    return strtod(val, NULL);
-}
-
-static bool read_bool(const char *text, const char *key, bool def)
-{
-    const char *val = find_key(text, key);
-    if (!val) return def;
-    while (*val && isspace((unsigned char)*val)) val++;
-    return (strncmp(val, "true", 4) == 0);
-}
-
-/* -- Satellite serialization ------------------------------------------------ */
-
-static void write_satellite(FILE *f, const Satellite *sat, int index)
-{
-    fprintf(f, "    {\n");
-    fprintf(f, "      \"index\": %d,\n", index);
-    fprintf(f, "      \"name\": \"%s\",\n", sat->name);
-    fprintf(f, "      \"norad_id\": \"%s\",\n", sat->norad_id);
-    fprintf(f, "      \"norad_id_num\": %u,\n", sat->norad_id_num);
-    fprintf(f, "      \"intl_designator\": \"%s\",\n", sat->intl_designator);
-    fprintf(f, "      \"epoch_days\": %.15f,\n", sat->epoch_days);
-    fprintf(f, "      \"epoch_unix\": %.6f,\n", sat->epoch_unix);
-    fprintf(f, "      \"inclination\": %.15f,\n", sat->inclination);
-    fprintf(f, "      \"raan\": %.15f,\n", sat->raan);
-    fprintf(f, "      \"eccentricity\": %.15f,\n", sat->eccentricity);
-    fprintf(f, "      \"arg_perigee\": %.15f,\n", sat->arg_perigee);
-    fprintf(f, "      \"mean_anomaly\": %.15f,\n", sat->mean_anomaly);
-    fprintf(f, "      \"mean_motion\": %.15f,\n", sat->mean_motion);
-    fprintf(f, "      \"semi_major_axis\": %.6f,\n", sat->semi_major_axis);
-    fprintf(f, "      \"bstar\": %.15f,\n", sat->bstar);
-    fprintf(f, "      \"is_active\": %s,\n", sat->is_active ? "true" : "false");
-    fprintf(f, "      \"data_meta\": {\n");
-    fprintf(f, "        \"source_name\": \"%s\",\n", sat->data_meta.source_name);
-    fprintf(f, "        \"format\": \"%s\",\n", FormatToString(sat->data_meta.format));
-    fprintf(f, "        \"fetch_time\": %ld,\n", (long)sat->data_meta.fetch_time);
-    fprintf(f, "        \"epoch_time\": %ld\n", (long)sat->data_meta.epoch_time);
-    fprintf(f, "      }\n");
-    fprintf(f, "    }");
-}
-
-static bool read_satellite(const char *text, Satellite *sat)
+static bool read_satellite_obj(const nlohmann::json &j, Satellite *sat)
 {
     memset(sat, 0, sizeof(Satellite));
 
-    read_string(text, "name", sat->name, sizeof(sat->name));
-    read_string(text, "norad_id", sat->norad_id, sizeof(sat->norad_id));
-    sat->norad_id_num = (uint32_t)read_int(text, "norad_id_num", 0);
-    read_string(text, "intl_designator", sat->intl_designator, sizeof(sat->intl_designator));
-    sat->epoch_days = read_double(text, "epoch_days", 0.0);
-    sat->epoch_unix = read_double(text, "epoch_unix", 0.0);
-    sat->inclination = read_double(text, "inclination", 0.0);
-    sat->raan = read_double(text, "raan", 0.0);
-    sat->eccentricity = read_double(text, "eccentricity", 0.0);
-    sat->arg_perigee = read_double(text, "arg_perigee", 0.0);
-    sat->mean_anomaly = read_double(text, "mean_anomaly", 0.0);
-    sat->mean_motion = read_double(text, "mean_motion", 0.0);
-    sat->semi_major_axis = read_double(text, "semi_major_axis", 0.0);
-    sat->bstar = read_double(text, "bstar", 0.0);
-    sat->is_active = read_bool(text, "is_active", false);
+    const nlohmann::json &data_meta = j.value("data_meta", nlohmann::json::object());
 
-    // Parse nested data_meta
-    const char *meta = strstr(text, "\"data_meta\"");
-    if (meta)
-    {
-        const char *meta_obj = strchr(meta, '{');
-        if (meta_obj)
-        {
-            read_string(meta_obj, "source_name", sat->data_meta.source_name, sizeof(sat->data_meta.source_name));
-            char fmt_buf[32];
-            read_string(meta_obj, "format", fmt_buf, sizeof(fmt_buf));
-            sat->data_meta.format = StringToFormat(fmt_buf);
-            sat->data_meta.fetch_time = (time_t)read_long(meta_obj, "fetch_time", 0);
-            sat->data_meta.epoch_time = (time_t)read_long(meta_obj, "epoch_time", 0);
-        }
-    }
+    copy_str(sat->name, sizeof(sat->name), j.value("name", ""));
+    copy_str(sat->norad_id, sizeof(sat->norad_id), j.value("norad_id", ""));
+    sat->norad_id_num = (uint32_t)j.value("norad_id_num", 0u);
+    copy_str(sat->intl_designator, sizeof(sat->intl_designator), j.value("intl_designator", ""));
+    sat->epoch_days = j.value("epoch_days", 0.0);
+    sat->epoch_unix = j.value("epoch_unix", 0.0);
+    sat->inclination = j.value("inclination", 0.0);
+    sat->raan = j.value("raan", 0.0);
+    sat->eccentricity = j.value("eccentricity", 0.0);
+    sat->arg_perigee = j.value("arg_perigee", 0.0);
+    sat->mean_anomaly = j.value("mean_anomaly", 0.0);
+    sat->mean_motion = j.value("mean_motion", 0.0);
+    sat->semi_major_axis = j.value("semi_major_axis", 0.0);
+    sat->bstar = j.value("bstar", 0.0);
+    sat->is_active = j.value("is_active", false);
+
+    // parse nested data_meta
+    copy_str(sat->data_meta.source_name, sizeof(sat->data_meta.source_name), data_meta.value("source_name", ""));
+    std::string fmt_buf = data_meta.value("format", "UNKNOWN");
+    sat->data_meta.format = StringToFormat(fmt_buf.c_str());
+    sat->data_meta.fetch_time = (time_t)data_meta.value("fetch_time", 0L);
+    sat->data_meta.epoch_time = (time_t)data_meta.value("epoch_time", 0L);
 
     return true;
 }
 
-/* -- Public API ------------------------------------------------------------- */
+// -- Public API -------------------------------------------------------------
 
 bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
 {
+    nlohmann::json root = nlohmann::json::object();
+    root["version"] = 2;
+    root["satellite_count"] = count;
+    nlohmann::json arr = nlohmann::json::array();
+    for (int i = 0; i < count; i++)
+        write_satellite(arr, &sats[i], i);
+    root["satellites"] = arr;
+
     FILE *f = fopen(filename, "w");
     if (!f) {
         LOG_ERROR("Failed to save orbital data to %s", filename);
@@ -171,21 +120,9 @@ bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
     }
     LOG_INFO("Saving %d satellites to %s", count, filename);
 
-    fprintf(f, "{\n");
-    fprintf(f, "  \"version\": 2,\n");
-    fprintf(f, "  \"satellite_count\": %d,\n", count);
-    fprintf(f, "  \"satellites\": [\n");
-
-    for (int i = 0; i < count; i++)
-    {
-        write_satellite(f, &sats[i], i);
-        if (i < count - 1) fprintf(f, ",\n");
-        else fprintf(f, "\n");
-    }
-
-    fprintf(f, "  ]\n");
-    fprintf(f, "}\n");
-
+    std::string out = root.dump(2);
+    fwrite(out.c_str(), 1, out.size(), f);
+    fwrite("\n", 1, 1, f);
     fclose(f);
     return true;
 }
@@ -205,72 +142,74 @@ bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
         return false;
     }
 
-    int loaded = 0;
-    const char *ptr = text;
-    int brace_depth = 0;
-    int obj_start = -1;
+    nlohmann::json root;
+    try
+    {
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &)
+    {
+        UnloadFileText(text);
+        *count = 0;
+        return false;
+    }
+    UnloadFileText(text);
 
     // Find the satellites array
-    const char *array_start = strstr(text, "\"satellites\"");
-    if (!array_start)
+    if (!root.is_object())
     {
-        UnloadFileText(text);
+        *count = 0;
+        return false;
+    }
+    auto sats_arr = root.find("satellites");
+    if (sats_arr == root.end() || !sats_arr->is_array())
+    {
         *count = 0;
         return false;
     }
 
-    // Walk through the array, extract each object
-    ptr = strchr(array_start, '[');
-    if (!ptr)
+    int loaded = 0;
+    for (size_t i = 0; i < sats_arr->size() && loaded < max; i++)
     {
-        UnloadFileText(text);
-        *count = 0;
-        return false;
-    }
-
-    while (*ptr && loaded < max)
-    {
-        if (*ptr == '{')
+        if (sats_arr->at(i).is_object())
         {
-            if (brace_depth == 0)
-                obj_start = (int)(ptr - text);
-            brace_depth++;
-        }
-        else if (*ptr == '}')
-        {
-            brace_depth--;
-            if (brace_depth == 0 && obj_start >= 0)
+            const nlohmann::json &sat_node = sats_arr->at(i);
+            // satellites array may contain the "index"/"name" of the wrapping
+            // object; read the elements directly
+            if (sat_node.contains("name") ||
+                sat_node.contains("data_meta") ||
+                sat_node.contains("norad_id"))
             {
-                // Extract the object substring
-                int obj_len = (int)(ptr - text) - obj_start + 1;
-                char *obj_text = (char*)malloc(obj_len + 1);
-                if (obj_text)
-                {
-                    strncpy(obj_text, text + obj_start, obj_len);
-                    obj_text[obj_len] = '\0';
-                    read_satellite(obj_text, &sats[loaded]);
-                    free(obj_text);
-                    loaded++;
-                }
-                obj_start = -1;
+                read_satellite_obj(sat_node, &sats[loaded]);
+                loaded++;
             }
         }
-        else if (*ptr == ']' && brace_depth == 0)
-        {
-            break;
-        }
-        ptr++;
     }
 
-    UnloadFileText(text);
     *count = loaded;
     return loaded > 0;
 }
 
-/* -- Source State Persistence ------------------------------------------------ */
+// -- Source State Persistence ------------------------------------------------
 
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
 {
+    nlohmann::json root = nlohmann::json::object();
+    root["version"] = 2;
+    root["source_count"] = count;
+    nlohmann::json arr = nlohmann::json::array();
+    for (int i = 0; i < count; i++)
+    {
+        arr.push_back(nlohmann::json{
+            {"provider_name", sources[i].provider_name},
+            {"group_name", sources[i].group_name},
+            {"url", sources[i].url},
+            {"preferred_format", FormatToString(sources[i].preferred_format)},
+            {"selected", sources[i].selected},
+            {"last_fetch", (long)sources[i].last_fetch}});
+    }
+    root["sources"] = arr;
+
     FILE *f = fopen(filename, "w");
     if (!f) {
         LOG_ERROR("Failed to save source state to %s", filename);
@@ -278,28 +217,9 @@ bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
     }
     LOG_INFO("Saving %d source states to %s", count, filename);
 
-    fprintf(f, "{\n");
-    fprintf(f, "  \"version\": 2,\n");
-    fprintf(f, "  \"source_count\": %d,\n", count);
-    fprintf(f, "  \"sources\": [\n");
-
-    for (int i = 0; i < count; i++)
-    {
-        fprintf(f, "    {\n");
-        fprintf(f, "      \"provider_name\": \"%s\",\n", sources[i].provider_name);
-        fprintf(f, "      \"group_name\": \"%s\",\n", sources[i].group_name);
-        fprintf(f, "      \"url\": \"%s\",\n", sources[i].url);
-        fprintf(f, "      \"preferred_format\": \"%s\",\n", FormatToString(sources[i].preferred_format));
-        fprintf(f, "      \"selected\": %s,\n", sources[i].selected ? "true" : "false");
-        fprintf(f, "      \"last_fetch\": %ld\n", (long)sources[i].last_fetch);
-        fprintf(f, "    }");
-        if (i < count - 1) fprintf(f, ",\n");
-        else fprintf(f, "\n");
-    }
-
-    fprintf(f, "  ]\n");
-    fprintf(f, "}\n");
-
+    std::string out = root.dump(2);
+    fwrite(out.c_str(), 1, out.size(), f);
+    fwrite("\n", 1, 1, f);
     fclose(f);
     return true;
 }
@@ -319,70 +239,49 @@ bool LoadSourceState(const char *filename, DataSourceState *sources, int *count,
         return false;
     }
 
-    int loaded = 0;
-    const char *array_start = strstr(text, "\"sources\"");
-    if (!array_start)
+    nlohmann::json root;
+    try
+    {
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &)
     {
         UnloadFileText(text);
         *count = 0;
         return false;
     }
-
-    const char *ptr = strchr(array_start, '[');
-    if (!ptr)
-    {
-        UnloadFileText(text);
-        *count = 0;
-        return false;
-    }
-
-    int brace_depth = 0;
-    int obj_start = -1;
-
-    while (*ptr && loaded < max)
-    {
-        if (*ptr == '{')
-        {
-            if (brace_depth == 0) obj_start = (int)(ptr - text);
-            brace_depth++;
-        }
-        else if (*ptr == '}')
-        {
-            brace_depth--;
-            if (brace_depth == 0 && obj_start >= 0)
-            {
-                int obj_len = (int)(ptr - text) - obj_start + 1;
-                char *obj_text = (char*)malloc(obj_len + 1);
-                if (obj_text)
-                {
-                    strncpy(obj_text, text + obj_start, obj_len);
-                    obj_text[obj_len] = '\0';
-
-                    DataSourceState *src = &sources[loaded];
-                    memset(src, 0, sizeof(DataSourceState));
-                    read_string(obj_text, "provider_name", src->provider_name, sizeof(src->provider_name));
-                    read_string(obj_text, "group_name", src->group_name, sizeof(src->group_name));
-                    read_string(obj_text, "url", src->url, sizeof(src->url));
-                    char fmt_buf[32];
-                    read_string(obj_text, "preferred_format", fmt_buf, sizeof(fmt_buf));
-                    src->preferred_format = StringToFormat(fmt_buf);
-                    src->selected = read_bool(obj_text, "selected", false);
-                    src->last_fetch = (time_t)read_long(obj_text, "last_fetch", 0);
-
-                    free(obj_text);
-                    loaded++;
-                }
-                obj_start = -1;
-            }
-        }
-        else if (*ptr == ']' && brace_depth == 0)
-        {
-            break;
-        }
-        ptr++;
-    }
-
     UnloadFileText(text);
+
+    if (!root.is_object())
+    {
+        *count = 0;
+        return false;
+    }
+    auto srcs = root.find("sources");
+    if (srcs == root.end() || !srcs->is_array())
+    {
+        *count = 0;
+        return false;
+    }
+
+    int loaded = 0;
+    for (size_t i = 0; i < srcs->size() && loaded < max; i++)
+    {
+        if (!srcs->at(i).is_object())
+            continue;
+        const nlohmann::json &o = srcs->at(i);
+        DataSourceState *src = &sources[loaded];
+        memset(src, 0, sizeof(DataSourceState));
+        copy_str(src->provider_name, sizeof(src->provider_name), o.value("provider_name", ""));
+        copy_str(src->group_name, sizeof(src->group_name), o.value("group_name", ""));
+        copy_str(src->url, sizeof(src->url), o.value("url", ""));
+        std::string fmt_buf = o.value("preferred_format", "UNKNOWN");
+        src->preferred_format = StringToFormat(fmt_buf.c_str());
+        src->selected = o.value("selected", false);
+        src->last_fetch = (time_t)o.value("last_fetch", 0L);
+        loaded++;
+    }
+
     *count = loaded;
     return loaded > 0;
 }

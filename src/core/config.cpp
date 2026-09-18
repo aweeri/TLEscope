@@ -4,36 +4,17 @@
 #include "location.h"
 #include "util/log.h"
 #include "ui/tools/tools_settings.h"
+
+#include <nlohmann/json.hpp>
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static bool ParseJsonBool(const char *text, const char *key, bool defaultValue)
+static void copy_str(char *dst, size_t dst_size, const std::string &src)
 {
-    if (!text || !key)
-        return defaultValue;
-
-    char needle[64];
-    snprintf(needle, sizeof(needle), "\"%s\"", key);
-    const char *ptr = strstr(text, needle);
-    if (!ptr)
-        return defaultValue;
-
-    ptr = strchr(ptr, ':');
-    if (!ptr)
-        return defaultValue;
-    ptr++;
-
-    while (*ptr && isspace((unsigned char)*ptr))
-        ptr++;
-
-    if (strncmp(ptr, "true", 4) == 0)
-        return true;
-    if (strncmp(ptr, "false", 5) == 0)
-        return false;
-
-    return defaultValue;
+    snprintf(dst, dst_size, "%s", src.c_str());
 }
 
 // read the json file and grab our settings
@@ -49,7 +30,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_skybox = true;       // default
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
-    config->show_first_run_dialog = false; //default
+    config->show_first_run_dialog = false; // default
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
     config->night_mode = false;      // default: full-screen red post-process off
@@ -61,9 +42,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
-    config->tool_settings.count = 0;  /* tool-owned settings start empty */
+    config->tool_settings.count = 0;  // tool-owned settings start empty
 
-    /* default rotator settings (mirror the static defaults in rotator.cpp) */
+    // default rotator settings (mirror the static defaults in rotator.cpp)
     {
         RotatorSettings *R = &config->rotator_settings;
         strcpy(R->host, "127.0.0.1");
@@ -75,10 +56,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         strcpy(R->park_el, "0.0");
         strcpy(R->lead_time, "30");
         R->auto_steer = true;
-        R->steer_mode = 0; /* ROTATOR_STEER_POLAR */
+        R->steer_mode = 0; // ROTATOR_STEER_POLAR
     }
 
-    /* default UI layout (first-run state) */
+    // default UI layout (first-run state)
     {
         UILayoutPersist *L = &config->ui_layout;
         L->left_sidebar_width = 300.0f;
@@ -90,8 +71,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->left_restore_width = 300.0f;
         L->right_restore_width = 300.0f;
 
-        /* left sidebar: core functions */
-        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; /* SAT_MGR, DATA_SOURCES, LAYERS, SCOPE, ROTATOR */
+        // left sidebar: core functions
+        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; // SAT_MGR, DATA_SOURCES, LAYERS, SCOPE, ROTATOR
         bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
@@ -99,8 +80,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             L->left_panel_open[i] = left_open_defaults[i];
         }
 
-        /* right sidebar: inspector + scientific tools */
-        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, 10, -1, -1, -1, -1, -1}; /* SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG, TRXDB */
+        // right sidebar: inspector + scientific tools
+        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, 10, -1, -1, -1, -1, -1}; // SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG, TRXDB
         bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
@@ -108,9 +89,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             L->right_panel_open[i] = right_open_defaults[i];
         }
 
-        /* all panels disabled by default (Tools dropdown); only the
-         * essential core/inspector tools are turned on for first run.
-         * New tools added to the enum stay off automatically. */
+        // all panels disabled by default (Tools dropdown); only the
+        // essential core/inspector tools are turned on for first run.
+        // New tools added to the enum stay off automatically.
         for (int i = 0; i < MAX_PANELS; i++)
             L->panel_enabled[i] = false;
         L->panel_enabled[PANEL_SAT_MGR]      = true;
@@ -127,693 +108,408 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         char *text = LoadFileText(filename);
         if (text)
         {
-            char hex[32];
-            char *ptr;
-
-#define PARSE_FLOAT(key, field)                                                                                                                                                                        \
-    ptr = strstr(text, "\"" key "\"");                                                                                                                                                                 \
-    if (ptr)                                                                                                                                                                                           \
-    {                                                                                                                                                                                                  \
-        ptr = strchr(ptr, ':');                                                                                                                                                                        \
-        if (ptr)                                                                                                                                                                                       \
-        {                                                                                                                                                                                              \
-            sscanf(ptr + 1, "%f", &config->field);                                                                                                                                                     \
-        }                                                                                                                                                                                              \
-    }
-
-#define PARSE_INT(key, field)                                                                                                                                                                          \
-    ptr = strstr(text, "\"" key "\"");                                                                                                                                                                 \
-    if (ptr)                                                                                                                                                                                           \
-    {                                                                                                                                                                                                  \
-        ptr = strchr(ptr, ':');                                                                                                                                                                        \
-        if (ptr)                                                                                                                                                                                       \
-        {                                                                                                                                                                                              \
-            sscanf(ptr + 1, "%d", &config->field);                                                                                                                                                     \
-        }                                                                                                                                                                                              \
-    }
-
-            ptr = strstr(text, "\"theme\"");
-            if (ptr)
+            nlohmann::json root = nlohmann::json::object();
+            try
             {
-                ptr = strchr(ptr, ':');
-                if (ptr)
-                {
-                    char *quote_start = strchr(ptr, '"');
-                    if (quote_start)
-                    {
-                        sscanf(quote_start + 1, "%63[^\"]", config->theme);
-                    }
-                }
+                root = nlohmann::json::parse(text);
+            }
+            catch (const std::exception &)
+            {
+                UnloadFileText(text);
+                text = NULL;
             }
 
-            PARSE_INT("window_width", window_width);
-            PARSE_INT("window_height", window_height);
-            PARSE_INT("target_fps", target_fps);
-            PARSE_FLOAT("ui_scale", ui_scale);
-            PARSE_FLOAT("earth_rotation_offset", earth_rotation_offset);
-            PARSE_FLOAT("orbits_to_draw", orbits_to_draw);
-            PARSE_INT("data_stale_threshold_seconds", data_stale_threshold_seconds);
-            PARSE_INT("first_day_of_week", first_day_of_week);
-
-            config->show_clouds = ParseJsonBool(text, "show_clouds", config->show_clouds);
-            config->show_night_lights = ParseJsonBool(text, "show_night_lights", config->show_night_lights);
-            config->show_markers = ParseJsonBool(text, "show_markers", config->show_markers);
-            config->show_statistics = ParseJsonBool(text, "show_statistics", config->show_statistics);
-            config->highlight_sunlit = ParseJsonBool(text, "highlight_sunlit", config->highlight_sunlit);
-            config->show_slant_range = ParseJsonBool(text, "show_slant_range", config->show_slant_range);
-            config->show_skybox = ParseJsonBool(text, "show_skybox", config->show_skybox);
-            config->show_ground_coverage = ParseJsonBool(text, "show_ground_coverage", config->show_ground_coverage);
-            config->show_apsides = ParseJsonBool(text, "show_apsides", config->show_apsides);
-            config->show_scattering = ParseJsonBool(text, "show_scattering", config->show_scattering);
-            config->hint_vsync = ParseJsonBool(text, "hint_vsync", config->hint_vsync);
-            config->show_first_run_dialog = ParseJsonBool(text, "show_first_run_dialog", config->show_first_run_dialog);
-            config->use_local_time = ParseJsonBool(text, "use_local_time", config->use_local_time);
-            config->night_mode = ParseJsonBool(text, "night_mode", config->night_mode);
-
-            // load manual orbital data entries
-            char *mt_ptr = strstr(text, "\"manual_entries\"");
-            if (mt_ptr)
+            if (text)
             {
-                char *array_start = strchr(mt_ptr, '[');
-                char *array_end = array_start ? strchr(array_start, ']') : NULL;
-                if (array_start && array_end)
+                if (root.is_object())
                 {
-                    char *curr = array_start + 1;
-                    while (curr < array_end && config->manual_entry_count < MAX_MANUAL_ENTRIES)
+                    auto get_bool = [&root](const char *key, bool def) {
+                        auto it = root.find(key);
+                        if (it != root.end() && it->is_boolean())
+                            return it->get<bool>();
+                        return def;
+                    };
+                    auto get_int = [&root](const char *key, int def) {
+                        auto it = root.find(key);
+                        if (it != root.end() && it->is_number_integer())
+                            return it->get<int>();
+                        return def;
+                    };
+                    auto get_float = [&root](const char *key, float def) {
+                        auto it = root.find(key);
+                        if (it != root.end() && it->is_number())
+                            return it->get<float>();
+                        return def;
+                    };
+                    auto get_str = [&root](const char *key, const char *def, char *dst, size_t dst_size) {
+                        auto it = root.find(key);
+                        if (it != root.end() && it->is_string())
+                            copy_str(dst, dst_size, it->get<std::string>());
+                        else if (def)
+                            copy_str(dst, dst_size, def);
+                    };
+
+                    get_str("theme", "default", config->theme, sizeof(config->theme));
+                    config->window_width = get_int("window_width", config->window_width);
+                    config->window_height = get_int("window_height", config->window_height);
+                    config->target_fps = get_int("target_fps", config->target_fps);
+                    config->ui_scale = get_float("ui_scale", config->ui_scale);
+                    config->earth_rotation_offset = get_float("earth_rotation_offset", config->earth_rotation_offset);
+                    config->orbits_to_draw = get_float("orbits_to_draw", config->orbits_to_draw);
+                    config->data_stale_threshold_seconds = get_int("data_stale_threshold_seconds", config->data_stale_threshold_seconds);
+                    config->first_day_of_week = get_int("first_day_of_week", config->first_day_of_week);
+
+                    config->show_clouds = get_bool("show_clouds", config->show_clouds);
+                    config->show_night_lights = get_bool("show_night_lights", config->show_night_lights);
+                    config->show_markers = get_bool("show_markers", config->show_markers);
+                    config->show_statistics = get_bool("show_statistics", config->show_statistics);
+                    config->highlight_sunlit = get_bool("highlight_sunlit", config->highlight_sunlit);
+                    config->show_slant_range = get_bool("show_slant_range", config->show_slant_range);
+                    config->show_skybox = get_bool("show_skybox", config->show_skybox);
+                    config->show_ground_coverage = get_bool("show_ground_coverage", config->show_ground_coverage);
+                    config->show_apsides = get_bool("show_apsides", config->show_apsides);
+                    config->show_scattering = get_bool("show_scattering", config->show_scattering);
+                    config->hint_vsync = get_bool("hint_vsync", config->hint_vsync);
+                    config->show_first_run_dialog = get_bool("show_first_run_dialog", config->show_first_run_dialog);
+                    config->use_local_time = get_bool("use_local_time", config->use_local_time);
+                    config->night_mode = get_bool("night_mode", config->night_mode);
+
+                    // load manual orbital data entries
+                    auto me = root.find("manual_entries");
+                    if (me != root.end() && me->is_array())
                     {
-                        char *quote_start = strchr(curr, '"');
-                        if (!quote_start || quote_start > array_end) break;
-                        char *quote_end = strchr(quote_start + 1, '"');
-                        if (!quote_end || quote_end > array_end) break;
-
-                        int len = quote_end - (quote_start + 1);
-                        if (len >= 512) len = 511;
-                        strncpy(config->manual_entries[config->manual_entry_count], quote_start + 1, len);
-                        config->manual_entries[config->manual_entry_count][len] = '\0';
-                        config->manual_entry_count++;
-
-                        curr = quote_end + 1;
+                        for (size_t i = 0; i < me->size() && config->manual_entry_count < MAX_MANUAL_ENTRIES; i++)
+                        {
+                            if (me->at(i).is_string())
+                            {
+                                std::string v = me->at(i).get<std::string>();
+                                int len = (int)v.size();
+                                if (len >= 512) len = 511;
+                                memcpy(config->manual_entries[config->manual_entry_count], v.c_str(), (size_t)len);
+                                config->manual_entries[config->manual_entry_count][len] = '\0';
+                                config->manual_entry_count++;
+                            }
+                        }
                     }
-                }
-            }
 
-            // load custom data sources
-            char *cts_ptr = strstr(text, "\"custom_data_sources\"");
-            if (cts_ptr)
-            {
-                char *block_end = strchr(cts_ptr, ']');
-                if (!block_end)
-                    block_end = text + strlen(text);
-
-                while ((cts_ptr = strstr(cts_ptr, "{")) && cts_ptr < block_end)
-                {
-                    if (config->custom_data_source_count >= MAX_CUSTOM_DATA_SOURCES)
-                        break;
-
-                    char *obj_end = strchr(cts_ptr, '}');
-                    if (!obj_end || obj_end > block_end)
-                        obj_end = block_end;
-
-                    char *name_ptr = strstr(cts_ptr, "\"name\"");
-                    char *url_ptr = strstr(cts_ptr, "\"url\"");
-                    char *fmt_ptr = strstr(cts_ptr, "\"preferred_format\"");
-
-                    if (name_ptr && name_ptr < obj_end && url_ptr && url_ptr < obj_end)
+                    // load custom data sources
+                    auto cds = root.find("custom_data_sources");
+                    if (cds != root.end() && cds->is_array())
                     {
-                        char *colon_name = strchr(name_ptr, ':');
-                        if (colon_name && colon_name < obj_end)
+                        for (size_t i = 0; i < cds->size() && config->custom_data_source_count < MAX_CUSTOM_DATA_SOURCES; i++)
                         {
-                            char *quote_start = strchr(colon_name, '"');
-                            if (quote_start && quote_start < obj_end)
-                                sscanf(quote_start + 1, "%63[^\"]", config->custom_data_sources[config->custom_data_source_count].name);
-                        }
+                            if (!cds->at(i).is_object())
+                                continue;
+                            const nlohmann::json &o = cds->at(i);
+                            auto nm = o.find("name");
+                            auto ur = o.find("url");
+                            if (nm == o.end() || ur == o.end())
+                                continue;
+                            CustomDataSource *s = &config->custom_data_sources[config->custom_data_source_count];
+                            if (nm->is_string())
+                                copy_str(s->name, sizeof(s->name), nm->get<std::string>());
+                            if (ur->is_string())
+                                copy_str(s->url, sizeof(s->url), ur->get<std::string>());
 
-                        char *colon_url = strchr(url_ptr, ':');
-                        if (colon_url && colon_url < obj_end)
-                        {
-                            char *quote_start = strchr(colon_url, '"');
-                            if (quote_start && quote_start < obj_end)
-                                sscanf(quote_start + 1, "%255[^\"]", config->custom_data_sources[config->custom_data_source_count].url);
-                        }
-
-                        // parse preferred format
-                        config->custom_data_sources[config->custom_data_source_count].preferred_format = FORMAT_TLE;
-                        if (fmt_ptr && fmt_ptr < obj_end)
-                        {
-                            char *colon_fmt = strchr(fmt_ptr, ':');
-                            if (colon_fmt && colon_fmt < obj_end)
+                            // parse preferred format
+                            s->preferred_format = FORMAT_TLE;
+                            auto fmt = o.find("preferred_format");
+                            if (fmt != o.end() && fmt->is_string())
                             {
-                                char *quote_start = strchr(colon_fmt, '"');
-                                if (quote_start && quote_start < obj_end)
-                                {
-                                    char fmt_buf[32] = {0};
-                                    sscanf(quote_start + 1, "%31[^\"]", fmt_buf);
-                                    if (strcmp(fmt_buf, "OMM_JSON") == 0)
-                                        config->custom_data_sources[config->custom_data_source_count].preferred_format = FORMAT_OMM_JSON;
-                                    else if (strcmp(fmt_buf, "OMM_CSV") == 0)
-                                        config->custom_data_sources[config->custom_data_source_count].preferred_format = FORMAT_OMM_CSV;
-                                }
+                                std::string fmt_buf = fmt->get<std::string>();
+                                if (fmt_buf == "OMM_JSON")
+                                    s->preferred_format = FORMAT_OMM_JSON;
+                                else if (fmt_buf == "OMM_CSV")
+                                    s->preferred_format = FORMAT_OMM_CSV;
                             }
+                            s->selected = false;
+                            config->custom_data_source_count++;
                         }
-
-                        config->custom_data_sources[config->custom_data_source_count].selected = false;
-                        config->custom_data_source_count++;
                     }
-                    cts_ptr = obj_end + 1;
-                }
-            }
 
-            // load retlector groups (cached from API)
-            char *rg_ptr = strstr(text, "\"retlector_groups\"");
-            if (rg_ptr)
-            {
-                char *block_end = strchr(rg_ptr, ']');
-                if (!block_end) block_end = text + strlen(text);
-
-                while ((rg_ptr = strstr(rg_ptr, "{")) && rg_ptr < block_end)
-                {
-                    if (config->retlector_group_count >= MAX_RETLECTOR_GROUPS) break;
-
-                    char *obj_end = strchr(rg_ptr, '}');
-                    if (!obj_end || obj_end > block_end) obj_end = block_end;
-
-                    char *name_ptr = strstr(rg_ptr, "\"name\"");
-                    char *csv_ptr = strstr(rg_ptr, "\"csv_endpoint\"");
-                    char *sel_ptr = strstr(rg_ptr, "\"selected\"");
-
-                    if (name_ptr && name_ptr < obj_end)
+                    // load retlector groups (cached from API)
+                    auto rg = root.find("retlector_groups");
+                    if (rg != root.end() && rg->is_array())
                     {
-                        RetlectorGroup *g = &config->retlector_groups[config->retlector_group_count];
-                        memset(g, 0, sizeof(RetlectorGroup));
-
-                        char *colon = strchr(name_ptr, ':');
-                        if (colon && colon < obj_end)
+                        for (size_t i = 0; i < rg->size() && config->retlector_group_count < MAX_RETLECTOR_GROUPS; i++)
                         {
-                            char *q = strchr(colon, '"');
-                            if (q && q < obj_end)
-                                sscanf(q + 1, "%63[^\"]", g->name);
+                            if (!rg->at(i).is_object())
+                                continue;
+                            const nlohmann::json &o = rg->at(i);
+                            RetlectorGroup *g = &config->retlector_groups[config->retlector_group_count];
+                            memset(g, 0, sizeof(RetlectorGroup));
+                            auto nm = o.find("name");
+                            if (nm != o.end() && nm->is_string())
+                                copy_str(g->name, sizeof(g->name), nm->get<std::string>());
+                            auto csv = o.find("csv_endpoint");
+                            if (csv != o.end() && csv->is_string())
+                                copy_str(g->csv_endpoint, sizeof(g->csv_endpoint), csv->get<std::string>());
+                            auto sel = o.find("selected");
+                            if (sel != o.end() && sel->is_boolean())
+                                g->selected = sel->get<bool>();
+                            config->retlector_group_count++;
                         }
-
-                        if (csv_ptr && csv_ptr < obj_end)
-                        {
-                            char *colon = strchr(csv_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                char *q = strchr(colon, '"');
-                                if (q && q < obj_end)
-                                    sscanf(q + 1, "%255[^\"]", g->csv_endpoint);
-                            }
-                        }
-
-                        if (sel_ptr && sel_ptr < obj_end)
-                        {
-                            char *colon = strchr(sel_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                colon++;
-                                while (*colon == ' ') colon++;
-                                g->selected = (strncmp(colon, "true", 4) == 0);
-                            }
-                        }
-
-                        config->retlector_group_count++;
+                        config->retlector_groups_fetched = (config->retlector_group_count > 0);
                     }
-                    rg_ptr = obj_end + 1;
-                }
-                config->retlector_groups_fetched = (config->retlector_group_count > 0);
-            }
 
-            // load custom entries (pasted orbital data)
-            char *ce_ptr = strstr(text, "\"custom_entries\"");
-            if (ce_ptr)
-            {
-                char *block_end = strchr(ce_ptr, ']');
-                if (!block_end) block_end = text + strlen(text);
-
-                while ((ce_ptr = strstr(ce_ptr, "{")) && ce_ptr < block_end)
-                {
-                    if (config->custom_entry_count >= MAX_CUSTOM_ENTRIES) break;
-
-                    char *obj_end = strchr(ce_ptr, '}');
-                    if (!obj_end || obj_end > block_end) obj_end = block_end;
-
-                    char *data_ptr = strstr(ce_ptr, "\"data\"");
-                    char *fmt_ptr = strstr(ce_ptr, "\"detected_format\"");
-                    char *sel_ptr = strstr(ce_ptr, "\"selected\"");
-
-                    if (data_ptr && data_ptr < obj_end)
+                    // load custom entries (pasted orbital data)
+                    auto ce = root.find("custom_entries");
+                    if (ce != root.end() && ce->is_array())
                     {
-                        CustomEntry *e = &config->custom_entries[config->custom_entry_count];
-                        memset(e, 0, sizeof(CustomEntry));
-
-                        char *colon = strchr(data_ptr, ':');
-                        if (colon && colon < obj_end)
+                        for (size_t i = 0; i < ce->size() && config->custom_entry_count < MAX_CUSTOM_ENTRIES; i++)
                         {
-                            char *q = strchr(colon, '"');
-                            if (q && q < obj_end)
-                            {
-                                q++;
-                                int i = 0;
-                                while (*q && *q != '"' && i < 4095) e->data[i++] = *q++;
-                                e->data[i] = '\0';
-                            }
+                            if (!ce->at(i).is_object())
+                                continue;
+                            const nlohmann::json &o = ce->at(i);
+                            auto data = o.find("data");
+                            if (data == o.end())
+                                continue;
+                            CustomEntry *e = &config->custom_entries[config->custom_entry_count];
+                            memset(e, 0, sizeof(CustomEntry));
+                            if (data->is_string())
+                                copy_str(e->data, sizeof(e->data), data->get<std::string>());
+                            auto fmt = o.find("detected_format");
+                            if (fmt != o.end() && fmt->is_number_integer())
+                                e->detected_format = (OrbitalDataFormat)fmt->get<int>();
+                            auto sel = o.find("selected");
+                            if (sel != o.end() && sel->is_boolean())
+                                e->selected = sel->get<bool>();
+                            config->custom_entry_count++;
                         }
-
-                        if (fmt_ptr && fmt_ptr < obj_end)
-                        {
-                            char *colon = strchr(fmt_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                colon++;
-                                while (*colon == ' ') colon++;
-                                e->detected_format = (OrbitalDataFormat)atoi(colon);
-                            }
-                        }
-
-                        if (sel_ptr && sel_ptr < obj_end)
-                        {
-                            char *colon = strchr(sel_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                colon++;
-                                while (*colon == ' ') colon++;
-                                e->selected = (strncmp(colon, "true", 4) == 0);
-                            }
-                        }
-
-                        config->custom_entry_count++;
                     }
-                    ce_ptr = obj_end + 1;
-                }
-            }
 
-            // load unified locations (markers + home merged into one list)
-            location_count = 0;
-            char *loc_ptr = strstr(text, "\"locations\"");
-            if (loc_ptr)
-            {
-                char *block_end = strchr(loc_ptr, ']');
-                if (!block_end)
-                    block_end = text + strlen(text);
-
-                while ((loc_ptr = strstr(loc_ptr, "{")) && loc_ptr < block_end)
-                {
-                    if (location_count >= MAX_LOCATIONS)
-                        break;
-
-                    char *obj_end = strchr(loc_ptr, '}');
-                    if (!obj_end || obj_end > block_end)
-                        obj_end = block_end;
-
-                    char *name_ptr = strstr(loc_ptr, "\"name\"");
-                    char *lat_ptr = strstr(loc_ptr, "\"lat\"");
-                    char *lon_ptr = strstr(loc_ptr, "\"lon\"");
-                    char *alt_ptr = strstr(loc_ptr, "\"alt\"");
-                    char *home_ptr = strstr(loc_ptr, "\"is_home\"");
-
-                    if (name_ptr && name_ptr < obj_end && lat_ptr && lat_ptr < obj_end && lon_ptr && lon_ptr < obj_end)
+                    // load unified locations (markers + home merged into one list)
+                    location_count = 0;
+                    auto locs = root.find("locations");
+                    if (locs != root.end() && locs->is_array())
                     {
-                        Location *loc = &locations[location_count];
-                        memset(loc, 0, sizeof(Location));
-
-                        char *colon_name = strchr(name_ptr, ':');
-                        if (colon_name && colon_name < obj_end)
+                        for (size_t i = 0; i < locs->size() && location_count < MAX_LOCATIONS; i++)
                         {
-                            char *quote_start = strchr(colon_name, '"');
-                            if (quote_start && quote_start < obj_end)
-                                sscanf(quote_start + 1, "%63[^\"]", loc->name);
+                            if (!locs->at(i).is_object())
+                                continue;
+                            const nlohmann::json &o = locs->at(i);
+                            auto nm = o.find("name");
+                            auto la = o.find("lat");
+                            auto lo = o.find("lon");
+                            if (nm == o.end() || la == o.end() || lo == o.end())
+                                continue;
+                            Location *loc = &locations[location_count];
+                            memset(loc, 0, sizeof(Location));
+                            if (nm->is_string())
+                                copy_str(loc->name, sizeof(loc->name), nm->get<std::string>());
+                            if (la->is_number())
+                                loc->lat = la->get<float>();
+                            if (lo->is_number())
+                                loc->lon = lo->get<float>();
+                            loc->alt = 0.0f;
+                            auto alt = o.find("alt");
+                            if (alt != o.end() && alt->is_number())
+                                loc->alt = alt->get<float>();
+                            loc->is_home = false;
+                            auto home = o.find("is_home");
+                            if (home != o.end() && home->is_boolean())
+                                loc->is_home = home->get<bool>();
+                            location_count++;
                         }
-
-                        char *colon_lat = strchr(lat_ptr, ':');
-                        if (colon_lat && colon_lat < obj_end)
-                            sscanf(colon_lat + 1, "%f", &loc->lat);
-
-                        char *colon_lon = strchr(lon_ptr, ':');
-                        if (colon_lon && colon_lon < obj_end)
-                            sscanf(colon_lon + 1, "%f", &loc->lon);
-
-                        loc->alt = 0.0f;
-                        if (alt_ptr && alt_ptr < obj_end)
-                        {
-                            char *colon_alt = strchr(alt_ptr, ':');
-                            if (colon_alt && colon_alt < obj_end)
-                                sscanf(colon_alt + 1, "%f", &loc->alt);
-                        }
-
-                        loc->is_home = false;
-                        if (home_ptr && home_ptr < obj_end)
-                        {
-                            char *colon_home = strchr(home_ptr, ':');
-                            if (colon_home && colon_home < obj_end)
-                            {
-                                colon_home++;
-                                while (*colon_home == ' ') colon_home++;
-                                loc->is_home = (strncmp(colon_home, "true", 4) == 0);
-                            }
-                        }
-
-                        location_count++;
                     }
-                    loc_ptr = obj_end + 1;
-                }
-            }
 
-            // migrate legacy home_location + markers into the unified list
-            if (location_count == 0)
-            {
-                char *hl_ptr = strstr(text, "\"home_location\"");
-                if (hl_ptr)
-                {
-                    char *name_ptr = strstr(hl_ptr, "\"name\"");
-                    char *lat_ptr = strstr(hl_ptr, "\"lat\"");
-                    char *lon_ptr = strstr(hl_ptr, "\"lon\"");
-                    char *alt_ptr = strstr(hl_ptr, "\"alt\"");
-                    char *obj_end = strchr(hl_ptr, '}');
-
-                    if (name_ptr && lat_ptr && lon_ptr && name_ptr < obj_end)
+                    // migrate legacy home_location + markers into the unified list
+                    if (location_count == 0)
                     {
-                        char name[64] = "Home";
-                        float lat = 0.0f, lon = 0.0f, alt = 0.0f;
-
-                        char *colon_name = strchr(name_ptr, ':');
-                        if (colon_name)
+                        auto hl = root.find("home_location");
+                        if (hl != root.end() && hl->is_object())
                         {
-                            char *quote_start = strchr(colon_name, '"');
-                            if (quote_start)
-                                sscanf(quote_start + 1, "%63[^\"]", name);
-                        }
-                        char *colon_lat = strchr(lat_ptr, ':');
-                        if (colon_lat)
-                            sscanf(colon_lat + 1, "%f", &lat);
-                        char *colon_lon = strchr(lon_ptr, ':');
-                        if (colon_lon)
-                            sscanf(colon_lon + 1, "%f", &lon);
-                        if (alt_ptr && alt_ptr < obj_end)
-                        {
-                            char *colon_alt = strchr(alt_ptr, ':');
-                            if (colon_alt)
-                                sscanf(colon_alt + 1, "%f", &alt);
-                        }
-
-                        int idx = AddLocation(name, lat, lon, alt);
-                        if (idx >= 0)
-                            SetHomeLocation(idx);
-                    }
-                }
-
-                // migrate legacy markers (non-home) into the list
-                char *m_ptr = strstr(text, "\"markers\"");
-                if (m_ptr)
-                {
-                    char *block_end = strchr(m_ptr, ']');
-                    if (!block_end)
-                        block_end = text + strlen(text);
-
-                    while ((m_ptr = strstr(m_ptr, "{")) && m_ptr < block_end)
-                    {
-                        char *obj_end = strchr(m_ptr, '}');
-                        if (!obj_end || obj_end > block_end)
-                            obj_end = block_end;
-
-                        char *name_ptr = strstr(m_ptr, "\"name\"");
-                        char *lat_ptr = strstr(m_ptr, "\"lat\"");
-                        char *lon_ptr = strstr(m_ptr, "\"lon\"");
-                        char *alt_ptr = strstr(m_ptr, "\"alt\"");
-
-                        if (name_ptr && name_ptr < obj_end && lat_ptr && lat_ptr < obj_end && lon_ptr && lon_ptr < obj_end)
-                        {
-                            char name[64] = "";
+                            const nlohmann::json &o = *hl;
+                            char name[64] = "Home";
                             float lat = 0.0f, lon = 0.0f, alt = 0.0f;
+                            auto nm = o.find("name");
+                            if (nm != o.end() && nm->is_string())
+                                copy_str(name, sizeof(name), nm->get<std::string>());
+                            auto la = o.find("lat");
+                            if (la != o.end() && la->is_number())
+                                lat = la->get<float>();
+                            auto lo = o.find("lon");
+                            if (lo != o.end() && lo->is_number())
+                                lon = lo->get<float>();
+                            auto at = o.find("alt");
+                            if (at != o.end() && at->is_number())
+                                alt = at->get<float>();
 
-                            char *colon_name = strchr(name_ptr, ':');
-                            if (colon_name && colon_name < obj_end)
-                            {
-                                char *quote_start = strchr(colon_name, '"');
-                                if (quote_start && quote_start < obj_end)
-                                    sscanf(quote_start + 1, "%63[^\"]", name);
-                            }
-                            char *colon_lat = strchr(lat_ptr, ':');
-                            if (colon_lat && colon_lat < obj_end)
-                                sscanf(colon_lat + 1, "%f", &lat);
-                            char *colon_lon = strchr(lon_ptr, ':');
-                            if (colon_lon && colon_lon < obj_end)
-                                sscanf(colon_lon + 1, "%f", &lon);
-                            if (alt_ptr && alt_ptr < obj_end)
-                            {
-                                char *colon_alt = strchr(alt_ptr, ':');
-                                if (colon_alt && colon_alt < obj_end)
-                                    sscanf(colon_alt + 1, "%f", &alt);
-                            }
-
-                            AddLocation(name, lat, lon, alt);
+                            int idx = AddLocation(name, lat, lon, alt);
+                            if (idx >= 0)
+                                SetHomeLocation(idx);
                         }
-                        m_ptr = obj_end + 1;
-                    }
-                }
-            }
 
-            // load UI layout (sidebar geometry + panel arrangement)
-            {
-                UILayoutPersist *L = &config->ui_layout;
-                char *ul_ptr = strstr(text, "\"ui_layout\"");
-                if (ul_ptr)
-                {
-                    char *block_end = strchr(ul_ptr, '}');
-                    if (!block_end) block_end = text + strlen(text);
-
-                    // sidebar widths
-                    char *w = strstr(ul_ptr, "\"left_sidebar_width\"");
-                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->left_sidebar_width); }
-                    w = strstr(ul_ptr, "\"right_sidebar_width\"");
-                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->right_sidebar_width); }
-
-                    // visibility
-                    L->left_sidebar_visible = ParseJsonBool(ul_ptr, "left_sidebar_visible", L->left_sidebar_visible);
-                    L->right_sidebar_visible = ParseJsonBool(ul_ptr, "right_sidebar_visible", L->right_sidebar_visible);
-                    L->left_sidebar_hidden = ParseJsonBool(ul_ptr, "left_sidebar_hidden", L->left_sidebar_hidden);
-                    L->right_sidebar_hidden = ParseJsonBool(ul_ptr, "right_sidebar_hidden", L->right_sidebar_hidden);
-
-                    // restore widths (used when un-hiding a snap-hidden sidebar)
-                    w = strstr(ul_ptr, "\"left_restore_width\"");
-                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->left_restore_width); }
-                    w = strstr(ul_ptr, "\"right_restore_width\"");
-                    if (w && w < block_end) { char *c = strchr(w, ':'); if (c) sscanf(c + 1, "%f", &L->right_restore_width); }
-
-                    // panel order arrays
-                    char *po = strstr(ul_ptr, "\"left_panel_order\"");
-                    if (po && po < block_end)
-                    {
-                        char *arr = strchr(po, '[');
-                        if (arr)
+                        // migrate legacy markers (non-home) into the list
+                        auto ms = root.find("markers");
+                        if (ms != root.end() && ms->is_array())
                         {
-                            char *cur = arr + 1;
-                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
+                            for (size_t i = 0; i < ms->size(); i++)
                             {
-                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
-                                if (*cur == ']' || *cur == '\0') break;
-                                L->left_panel_order[i] = atoi(cur);
-                                while (*cur && *cur != ',' && *cur != ']') cur++;
-                            }
-                        }
-                    }
-                    po = strstr(ul_ptr, "\"right_panel_order\"");
-                    if (po && po < block_end)
-                    {
-                        char *arr = strchr(po, '[');
-                        if (arr)
-                        {
-                            char *cur = arr + 1;
-                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
-                            {
-                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
-                                if (*cur == ']' || *cur == '\0') break;
-                                L->right_panel_order[i] = atoi(cur);
-                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                                if (!ms->at(i).is_object())
+                                    continue;
+                                const nlohmann::json &o = ms->at(i);
+                                auto nm = o.find("name");
+                                auto la = o.find("lat");
+                                auto lo = o.find("lon");
+                                if (nm == o.end() || la == o.end() || lo == o.end())
+                                    continue;
+                                char name[64] = "";
+                                float lat = 0.0f, lon = 0.0f, alt = 0.0f;
+                                if (nm->is_string())
+                                    copy_str(name, sizeof(name), nm->get<std::string>());
+                                if (la->is_number())
+                                    lat = la->get<float>();
+                                if (lo->is_number())
+                                    lon = lo->get<float>();
+                                auto at = o.find("alt");
+                                if (at != o.end() && at->is_number())
+                                    alt = at->get<float>();
+                                AddLocation(name, lat, lon, alt);
                             }
                         }
                     }
 
-                    // panel open arrays
-                    char *po2 = strstr(ul_ptr, "\"left_panel_open\"");
-                    if (po2 && po2 < block_end)
+                    // load UI layout (sidebar geometry + panel arrangement)
                     {
-                        char *arr = strchr(po2, '[');
-                        if (arr)
+                        UILayoutPersist *L = &config->ui_layout;
+                        auto ul = root.find("ui_layout");
+                        if (ul != root.end() && ul->is_object())
                         {
-                            char *cur = arr + 1;
-                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
+                            auto get_val = [&ul](const char *key, float def) -> float {
+                                auto it = ul->find(key);
+                                if (it != ul->end() && it->is_number())
+                                    return it->get<float>();
+                                return def;
+                            };
+                            auto get_b = [&ul](const char *key, bool def) -> bool {
+                                auto it = ul->find(key);
+                                if (it != ul->end() && it->is_boolean())
+                                    return it->get<bool>();
+                                return def;
+                            };
+
+                            L->left_sidebar_width = get_val("left_sidebar_width", L->left_sidebar_width);
+                            L->right_sidebar_width = get_val("right_sidebar_width", L->right_sidebar_width);
+                            L->left_sidebar_visible = get_b("left_sidebar_visible", L->left_sidebar_visible);
+                            L->right_sidebar_visible = get_b("right_sidebar_visible", L->right_sidebar_visible);
+                            L->left_sidebar_hidden = get_b("left_sidebar_hidden", L->left_sidebar_hidden);
+                            L->right_sidebar_hidden = get_b("right_sidebar_hidden", L->right_sidebar_hidden);
+                            L->left_restore_width = get_val("left_restore_width", L->left_restore_width);
+                            L->right_restore_width = get_val("right_restore_width", L->right_restore_width);
+
+                            auto read_int_array = [&ul](const char *key, int *dst) {
+                                auto it = ul->find(key);
+                                if (it == ul->end() || !it->is_array())
+                                    return;
+                                int n = (int)it->size();
+                                if (n > MAX_PANELS) n = MAX_PANELS;
+                                for (int i = 0; i < n; i++)
+                                    if (it->at(i).is_number_integer())
+                                        dst[i] = it->at(i).get<int>();
+                            };
+                            auto read_bool_array = [&ul](const char *key, bool *dst) {
+                                auto it = ul->find(key);
+                                if (it == ul->end() || !it->is_array())
+                                    return;
+                                int n = (int)it->size();
+                                if (n > MAX_PANELS) n = MAX_PANELS;
+                                for (int i = 0; i < n; i++)
+                                    if (it->at(i).is_boolean())
+                                        dst[i] = it->at(i).get<bool>();
+                            };
+
+                            read_int_array("left_panel_order", L->left_panel_order);
+                            read_int_array("right_panel_order", L->right_panel_order);
+                            read_bool_array("left_panel_open", L->left_panel_open);
+                            read_bool_array("right_panel_open", L->right_panel_open);
+                            read_bool_array("panel_enabled", L->panel_enabled);
+                        }
+                    }
+
+                    // load tool-owned settings (generic key-value store)
+                    {
+                        auto ts = root.find("tool_settings");
+                        if (ts != root.end() && ts->is_array())
+                        {
+                            config->tool_settings.count = 0;
+                            for (size_t i = 0; i < ts->size() && config->tool_settings.count < MAX_TOOL_SETTINGS; i++)
                             {
-                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
-                                if (*cur == ']' || *cur == '\0') break;
-                                L->left_panel_open[i] = (strncmp(cur, "true", 4) == 0);
-                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                                if (!ts->at(i).is_object())
+                                    continue;
+                                const nlohmann::json &o = ts->at(i);
+                                ToolSetting *s = &config->tool_settings.entries[config->tool_settings.count];
+                                auto k = o.find("key");
+                                auto v = o.find("value");
+                                if (k == o.end() || v == o.end())
+                                    continue;
+                                if (k->is_string())
+                                    copy_str(s->key, sizeof(s->key), k->get<std::string>());
+                                if (v->is_string())
+                                    copy_str(s->value, sizeof(s->value), v->get<std::string>());
+                                config->tool_settings.count++;
                             }
                         }
                     }
-                    po2 = strstr(ul_ptr, "\"right_panel_open\"");
-                    if (po2 && po2 < block_end)
+
+                    // load rotator settings
                     {
-                        char *arr = strchr(po2, '[');
-                        if (arr)
+                        RotatorSettings *R = &config->rotator_settings;
+                        auto rot = root.find("rotator_settings");
+                        if (rot != root.end() && rot->is_object())
                         {
-                            char *cur = arr + 1;
-                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
-                            {
-                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
-                                if (*cur == ']' || *cur == '\0') break;
-                                L->right_panel_open[i] = (strncmp(cur, "true", 4) == 0);
-                                while (*cur && *cur != ',' && *cur != ']') cur++;
-                            }
+                            auto get_s = [rot](const char *key, char *dst, size_t size) {
+                                auto it = rot->find(key);
+                                if (it != rot->end() && it->is_string())
+                                    copy_str(dst, size, it->get<std::string>());
+                            };
+                            get_s("host", R->host, sizeof(R->host));
+                            get_s("port", R->port, sizeof(R->port));
+                            get_s("get_fmt", R->get_fmt, sizeof(R->get_fmt));
+                            get_s("set_fmt", R->set_fmt, sizeof(R->set_fmt));
+                            get_s("custom_cmd", R->custom_cmd, sizeof(R->custom_cmd));
+                            get_s("park_az", R->park_az, sizeof(R->park_az));
+                            get_s("park_el", R->park_el, sizeof(R->park_el));
+                            get_s("lead_time", R->lead_time, sizeof(R->lead_time));
+                            auto a = rot->find("auto_steer");
+                            if (a != rot->end() && a->is_boolean())
+                                R->auto_steer = a->get<bool>();
+                            auto sm = rot->find("steer_mode");
+                            if (sm != rot->end() && sm->is_number_integer())
+                                R->steer_mode = sm->get<int>();
                         }
                     }
 
-                    // panel enabled/disabled state (Tools dropdown)
-                    char *pe = strstr(ul_ptr, "\"panel_enabled\"");
-                    if (pe && pe < block_end)
+                    // load active satellite selection (NORAD ids)
+                    config->active_sat_count = 0;
                     {
-                        char *arr = strchr(pe, '[');
-                        if (arr)
+                        auto as = root.find("active_sat_ids");
+                        if (as != root.end() && as->is_array())
                         {
-                            char *cur = arr + 1;
-                            for (int i = 0; i < MAX_PANELS && cur && *cur != ']'; i++)
+                            config->has_saved_selection = true;
+                            for (size_t i = 0; i < as->size() && config->active_sat_count < MAX_SATELLITES; i++)
                             {
-                                while (*cur && (*cur == ' ' || *cur == ',')) cur++;
-                                if (*cur == ']' || *cur == '\0') break;
-                                L->panel_enabled[i] = (strncmp(cur, "true", 4) == 0);
-                                while (*cur && *cur != ',' && *cur != ']') cur++;
+                                if (as->at(i).is_number_unsigned())
+                                    config->active_sat_ids[config->active_sat_count++] = (uint32_t)as->at(i).get<uint64_t>();
+                                else if (as->at(i).is_number_integer())
+                                    config->active_sat_ids[config->active_sat_count++] = (uint32_t)as->at(i).get<int64_t>();
                             }
-                        }
-                    }
-                }
-            }
-
-            // load tool-owned settings (generic key-value store)
-            {
-                char *ts_ptr = strstr(text, "\"tool_settings\"");
-                if (ts_ptr)
-                {
-                    char *block_end = strchr(ts_ptr, ']');
-                    if (!block_end) block_end = text + strlen(text);
-
-                    config->tool_settings.count = 0;
-                    char *cur = ts_ptr;
-                    while ((cur = strstr(cur, "{")) && cur < block_end)
-                    {
-                        if (config->tool_settings.count >= MAX_TOOL_SETTINGS)
-                            break;
-
-                        char *obj_end = strchr(cur, '}');
-                        if (!obj_end || obj_end > block_end) obj_end = block_end;
-
-                        char *key_ptr = strstr(cur, "\"key\"");
-                        char *val_ptr = strstr(cur, "\"value\"");
-                        if (key_ptr && key_ptr < obj_end && val_ptr && val_ptr < obj_end)
-                        {
-                            ToolSetting *s = &config->tool_settings.entries[config->tool_settings.count];
-
-                            char *colon = strchr(key_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                char *q = strchr(colon, '"');
-                                if (q && q < obj_end)
-                                {
-                                    q++;
-                                    int i = 0;
-                                    while (*q && *q != '"' && i < (int)sizeof(s->key) - 1)
-                                        s->key[i++] = *q++;
-                                    s->key[i] = '\0';
-                                }
-                            }
-
-                            colon = strchr(val_ptr, ':');
-                            if (colon && colon < obj_end)
-                            {
-                                char *q = strchr(colon, '"');
-                                if (q && q < obj_end)
-                                {
-                                    q++;
-                                    int i = 0;
-                                    while (*q && *q != '"' && i < (int)sizeof(s->value) - 1)
-                                        s->value[i++] = *q++;
-                                    s->value[i] = '\0';
-                                }
-                            }
-
-                            config->tool_settings.count++;
-                        }
-                        cur = obj_end + 1;
-                    }
-                }
-            }
-
-            // load rotator settings
-            {
-                RotatorSettings *R = &config->rotator_settings;
-                char *rot_ptr = strstr(text, "\"rotator_settings\"");
-                if (rot_ptr)
-                {
-                    char *block_end = strchr(rot_ptr, '}');
-                    if (!block_end) block_end = text + strlen(text);
-
-                    char *s = strstr(rot_ptr, "\"host\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->host); } }
-                    s = strstr(rot_ptr, "\"port\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->port); } }
-                    s = strstr(rot_ptr, "\"get_fmt\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->get_fmt); } }
-                    s = strstr(rot_ptr, "\"set_fmt\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%63[^\"]", R->set_fmt); } }
-                    s = strstr(rot_ptr, "\"custom_cmd\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%127[^\"]", R->custom_cmd); } }
-                    s = strstr(rot_ptr, "\"park_az\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->park_az); } }
-                    s = strstr(rot_ptr, "\"park_el\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->park_el); } }
-                    s = strstr(rot_ptr, "\"lead_time\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) { char *q = strchr(c, '"'); if (q && q < block_end) sscanf(q + 1, "%15[^\"]", R->lead_time); } }
-                    R->auto_steer = ParseJsonBool(rot_ptr, "auto_steer", R->auto_steer);
-                    R->steer_mode = 0;
-                    s = strstr(rot_ptr, "\"steer_mode\"");
-                    if (s && s < block_end) { char *c = strchr(s, ':'); if (c) sscanf(c + 1, "%d", &R->steer_mode); }
-                }
-            }
-
-            // load active satellite selection (NORAD ids)
-            config->active_sat_count = 0;
-            {
-                char *as_ptr = strstr(text, "\"active_sat_ids\"");
-                if (as_ptr)
-                {
-                    config->has_saved_selection = true;
-                    char *arr = strchr(as_ptr, '[');
-                    if (arr)
-                    {
-                        char *cur = arr + 1;
-                        while (cur && config->active_sat_count < MAX_SATELLITES)
-                        {
-                            while (*cur && (*cur == ' ' || *cur == ',' || *cur == '\n' || *cur == '\r' || *cur == '\t'))
-                                cur++;
-                            if (*cur == ']' || *cur == '\0')
-                                break;
-                            config->active_sat_ids[config->active_sat_count++] = (uint32_t)strtoul(cur, NULL, 10);
-                            while (*cur && *cur != ',' && *cur != ']')
-                                cur++;
                         }
                     }
                 }
-            }
 
-            UnloadFileText(text);
-            LOG_INFO("Config loaded: theme=%s, %dx%d, %d locations, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
-                     config->theme, config->window_width, config->window_height,
-                     location_count, config->custom_data_source_count,
-                     config->retlector_group_count, config->custom_entry_count,
-                     config->data_stale_threshold_seconds);
+                UnloadFileText(text);
+                LOG_INFO("Config loaded: theme=%s, %dx%d, %d locations, %d custom sources, %d retlector groups, %d custom entries, stale_threshold=%d",
+                         config->theme, config->window_width, config->window_height,
+                         location_count, config->custom_data_source_count,
+                         config->retlector_group_count, config->custom_entry_count,
+                         config->data_stale_threshold_seconds);
+            }
         }
     }
     else {
         LOG_INFO("No config file found at %s -- showing first-run dialog", filename);
-        sscanf("default","%63[^\"]",config->theme);
+        strcpy(config->theme, "default");
         config->window_width = 1920;
         config->window_height = 1080;
         config->target_fps = 120;
@@ -832,7 +528,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_apsides = true;
         config->hint_vsync = true;
         config->night_mode = false;
-        /* first run: a single default home location, no forced example marker */
+        // first run: a single default home location, no forced example marker
         location_count = 0;
         int home_idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);
         if (home_idx >= 0)
@@ -841,8 +537,6 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_first_run_dialog = true;
 
         SaveAppConfig(filename, config);
-        
-
     }
 
     // load theme from the selected theme directory
@@ -855,6 +549,172 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
 void SaveAppConfig(const char *filename, AppConfig *config)
 {
+    nlohmann::json root = nlohmann::json::object();
+
+    root["theme"] = config->theme;
+    root["window_width"] = config->window_width;
+    root["window_height"] = config->window_height;
+    root["target_fps"] = config->target_fps;
+    root["ui_scale"] = config->ui_scale;
+    root["earth_rotation_offset"] = config->earth_rotation_offset;
+    root["orbits_to_draw"] = config->orbits_to_draw;
+    root["show_clouds"] = config->show_clouds;
+    root["show_night_lights"] = config->show_night_lights;
+    root["show_markers"] = config->show_markers;
+    root["show_statistics"] = config->show_statistics;
+    root["highlight_sunlit"] = config->highlight_sunlit;
+    root["show_slant_range"] = config->show_slant_range;
+    root["show_scattering"] = config->show_scattering;
+    root["show_skybox"] = config->show_skybox;
+    root["show_ground_coverage"] = config->show_ground_coverage;
+    root["show_apsides"] = config->show_apsides;
+    root["hint_vsync"] = config->hint_vsync;
+    root["show_first_run_dialog"] = config->show_first_run_dialog;
+    root["use_local_time"] = config->use_local_time;
+    root["night_mode"] = config->night_mode;
+    root["first_day_of_week"] = config->first_day_of_week;
+    root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
+
+    if (config->custom_data_source_count > 0)
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->custom_data_source_count; i++)
+        {
+            const CustomDataSource &s = config->custom_data_sources[i];
+            const char *fmt = "TLE";
+            if (s.preferred_format == FORMAT_OMM_JSON) fmt = "OMM_JSON";
+            else if (s.preferred_format == FORMAT_OMM_CSV) fmt = "OMM_CSV";
+            arr.push_back(nlohmann::json{
+                {"name", s.name},
+                {"url", s.url},
+                {"preferred_format", fmt}});
+        }
+        root["custom_data_sources"] = arr;
+    }
+
+    if (config->manual_entry_count > 0)
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->manual_entry_count; i++)
+            arr.push_back(config->manual_entries[i]);
+        root["manual_entries"] = arr;
+    }
+
+    // save retlector groups (cached from API)
+    if (config->retlector_group_count > 0)
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->retlector_group_count; i++)
+        {
+            const RetlectorGroup &g = config->retlector_groups[i];
+            arr.push_back(nlohmann::json{
+                {"name", g.name},
+                {"csv_endpoint", g.csv_endpoint},
+                {"selected", g.selected}});
+        }
+        root["retlector_groups"] = arr;
+    }
+
+    // save custom entries (pasted orbital data)
+    if (config->custom_entry_count > 0)
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->custom_entry_count; i++)
+        {
+            const CustomEntry &e = config->custom_entries[i];
+            arr.push_back(nlohmann::json{
+                {"data", e.data},
+                {"detected_format", (int)e.detected_format},
+                {"selected", e.selected}});
+        }
+        root["custom_entries"] = arr;
+    }
+
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < location_count; i++)
+        {
+            arr.push_back(nlohmann::json{
+                {"name", locations[i].name},
+                {"lat", locations[i].lat},
+                {"lon", locations[i].lon},
+                {"alt", locations[i].alt},
+                {"is_home", locations[i].is_home}});
+        }
+        root["locations"] = arr;
+    }
+
+    // -- UI layout (sidebar geometry + panel arrangement) -----------------
+    {
+        const UILayoutPersist *L = &config->ui_layout;
+        nlohmann::json ul = nlohmann::json::object();
+        ul["left_sidebar_width"] = L->left_sidebar_width;
+        ul["right_sidebar_width"] = L->right_sidebar_width;
+        ul["left_sidebar_visible"] = L->left_sidebar_visible;
+        ul["right_sidebar_visible"] = L->right_sidebar_visible;
+        ul["left_sidebar_hidden"] = L->left_sidebar_hidden;
+        ul["right_sidebar_hidden"] = L->right_sidebar_hidden;
+        ul["left_restore_width"] = L->left_restore_width;
+        ul["right_restore_width"] = L->right_restore_width;
+
+        nlohmann::json left_order = nlohmann::json::array();
+        nlohmann::json right_order = nlohmann::json::array();
+        nlohmann::json left_open = nlohmann::json::array();
+        nlohmann::json right_open = nlohmann::json::array();
+        nlohmann::json panel_enabled = nlohmann::json::array();
+        for (int i = 0; i < MAX_PANELS; i++)
+        {
+            left_order.push_back(L->left_panel_order[i]);
+            right_order.push_back(L->right_panel_order[i]);
+            left_open.push_back(L->left_panel_open[i]);
+            right_open.push_back(L->right_panel_open[i]);
+            panel_enabled.push_back(L->panel_enabled[i]);
+        }
+        ul["left_panel_order"] = left_order;
+        ul["right_panel_order"] = right_order;
+        ul["left_panel_open"] = left_open;
+        ul["right_panel_open"] = right_open;
+        ul["panel_enabled"] = panel_enabled;
+
+        root["ui_layout"] = ul;
+    }
+
+    // -- rotator settings ------------------------------------------------
+    {
+        const RotatorSettings *R = &config->rotator_settings;
+        root["rotator_settings"] = nlohmann::json{
+            {"host", R->host},
+            {"port", R->port},
+            {"get_fmt", R->get_fmt},
+            {"set_fmt", R->set_fmt},
+            {"custom_cmd", R->custom_cmd},
+            {"park_az", R->park_az},
+            {"park_el", R->park_el},
+            {"lead_time", R->lead_time},
+            {"auto_steer", R->auto_steer},
+            {"steer_mode", R->steer_mode}};
+    }
+
+    // -- tool-owned settings (generic key-value store) --------------------
+    if (config->tool_settings.count > 0)
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->tool_settings.count; i++)
+        {
+            const ToolSetting &s = config->tool_settings.entries[i];
+            arr.push_back(nlohmann::json{{"key", s.key}, {"value", s.value}});
+        }
+        root["tool_settings"] = arr;
+    }
+
+    // -- active satellite selection (NORAD ids) ---------------------------
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (int i = 0; i < config->active_sat_count; i++)
+            arr.push_back(config->active_sat_ids[i]);
+        root["active_sat_ids"] = arr;
+    }
+
     FILE *file = fopen(filename, "w");
     if (!file)
     {
@@ -862,175 +722,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
         return;
     }
     LOG_INFO("Saving config to %s", filename);
-
-    fprintf(file, "{\n");
-    fprintf(file, "    \"theme\": \"%s\",\n", config->theme);
-    fprintf(file, "    \"window_width\": %d,\n", config->window_width);
-    fprintf(file, "    \"window_height\": %d,\n", config->window_height);
-    fprintf(file, "    \"target_fps\": %d,\n", config->target_fps);
-    fprintf(file, "    \"ui_scale\": %.2f,\n", config->ui_scale);
-    fprintf(file, "    \"earth_rotation_offset\": %.2f,\n", config->earth_rotation_offset);
-    fprintf(file, "    \"orbits_to_draw\": %.2f,\n", config->orbits_to_draw);
-    fprintf(file, "    \"show_clouds\": %s,\n", config->show_clouds ? "true" : "false");
-    fprintf(file, "    \"show_night_lights\": %s,\n", config->show_night_lights ? "true" : "false");
-    fprintf(file, "    \"show_markers\": %s,\n", config->show_markers ? "true" : "false");
-    fprintf(file, "    \"show_statistics\": %s,\n", config->show_statistics ? "true" : "false");
-    fprintf(file, "    \"highlight_sunlit\": %s,\n", config->highlight_sunlit ? "true" : "false");
-    fprintf(file, "    \"show_slant_range\": %s,\n", config->show_slant_range ? "true" : "false");
-    fprintf(file, "    \"show_scattering\": %s,\n", config->show_scattering ? "true" : "false");
-    fprintf(file, "    \"show_skybox\": %s,\n", config->show_skybox ? "true" : "false");
-    fprintf(file, "    \"show_ground_coverage\": %s,\n", config->show_ground_coverage ? "true" : "false");
-    fprintf(file, "    \"show_apsides\": %s,\n", config->show_apsides ? "true" : "false");
-    fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
-    fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
-    fprintf(file, "    \"use_local_time\": %s,\n", config->use_local_time ? "true" : "false");
-    fprintf(file, "    \"night_mode\": %s,\n", config->night_mode ? "true" : "false");
-    fprintf(file, "    \"first_day_of_week\": %d,\n", config->first_day_of_week);
-    fprintf(file, "    \"data_stale_threshold_seconds\": %d,\n", config->data_stale_threshold_seconds);
-
-    if (config->custom_data_source_count > 0)
-    {
-        fprintf(file, "    \"custom_data_sources\": [\n");
-        for (int i = 0; i < config->custom_data_source_count; i++)
-        {
-            fprintf(file, "    {\"name\": \"%s\", \"url\": \"%s\", \"preferred_format\": \"%s\"}%s\n",
-                    config->custom_data_sources[i].name,
-                    config->custom_data_sources[i].url,
-                    config->custom_data_sources[i].preferred_format == FORMAT_OMM_JSON ? "OMM_JSON" :
-                    config->custom_data_sources[i].preferred_format == FORMAT_OMM_CSV ? "OMM_CSV" : "TLE",
-                    (i == config->custom_data_source_count - 1) ? "" : ",");
-        }
-        fprintf(file, "    ],\n");
-    }
-
-    if (config->manual_entry_count > 0)
-    {
-        fprintf(file, "    \"manual_entries\": [\n");
-        for (int i = 0; i < config->manual_entry_count; i++)
-        {
-            fprintf(file, "        \"%s\"%s\n", config->manual_entries[i], (i == config->manual_entry_count - 1) ? "" : ",");
-        }
-        fprintf(file, "    ],\n");
-    }
-
-    // save retlector groups (cached from API)
-    if (config->retlector_group_count > 0)
-    {
-        fprintf(file, "    \"retlector_groups\": [\n");
-        for (int i = 0; i < config->retlector_group_count; i++)
-        {
-            RetlectorGroup *g = &config->retlector_groups[i];
-            fprintf(file, "    {\"name\": \"%s\", \"csv_endpoint\": \"%s\", \"selected\": %s}%s\n",
-                    g->name, g->csv_endpoint,
-                    g->selected ? "true" : "false",
-                    (i == config->retlector_group_count - 1) ? "" : ",");
-        }
-        fprintf(file, "    ],\n");
-    }
-
-    // save custom entries (pasted orbital data)
-    if (config->custom_entry_count > 0)
-    {
-        fprintf(file, "    \"custom_entries\": [\n");
-        for (int i = 0; i < config->custom_entry_count; i++)
-        {
-            CustomEntry *e = &config->custom_entries[i];
-            fprintf(file, "    {\"data\": \"%s\", \"detected_format\": %d, \"selected\": %s}%s\n",
-                    e->data, (int)e->detected_format,
-                    e->selected ? "true" : "false",
-                    (i == config->custom_entry_count - 1) ? "" : ",");
-        }
-        fprintf(file, "    ],\n");
-    }
-
-    fprintf(file, "    \"locations\": [\n");
-    for (int i = 0; i < location_count; i++)
-    {
-        fprintf(file, "    {\"name\": \"%s\", \"lat\": %.4f, \"lon\": %.4f, \"alt\": %.4f, \"is_home\": %s}%s\n",
-                locations[i].name, locations[i].lat, locations[i].lon, locations[i].alt,
-                locations[i].is_home ? "true" : "false",
-                (i == location_count - 1) ? "" : ",");
-    }
-    fprintf(file, "    ],\n");
-
-    /* -- UI layout (sidebar geometry + panel arrangement) ----------------- */
-    {
-        const UILayoutPersist *L = &config->ui_layout;
-        fprintf(file, "    \"ui_layout\": {\n");
-        fprintf(file, "        \"left_sidebar_width\": %.1f,\n", L->left_sidebar_width);
-        fprintf(file, "        \"right_sidebar_width\": %.1f,\n", L->right_sidebar_width);
-        fprintf(file, "        \"left_sidebar_visible\": %s,\n", L->left_sidebar_visible ? "true" : "false");
-        fprintf(file, "        \"right_sidebar_visible\": %s,\n", L->right_sidebar_visible ? "true" : "false");
-        fprintf(file, "        \"left_sidebar_hidden\": %s,\n", L->left_sidebar_hidden ? "true" : "false");
-        fprintf(file, "        \"right_sidebar_hidden\": %s,\n", L->right_sidebar_hidden ? "true" : "false");
-        fprintf(file, "        \"left_restore_width\": %.1f,\n", L->left_restore_width);
-        fprintf(file, "        \"right_restore_width\": %.1f,\n", L->right_restore_width);
-
-        fprintf(file, "        \"left_panel_order\": [");
-        for (int i = 0; i < MAX_PANELS; i++)
-            fprintf(file, "%s%d", i ? "," : "", L->left_panel_order[i]);
-        fprintf(file, "],\n");
-
-        fprintf(file, "        \"right_panel_order\": [");
-        for (int i = 0; i < MAX_PANELS; i++)
-            fprintf(file, "%s%d", i ? "," : "", L->right_panel_order[i]);
-        fprintf(file, "],\n");
-
-        fprintf(file, "        \"left_panel_open\": [");
-        for (int i = 0; i < MAX_PANELS; i++)
-            fprintf(file, "%s%s", i ? "," : "", L->left_panel_open[i] ? "true" : "false");
-        fprintf(file, "],\n");
-
-        fprintf(file, "        \"right_panel_open\": [");
-        for (int i = 0; i < MAX_PANELS; i++)
-            fprintf(file, "%s%s", i ? "," : "", L->right_panel_open[i] ? "true" : "false");
-        fprintf(file, "],\n");
-
-        fprintf(file, "        \"panel_enabled\": [");
-        for (int i = 0; i < MAX_PANELS; i++)
-            fprintf(file, "%s%s", i ? "," : "", L->panel_enabled[i] ? "true" : "false");
-        fprintf(file, "]\n");
-
-        fprintf(file, "    }\n");
-    }
-
-    /* -- rotator settings ------------------------------------------------ */
-    {
-        const RotatorSettings *R = &config->rotator_settings;
-        fprintf(file, "    \"rotator_settings\": {\n");
-        fprintf(file, "        \"host\": \"%s\",\n", R->host);
-        fprintf(file, "        \"port\": \"%s\",\n", R->port);
-        fprintf(file, "        \"get_fmt\": \"%s\",\n", R->get_fmt);
-        fprintf(file, "        \"set_fmt\": \"%s\",\n", R->set_fmt);
-        fprintf(file, "        \"custom_cmd\": \"%s\",\n", R->custom_cmd);
-        fprintf(file, "        \"park_az\": \"%s\",\n", R->park_az);
-        fprintf(file, "        \"park_el\": \"%s\",\n", R->park_el);
-        fprintf(file, "        \"lead_time\": \"%s\",\n", R->lead_time);
-        fprintf(file, "        \"auto_steer\": %s,\n", R->auto_steer ? "true" : "false");
-        fprintf(file, "        \"steer_mode\": %d\n", R->steer_mode);
-        fprintf(file, "    }\n");
-    }
-
-    /* -- tool-owned settings (generic key-value store) -------------------- */
-    if (config->tool_settings.count > 0)
-    {
-        fprintf(file, "    \"tool_settings\": [\n");
-        for (int i = 0; i < config->tool_settings.count; i++)
-        {
-            ToolSetting *s = &config->tool_settings.entries[i];
-            fprintf(file, "    {\"key\": \"%s\", \"value\": \"%s\"}%s\n",
-                    s->key, s->value,
-                    (i == config->tool_settings.count - 1) ? "" : ",");
-        }
-        fprintf(file, "    ],\n");
-    }
-
-    /* -- active satellite selection (NORAD ids) --------------------------- */
-    fprintf(file, "    \"active_sat_ids\": [");
-    for (int i = 0; i < config->active_sat_count; i++)
-        fprintf(file, "%s%u", i ? "," : "", config->active_sat_ids[i]);
-    fprintf(file, "]\n");
-
-    fprintf(file, "}\n");
+    std::string out = root.dump(4);
+    fwrite(out.c_str(), 1, out.size(), file);
+    fwrite("\n", 1, 1, file);
     fclose(file);
 }
