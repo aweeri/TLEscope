@@ -21,6 +21,11 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 /* master switch for the 2D "Future Orbits" track (bool, default true) */
 #define LAYERS_KEY_FUTURE_ORBITS "layers.future_orbits"
 
+/* universal master switch for the Earth surface texture (bool, default true).
+ * When off, the Earth renders as a plain black body in both the 2D map and the
+ * 3D globe (see main.cpp). */
+#define LAYERS_KEY_EARTH_TEXTURE "layers.earth_texture"
+
 /* Ground Coverage scope: 0 = Sel (active satellite only), 1 = All (every active satellite) */
 #define LAYERS_KEY_GC_MODE       "layers.ground_coverage_mode"
 #define LAYERS_GC_MODE_SELECTED  0

@@ -1399,28 +1399,39 @@ int main(void)
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
 
+        /* universal Earth texture toggle (Layers panel); off = plain black body */
+        const bool show_earth = ToolSettingGetBool(&cfg, LAYERS_KEY_EARTH_TEXTURE, true);
+
         /* 2d projection rendering */
         if (is_2d_view)
         {
             BeginMapMode2D(Camera2DParams);
-            if (cfg.show_night_lights)
+            if (show_earth)
             {
-                BeginShaderMode(shader2D);
-                SetShaderValueTexture(shader2D, nightTexLoc2D, earthNightTexture);
+                if (cfg.show_night_lights)
+                {
+                    BeginShaderMode(shader2D);
+                    SetShaderValueTexture(shader2D, nightTexLoc2D, earthNightTexture);
 
-                Vector3 sunEci = calculate_sun_position(current_epoch);
-                float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
-                Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
-                Vector3 moonEcef = Vector3Transform(draw_moon_pos, MatrixRotateY(-earth_rot_rad));
+                    Vector3 sunEci = calculate_sun_position(current_epoch);
+                    float earth_rot_rad = (gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
+                    Vector3 sunEcef = Vector3Transform(sunEci, MatrixRotateY(-earth_rot_rad));
+                    Vector3 moonEcef = Vector3Transform(draw_moon_pos, MatrixRotateY(-earth_rot_rad));
 
-                SetShaderValue(shader2D, sunDirLoc2D, &sunEcef, SHADER_UNIFORM_VEC3);
-                SetShaderValue(shader2D, moonPosLoc2D, &moonEcef, SHADER_UNIFORM_VEC3);
+                    SetShaderValue(shader2D, sunDirLoc2D, &sunEcef, SHADER_UNIFORM_VEC3);
+                    SetShaderValue(shader2D, moonPosLoc2D, &moonEcef, SHADER_UNIFORM_VEC3);
+                }
+
+                DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){-map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
+
+                if (cfg.show_night_lights)
+                    EndShaderMode();
             }
-
-            DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){-map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
-
-            if (cfg.show_night_lights)
-                EndShaderMode();
+            else
+            {
+                /* earth texture disabled: plain black body underneath the overlays */
+                DrawRectangle((int)(-map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h, BLACK);
+            }
 
             /* scissor mode for map boundaries */
             Vector2 mapMin = GetWorldToScreen2D((Vector2){-map_w / 2.0f, -map_h / 2.0f}, Camera2DParams);
@@ -1881,7 +1892,9 @@ int main(void)
             earthModel.materials[0].shader = defaultEarthShader;
         }
 
-        DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
+        /* black tint when the Earth texture layer is off, so the globe becomes a
+         * plain black body (the shader multiplies its output by the tint color) */
+        DrawModel(earthModel, Vector3Zero(), 1.0f, show_earth ? WHITE : BLACK);
 
         /* atmosphere/cloud layer */
         if (cfg.show_clouds)

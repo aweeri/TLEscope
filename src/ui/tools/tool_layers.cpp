@@ -57,6 +57,7 @@ typedef struct
     const char *settings_key; /* tool-settings key, or NULL */
     bool placeholder;         /* true = UI only, no render effect yet */
     const char *mode_key;     /* tool-settings key for a Sel/All scope combo, or NULL */
+    bool default_on;          /* default value for settings_key-backed rows */
 } LayerDef;
 
 /* persisted map overlay keys (ToolSettings store, see tools_settings.h) */
@@ -72,22 +73,23 @@ static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60
 
 static const LayerDef s_layers[] = {
     /* -- Universal (both 2D map and 3D globe) ------------------------------ */
-    { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false, NULL },
-    { "Markers",           ICON_FA_MAP_PIN,     "Show ground markers (L)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_markers), NULL, false, NULL },
-    { "Highlight Sunlit",   ICON_FA_BOLT,       "Highlight sunlit portions of orbits", LAYER_UNIVERSAL, (int)offsetof(AppConfig, highlight_sunlit), NULL, false, NULL },
-    { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false, NULL },
-    { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false, LAYERS_KEY_GC_MODE },
-    { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false, NULL },
-    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map and globe", LAYER_UNIVERSAL, -1, COAST_KEY_ENABLED, false, NULL },
-    { "Country Borders",   ICON_FA_DRAW_POLYGON, "Show country borders on the map and globe", LAYER_UNIVERSAL, -1, BORDER_KEY_ENABLED, false, NULL },
+    { "Earth Texture",     ICON_FA_GLOBE,       "Show the Earth surface texture (off = plain black)", LAYER_UNIVERSAL, -1, LAYERS_KEY_EARTH_TEXTURE, false, NULL, true },
+    { "Night Lights",      ICON_FA_MOON,       "Show night-side city lights (N)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_night_lights), NULL, false, NULL, false },
+    { "Markers",           ICON_FA_MAP_PIN,     "Show ground markers (L)", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_markers), NULL, false, NULL, false },
+    { "Highlight Sunlit",   ICON_FA_BOLT,       "Highlight sunlit portions of orbits", LAYER_UNIVERSAL, (int)offsetof(AppConfig, highlight_sunlit), NULL, false, NULL, false },
+    { "Slant Range",       ICON_FA_RULER,       "Show slant range line to home", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_slant_range), NULL, false, NULL, false },
+    { "Ground Coverage",   ICON_FA_ROUTE,       "Show the line-of-sight ground coverage footprint", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_ground_coverage), NULL, false, LAYERS_KEY_GC_MODE, false },
+    { "Apsides",           ICON_FA_CIRCLE_DOT, "Show perigee/apogee markers and altitude labels", LAYER_UNIVERSAL, (int)offsetof(AppConfig, show_apsides), NULL, false, NULL, false },
+    { "Coast Lines",       ICON_FA_WATER,       "Show coastline outlines on the map and globe", LAYER_UNIVERSAL, -1, COAST_KEY_ENABLED, false, NULL, false },
+    { "Country Borders",   ICON_FA_DRAW_POLYGON, "Show country borders on the map and globe", LAYER_UNIVERSAL, -1, BORDER_KEY_ENABLED, false, NULL, false },
 
     /* -- 2D map only ------------------------------------------------------- */
-    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false },
+    { "Lat/Lon Grid",      ICON_FA_GRIP_LINES,  "Show a latitude/longitude grid on the map", LAYER_2D, -1, GRID_KEY_ENABLED, false, NULL, false },
 
     /* -- 3D globe only ----------------------------------------------------- */
-    { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false, NULL },
-    { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false, NULL },
-    { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false, NULL },
+    { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false, NULL, false },
+    { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false, NULL, false },
+    { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false, NULL, false },
 };
 
 #define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
@@ -134,7 +136,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     auto GetLayerValue = [&](const LayerDef *def) -> bool {
         if (def->cfg_offset >= 0)
             return *(bool *)((char *)cfg + def->cfg_offset);
-        return ToolSettingGetBool(cfg, def->settings_key, false);
+        return ToolSettingGetBool(cfg, def->settings_key, def->default_on);
     };
 
     auto SetLayerValue = [&](const LayerDef *def, bool val) {
