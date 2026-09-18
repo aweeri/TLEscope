@@ -333,6 +333,7 @@ typedef struct
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)
     bool night_mode;       // full-screen monochrome-red post-process for dark adaptation
+    int first_day_of_week; // first day of the week in date pickers: 0 = Sunday, 1 = Monday (default)
 
     RotatorSettings rotator_settings;  // persisted rotator connection config
 

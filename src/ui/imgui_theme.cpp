@@ -154,6 +154,17 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale)
 /* font atlas rebuild                                                  */
 /* ------------------------------------------------------------------ */
 
+float ThemeDevicePixelScale(void)
+{
+    float sw = (float)GetScreenWidth();
+    float rw = (float)GetRenderWidth();
+    if (sw > 0.0f && rw > 0.0f)
+        return rw / sw;
+
+    Vector2 dpi = GetWindowScaleDPI();
+    return (dpi.y > 0.0f) ? dpi.y : 1.0f;
+}
+
 void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
 {
     ImGuiIO &io = ImGui::GetIO();
@@ -173,26 +184,41 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
      * The UI scale is baked into the atlas size so glyphs are rasterized at
      * the final pixel size (crisp text) rather than scaled at render time. */
     const char *font_path = ThemeAssetPath(t->font.file);
+
+    /* Round the logical font size to a whole pixel (Dear ImGui's DPI guidance)
+     * so glyph metrics line up with the integer-truncated style sizes that
+     * ImGuiStyle::ScaleAllSizes() produces. A fractional font size leaves text
+     * baselines between pixels and is a common source of misaligned rows on
+     * HiDPI displays. */
+    float font_px  = (float)(int)(t->font.size * ui_scale + 0.5f);
+    float icon_px  = (float)(int)(t->font.icon_size * ui_scale + 0.5f);
+    if (font_px < 1.0f) font_px = 1.0f;
+    if (icon_px < 1.0f) icon_px = 1.0f;
+
+    /* Single source of truth for the device scale: the exact ratio raylib uses
+     * for its DPI transform, so the atlas is never resampled. */
+    const float density = ThemeDevicePixelScale();
+
     ImFontConfig font_cfg;
     font_cfg.FontDataOwnedByAtlas = true;
     font_cfg.MergeMode = false;
     font_cfg.PixelSnapH = true;
     /* Keep logical font metrics unchanged; rasterize for the framebuffer's
      * pixel density. raylib/rlImGui handle window and input scaling. */
-    font_cfg.RasterizerDensity = GetWindowScaleDPI().y;
-    io.Fonts->AddFontFromFileTTF(font_path, t->font.size * ui_scale, &font_cfg, NULL);
+    font_cfg.RasterizerDensity = density;
+    io.Fonts->AddFontFromFileTTF(font_path, font_px, &font_cfg, NULL);
 
     /* merge FontAwesome icons */
     ImFontConfig icons_cfg;
     icons_cfg.MergeMode = true;
     icons_cfg.FontDataOwnedByAtlas = true;
     icons_cfg.PixelSnapH = true;
-    icons_cfg.RasterizerDensity = font_cfg.RasterizerDensity;
+    icons_cfg.RasterizerDensity = density;
     static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
     io.Fonts->AddFontFromMemoryCompressedTTF(
         fa_solid_900_compressed_data,
         fa_solid_900_compressed_size,
-        t->font.icon_size * ui_scale,
+        icon_px,
         &icons_cfg,
         icon_ranges);
 

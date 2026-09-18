@@ -152,57 +152,322 @@ void UIOpenHelp(void) { show_help = true; }
 void UIOpenAbout(void) { show_about = true; }
 void UIRequestExit(void) { show_exit_dialog = true; }
 
+/* -- Time-control helpers -------------------------------------------------- */
+
+/** number of days in a month (leap-aware). mon is 1-12. */
+static int DaysInMonth(int year, int mon)
+{
+    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (mon < 1) mon = 1;
+    if (mon > 12) mon = 12;
+    int n = days[mon - 1];
+    if (mon == 2 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0))
+        n = 29;
+    return n;
+}
+
+/** day-of-year (1-366) -> month (1-12) + day-of-month (1-31). */
+static void DoyToMonthDay(int year, int doy, int *mon, int *mday)
+{
+    if (doy < 1) doy = 1;
+    int m = 1;
+    while (m < 12 && doy > DaysInMonth(year, m))
+    {
+        doy -= DaysInMonth(year, m);
+        m++;
+    }
+    *mon = m;
+    *mday = doy;
+}
+
+/** month (1-12) + day-of-month (1-31) -> day-of-year (1-366). */
+static int MonthDayToDoy(int year, int mon, int mday)
+{
+    int doy = 0;
+    for (int m = 1; m < mon; m++)
+        doy += DaysInMonth(year, m);
+    return doy + mday;
+}
+
+/** day of week for a date; 0 = Sunday (Sakamoto's algorithm). */
+static int DayOfWeek(int y, int m, int d)
+{
+    static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    if (m < 3) y -= 1;
+    int w = (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
+    if (w < 0) w += 7;
+    return w;
+}
+
+// combined date picker
+static bool DrawDatePicker(int *year, int *doy, float width, int *cal_year, int *cal_mon,
+                           int first_day)
+{
+    int mon, mday;
+    DoyToMonthDay(*year, *doy, &mon, &mday);
+
+    char date_str[16];
+    snprintf(date_str, sizeof(date_str), "%04d-%02d-%02d", *year, mon, mday);
+
+    bool changed = false;
+    ImGui::PushID("datebtn");
+    bool open = ImGui::Button(date_str, ImVec2(width, 0.0f));
+    ImGui::PopID();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a date");
+
+    if (open)
+    {
+        *cal_year = *year;
+        *cal_mon = mon;
+        ImGui::OpenPopup("##datepop");
+    }
+
+    if (ImGui::BeginPopup("##datepop"))
+    {
+        /* month navigation */
+        if (ImGui::ArrowButton("##prevmonth", ImGuiDir_Left))
+        {
+            if (--(*cal_mon) < 1) { *cal_mon = 12; --(*cal_year); }
+        }
+        ImGui::SameLine(0.0f, 6.0f);
+        ImGui::Text("%04d-%02d", *cal_year, *cal_mon);
+        ImGui::SameLine(0.0f, 6.0f);
+        if (ImGui::ArrowButton("##nextmonth", ImGuiDir_Right))
+        {
+            if (++(*cal_mon) > 12) { *cal_mon = 1; ++(*cal_year); }
+        }
+
+        ImGui::Separator();
+
+        /* weekday header + day grid, ordered by the configured first day of
+         * the week (0 = Sunday, 1 = Monday). Every column is the same width
+         * (all data cells use the same button size) so the header aligns. */
+        static const char *kWeekdays[7] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+        float cell_w = ImGui::CalcTextSize("30").x + 2.0f * ImGui::GetStyle().FramePadding.x;
+        if (ImGui::BeginTable("##calgrid", 7, ImGuiTableFlags_SizingFixedSame))
+        {
+            for (int i = 0; i < 7; i++)
+            {
+                ImGui::TableNextColumn();
+                const char *wd = kWeekdays[(i + first_day) % 7];
+                float w = ImGui::CalcTextSize(wd).x;
+                if (cell_w > w) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cell_w - w) * 0.5f);
+                ImGui::TextDisabled("%s", wd);
+            }
+
+            int first_wd = DayOfWeek(*cal_year, *cal_mon, 1);          /* 0 = Sunday */
+            int offset   = (first_wd - first_day + 7) % 7;             /* leading blanks */
+            int dim      = DaysInMonth(*cal_year, *cal_mon);
+            for (int i = 0; i < offset; i++)
+                ImGui::TableNextColumn();
+            for (int day = 1; day <= dim; day++)
+            {
+                ImGui::TableNextColumn();
+                char lbl[16];
+                snprintf(lbl, sizeof(lbl), "%d##d", day);
+                bool selected = (day == mday);
+                if (selected)
+                {
+                    /* highlight the currently-set day with the theme accent */
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColor(g_theme.ui.accent));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColor(g_theme.ui.accent));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColor(g_theme.ui.accent));
+                    ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColor(g_theme.ui.bg));
+                }
+                if (ImGui::Button(lbl, ImVec2(cell_w, 0.0f)))
+                {
+                    *year = *cal_year;
+                    *doy  = MonthDayToDoy(*cal_year, *cal_mon, day);
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                if (selected)
+                    ImGui::PopStyleColor(4);
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    return changed;
+}
+
+static bool DrawHMSField(int *hour, int *minute, int *second, char *buf, size_t buf_sz, float width)
+{
+    bool changed = false;
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::InputText("##hms", buf, buf_sz, ImGuiInputTextFlags_CharsNoBlank))
+    {
+        int h = 0, m = 0, s = 0;
+        if (sscanf(buf, "%d:%d:%d", &h, &m, &s) == 3)
+        {
+            if (h < 0) h = 0;
+            if (h > 23) h = 23;
+            if (m < 0) m = 0;
+            if (m > 59) m = 59;
+            if (s < 0) s = 0;
+            if (s > 59) s = 59;
+            *hour = h;
+            *minute = m;
+            *second = s;
+            changed = true;
+        }
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("HH:MM:SS");
+    return changed;
+}
+
+/* -- Live badge ------------------------------------------------------------ */
+
+/* Badge geometry shared by the width helper and the draw routine so the painted
+ * chip always matches the reserved width. */
+static const float kBadgeDotR = 3.0f;
+static const float kBadgeGap  = 5.0f;
+static const float kBadgePadX = 6.0f;
+
+/* Fixed badge width (based on the widest state label) so the transport cluster
+ * never shifts when the live state changes. */
+static float LiveBadgeWidth(void)
+{
+    return 2.0f * kBadgePadX + 2.0f * kBadgeDotR + kBadgeGap + ImGui::CalcTextSize("PAUSED").x;
+}
+
+/**
+ * Compact pill badge showing whether the simulation is tracking real time.
+ *   LIVE   - accent green, sim runs at 1x and matches the wall clock
+ *   PAUSED - muted, time is stopped
+ *   FIXED  - muted, a custom/fixed time is active
+ */
+static void DrawLiveBadge(bool is_live, bool is_paused, float height)
+{
+    const char *label = is_live ? "LIVE" : (is_paused ? "PAUSED" : "FIXED");
+
+    const float dot_r = kBadgeDotR;
+    const float gap   = kBadgeGap;
+    float w = LiveBadgeWidth();
+    float h = height;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(w, h));   /* reserve layout space and advance the cursor */
+
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    /* modest corner radius keeps the badge reading as a squarish chip rather
+     * than a fully-rounded pill */
+    float rounding = fminf(h * 0.5f, ImGui::GetStyle().FrameRounding);
+
+    Color pill_bg, pill_border, pill_text, dot;
+    if (is_live)
+    {
+        pill_bg     = ThemeAlpha(g_theme.ui.success, 0.20f);
+        pill_border = ThemeAlpha(g_theme.ui.success, 0.70f);
+        pill_text   = g_theme.ui.success;
+        dot         = g_theme.ui.success;
+    }
+    else
+    {
+        pill_bg     = ThemeAlpha(g_theme.ui.surface, 0.65f);
+        pill_border = ThemeAlpha(g_theme.ui.border, 0.90f);
+        pill_text   = g_theme.ui.text_dim;
+        dot         = g_theme.ui.text_dim;
+    }
+
+    ImVec2 p1 = ImVec2(p.x + w, p.y + h);
+    dl->AddRectFilled(p, p1, ImGui::GetColorU32(ThemeColor(pill_bg)), rounding);
+    dl->AddRect(p, p1, ImGui::GetColorU32(ThemeColor(pill_border)), rounding, 0, 1.0f);
+
+    /* status dot (with a soft halo when live), centred with the label */
+    ImVec2 text_sz = ImGui::CalcTextSize(label);
+    float group_w = 2.0f * dot_r + gap + text_sz.x;
+    float group_x = p.x + (w - group_w) * 0.5f;
+    ImVec2 dot_c = ImVec2(group_x + dot_r, p.y + h * 0.5f);
+    if (is_live)
+        dl->AddCircleFilled(dot_c, dot_r + 2.0f, ImGui::GetColorU32(ThemeColor(ThemeAlpha(dot, 0.25f))), 16);
+    dl->AddCircleFilled(dot_c, dot_r, ImGui::GetColorU32(ThemeColor(dot)), 16);
+
+    /* label */
+    ImVec2 tp = ImVec2(group_x + 2.0f * dot_r + gap, p.y + (h - text_sz.y) * 0.5f);
+    dl->AddText(tp, ImGui::GetColorU32(ThemeColor(pill_text)), label);
+}
+
 /* -- Bottom Center Time Bar ------------------------------------------------ */
 
 static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 {
-    (void)cfg;
     if (!LayoutBottomBarVisible()) return;
+
+    ImGuiStyle &style = ImGui::GetStyle();
 
     /* use ImGui's display size (consistent with sidebar layout in ui_layout.cpp) */
     float screen_w = ImGui::GetIO().DisplaySize.x;
     float screen_h = ImGui::GetIO().DisplaySize.y;
-    float btn_sz = 24.0f;
-    float spacing = 4.0f;
-    float time_text_w = 220.0f;
-    float speed_text_w = 56.0f;
 
-    /* collapsed bar: time + 5 buttons + expand arrow + speed label */
-    int collapsed_btns = 6; /* backward, play/pause, forward, reset, expand, (speed label inline) */
-    float collapsed_w = time_text_w + collapsed_btns * (btn_sz + spacing) + speed_text_w + spacing * 2;
+    float row_h   = ImGui::GetFrameHeight();   /* standard widget row height */
+    float btn_sz  = row_h;                     /* square icon buttons        */
+    float spacing = style.ItemSpacing.x;
+    float row_gap = style.ItemSpacing.y;
+    float pad_x   = style.WindowPadding.x;
+    float pad_y   = style.WindowPadding.y;
 
-    /* expanded panel slides UP from behind the collapsed bar */
-    float expanded_h = 112.0f;  /* height for the time setter area */
-    float bar_h = btn_sz + 12.0f;
-    float total_h = bar_h + (g_layout.bottom_bar_expanded ? expanded_h : 0.0f);
-    float y = screen_h - total_h;
+    float time_reserve = ImGui::CalcTextSize("0000-00-00 00:00:00 UTC+0000").x;
+    float date_w       = ImGui::CalcTextSize("0000-00-00").x + 4.0f * style.FramePadding.x;
+    float time_w       = ImGui::CalcTextSize("00:00:00").x   + 4.0f * style.FramePadding.x;
 
-    /* center the window, but ensure it doesn't clip on small screens */
-    float win_w = fmaxf(collapsed_w, 560.0f);
+    char speed_str[32];
+    double mult = *ctx->time_multiplier;
+    if (fabs(mult) < 1e-9)
+        snprintf(speed_str, sizeof(speed_str), "0.0x");
+    else
+        snprintf(speed_str, sizeof(speed_str), "%.1fx", mult);
+    float speed_w = ImGui::CalcTextSize(speed_str).x;
+
+    const char *apply_label = ICON_FA_CHECK " Apply";
+    const char *reset_label = ICON_FA_CLOCK " Reset to Now";
+    float action_w = fmaxf(ImGui::CalcTextSize(apply_label).x,
+                           ImGui::CalcTextSize(reset_label).x) + 2.0f * style.FramePadding.x;
+
+    float badge_w = LiveBadgeWidth();
+    float play_w  = 4.0f * btn_sz + 3.0f * spacing;   /* backward | play/pause | forward | now */
+    float right_w = btn_sz + spacing + speed_w;       /* chevron + speed text */
+
+    float bottom_need = time_reserve + spacing + badge_w + 2.0f * spacing + play_w + spacing + right_w;
+
+    float top_need = ImGui::CalcTextSize("Date").x + spacing + date_w + spacing +
+                     ImGui::CalcTextSize("Time").x + spacing + time_w + 2.0f * spacing +
+                     action_w + spacing + action_w;
+
+    float need  = fmaxf(bottom_need, top_need);
+    float win_w = need + 2.0f * pad_x;
+    if (win_w > screen_w) win_w = screen_w;
+
+    float content_h = row_h + (g_layout.bottom_bar_expanded ? (row_gap + row_h) : 0.0f);
+    float win_h = content_h + 2.0f * pad_y;
+    float y  = screen_h - win_h;
     float x0 = (screen_w - win_w) * 0.5f;
     if (x0 < 0.0f) x0 = 0.0f;
 
     ImGui::SetNextWindowPos(ImVec2(x0, y), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(win_w, total_h));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.08f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border,    ImVec4(0.20f, 0.20f, 0.25f, 0.70f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
-    /* sleeker frames: rounded corners + compact padding instead of big clunky buttons */
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 3.0f));
+    ImGui::SetNextWindowSize(ImVec2(win_w, win_h));
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeColor(g_theme.ui.bg));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ThemeColor(g_theme.ui.border));
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+                             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+                             ImGuiWindowFlags_NoBringToFrontOnFocus;
 
     /* track whether we need to re-populate the time setter fields from sim time */
     static bool s_needs_populate = true;
+    /* HH:MM:SS edit buffer */
+    static char s_hms_buf[16] = "00:00:00";
+    /* calendar popup navigation state (month currently browsed) */
+    static int s_cal_year = 2000;
+    static int s_cal_mon = 1;
 
     if (ImGui::Begin("##bottombar", NULL, flags))
     {
-        /* ---- Expanded panel (time setter) — slides up from behind the collapsed bar ---- */
+        /* ---- TOP ROW (expanded only): Date [picker]  Time [HH:MM:SS]  |  [Apply] [Reset to Now] ---- */
         if (g_layout.bottom_bar_expanded)
         {
             /* populate input fields from current simulation time when needed */
@@ -211,133 +476,76 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                 epoch_to_local_fields(*ctx->current_epoch,
                                       &g_layout.bb_year, &g_layout.bb_day,
                                       &g_layout.bb_hour, &g_layout.bb_min, &g_layout.bb_sec);
+                snprintf(s_hms_buf, sizeof(s_hms_buf), "%02d:%02d:%02d",
+                         g_layout.bb_hour, g_layout.bb_min, g_layout.bb_sec);
                 s_needs_populate = false;
             }
-            float avail = ImGui::GetContentRegionAvail().x;
 
-            /* ---- Time setter: labeled inputs in a single aligned row ---- */
-            auto DrawTimeField = [&](const char *label, int *value, int min_v, int max_v,
-                                     float width)
+            ImGui::SetCursorPos(ImVec2(pad_x, pad_y));
+
+            /* date + time inputs (left group) */
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Date");
+            ImGui::SameLine(0.0f, spacing);
+            if (DrawDatePicker(&g_layout.bb_year, &g_layout.bb_day, date_w,
+                               &s_cal_year, &s_cal_mon, cfg->first_day_of_week))
             {
-                ImGui::BeginGroup();
-                ImGui::PushID(label);
+                snprintf(s_hms_buf, sizeof(s_hms_buf), "%02d:%02d:%02d",
+                         g_layout.bb_hour, g_layout.bb_min, g_layout.bb_sec);
+            }
 
-                /* label centered above the field */
-                float label_w = ImGui::CalcTextSize(label).x;
-                float arrow_w = ImGui::GetFrameHeight();
-                float group_w = width + 2.0f * arrow_w + 2.0f;  /* up + input + down */
-                float label_x = (group_w - label_w) * 0.5f;
-                if (label_x > 0.0f) ImGui::Dummy(ImVec2(label_x, 0.0f));
-                ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", label);
-                if (label_x > 0.0f) ImGui::SameLine(0.0f, 0.0f);
-                ImGui::Dummy(ImVec2(group_w - label_x - label_w, 0.0f));
-
-                /* up arrow */
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
-                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
-                {
-                    (*value)++;
-                    if (*value > max_v) *value = min_v;
-                }
-                ImGui::PopStyleVar();
-                ImGui::SameLine(0.0f, 1.0f);
-
-                /* value input */
-                ImGui::SetNextItemWidth(width);
-                if (ImGui::InputInt("##field", value, 0, 0))
-                {
-                    if (*value < min_v) *value = min_v;
-                    if (*value > max_v) *value = max_v;
-                }
-
-                /* down arrow */
-                ImGui::SameLine(0.0f, 1.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
-                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
-                {
-                    (*value)--;
-                    if (*value < min_v) *value = max_v;
-                }
-                ImGui::PopStyleVar();
-
-                ImGui::PopID();
-                ImGui::EndGroup();
-            };
-
-            float field_w = fminf(52.0f, (avail - 280.0f) / 5.0f);
-            if (field_w < 36.0f) field_w = 36.0f;
-
-            DrawTimeField("Year", &g_layout.bb_year, 1900, 3000, field_w);
             ImGui::SameLine(0.0f, spacing);
-            DrawTimeField("Day", &g_layout.bb_day, 1, 366, field_w);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Time");
             ImGui::SameLine(0.0f, spacing);
-            DrawTimeField("Hour", &g_layout.bb_hour, 0, 23, field_w);
-            ImGui::SameLine(0.0f, spacing);
-            DrawTimeField("Min", &g_layout.bb_min, 0, 59, field_w);
-            ImGui::SameLine(0.0f, spacing);
-            DrawTimeField("Sec", &g_layout.bb_sec, 0, 59, field_w);
+            DrawHMSField(&g_layout.bb_hour, &g_layout.bb_min, &g_layout.bb_sec,
+                         s_hms_buf, sizeof(s_hms_buf), time_w);
 
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            /* ---- Action row: Apply / Reset to Now / Collapse ---- */
-            float action_w = (btn_sz + spacing) * 3.0f;
-            float action_x = avail - action_w;
-            if (action_x < 0.0f) action_x = 0.0f;
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + action_x);
-
-            /* Apply time button */
+            ImGui::SameLine(0.0f, 2.0f * spacing);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
-            if (ImGui::Button(ICON_FA_CHECK "##settime", ImVec2(btn_sz, btn_sz)))
+            if (ImGui::Button(apply_label, ImVec2(action_w, btn_sz)))
             {
                 *ctx->current_epoch = local_fields_to_epoch(
                     g_layout.bb_year, g_layout.bb_day,
                     g_layout.bb_hour, g_layout.bb_min, g_layout.bb_sec);
             }
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply set time");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Apply the entered date/time to the simulation");
 
             ImGui::SameLine(0.0f, spacing);
-
-            /* Reset to Now button */
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
-            if (ImGui::Button(ICON_FA_CLOCK "##resetnow", ImVec2(btn_sz, btn_sz)))
+            if (ImGui::Button(reset_label, ImVec2(action_w, btn_sz)))
             {
-                *ctx->current_epoch = get_current_real_time_epoch();
-                /* repopulate fields from current time */
-                epoch_to_local_fields(*ctx->current_epoch,
+                epoch_to_local_fields(get_current_real_time_epoch(),
                                       &g_layout.bb_year, &g_layout.bb_day,
                                       &g_layout.bb_hour, &g_layout.bb_min, &g_layout.bb_sec);
+                snprintf(s_hms_buf, sizeof(s_hms_buf), "%02d:%02d:%02d",
+                         g_layout.bb_hour, g_layout.bb_min, g_layout.bb_sec);
             }
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current real time");
-
-            ImGui::SameLine(0.0f, spacing);
-
-            /* collapse button INSIDE the expanded panel so the setter can always be exited */
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
-            if (ImGui::Button(ICON_FA_CHEVRON_DOWN "##collapse", ImVec2(btn_sz, btn_sz)))
-            {
-                g_layout.bottom_bar_expanded = false;
-                s_needs_populate = true;
-            }
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse time controls");
-
-            ImGui::Separator();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load current real time into the fields (does not apply)");
         }
 
-        /* ---- Collapsed bar row (always visible) ---- */
+        /* ---- BOTTOM ROW: timestamp + live badge + transport (left) | chevron + speed (right) ---- */
         /* simulation time display (uses simulation epoch, not wall clock) */
         char time_str[64];
         epoch_to_datetime_str(*ctx->current_epoch, time_str);
 
+        double real_now  = get_current_real_time_epoch();
+        double drift_sec = fabs(*ctx->current_epoch - real_now) * 86400.0;
+        bool is_paused = (*ctx->time_multiplier == 0.0);
+        bool is_live = (!*ctx->is_auto_warping) && (*ctx->time_multiplier == 1.0) && (drift_sec < 5.0);
+
+        float content_w = win_w - 2.0f * pad_x;
+        float bottom_y  = pad_y + (g_layout.bottom_bar_expanded ? (row_h + row_gap) : 0.0f);
+
+        ImGui::SetCursorPos(ImVec2(pad_x, bottom_y));
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", time_str);
-        ImGui::SameLine(0.0f, spacing * 2);
 
-        /* slow down / reverse */
+        ImGui::SameLine(0.0f, spacing);
+        DrawLiveBadge(is_live, is_paused, row_h);
+
+        /* transport: slow down / reverse, play-pause, accelerate, jump to now */
+        ImGui::SameLine(0.0f, 2.0f * spacing);
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
         if (ImGui::Button(ICON_FA_BACKWARD "##backward", ImVec2(btn_sz, btn_sz)))
         {
@@ -349,7 +557,6 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         /* play/pause */
-        bool is_paused = (*ctx->time_multiplier == 0.0);
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
         if (ImGui::Button(is_paused ? (ICON_FA_PLAY "##playpause") : (ICON_FA_PAUSE "##playpause"), ImVec2(btn_sz, btn_sz)))
         {
@@ -379,22 +586,27 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Speed up time");
         ImGui::SameLine(0.0f, spacing);
 
-        /* reset to now */
+        /* jump to now and run live */
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
         if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT "##reset", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->current_epoch = get_current_real_time_epoch();
             *ctx->time_multiplier = 1.0;
+            s_needs_populate = true;   /* refresh the setter fields on next expand */
             NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time reset to now");
         }
         ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to current time");
-        ImGui::SameLine(0.0f, spacing);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jump to now and run live");
 
-        /* expand/collapse arrow — clicking makes the time setter slide UP from behind */
         bool is_expanded = g_layout.bottom_bar_expanded;
+        float left_end = pad_x + time_reserve + spacing + badge_w + 2.0f * spacing + play_w;
+        float right_x = pad_x + content_w - right_w;
+        if (right_x < left_end + spacing) right_x = left_end + spacing;
+        ImGui::SetCursorPos(ImVec2(right_x, bottom_y));
+
+        /* the single expand/collapse chevron (bottom row only) */
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
-        if (ImGui::Button(is_expanded ? ICON_FA_CHEVRON_DOWN "##expand2" : ICON_FA_CHEVRON_UP "##expand", ImVec2(btn_sz, btn_sz)))
+        if (ImGui::Button(is_expanded ? ICON_FA_CHEVRON_DOWN "##expand" : ICON_FA_CHEVRON_UP "##expand", ImVec2(btn_sz, btn_sz)))
         {
             g_layout.bottom_bar_expanded = !g_layout.bottom_bar_expanded;
             /* when collapsing, mark for re-population on next expand */
@@ -404,14 +616,8 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(is_expanded ? "Collapse time controls" : "Expand time controls");
 
-        /* speed indicator */
-        ImGui::SameLine(0.0f, spacing * 2);
-        char speed_str[32];
-        double mult = *ctx->time_multiplier;
-        if (fabs(mult) < 1e-9)
-            snprintf(speed_str, sizeof(speed_str), "0.0x");
-        else
-            snprintf(speed_str, sizeof(speed_str), "%.1fx", mult);
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s", speed_str);
 
         /* capture actual notch rect for sidebar layout (ui_layout reads this) */
@@ -422,7 +628,6 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         g_layout.bottom_bar_top = bb_pos.y;
     }
     ImGui::End();
-    ImGui::PopStyleVar(5);
     ImGui::PopStyleColor(2);
 }
 
@@ -700,7 +905,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     static bool imgui_inited = false;
     static float last_ui_scale = 0.0f;
     static float last_dpi_scale = 0.0f;
-    const float dpi_scale = GetWindowScaleDPI().y;
+    const float dpi_scale = ThemeDevicePixelScale();
     if (!imgui_inited) {
         rlImGuiBeginInitImGui();
         rlImGuiEndInitImGui();
@@ -736,6 +941,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* begin rlImGui frame */
     rlImGuiBegin();
+
+    ImGui::GetIO().DisplayFramebufferScale = ImVec2(dpi_scale, dpi_scale);
 
     /* map grid value labels, drawn first so satellite/marker labels win */
     DrawMapGridLabels(ctx, cfg);

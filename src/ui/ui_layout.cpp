@@ -1061,6 +1061,14 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Show dates/times in your system timezone instead of UTC");
+
+            /* first day of the week used by the time-controls date picker */
+            if (cfg->first_day_of_week < 0 || cfg->first_day_of_week > 1)
+                cfg->first_day_of_week = 1;
+            if (ImGui::Combo("Week Starts On", &cfg->first_day_of_week, "Sunday\0Monday\0"))
+                SaveAppConfig("settings.json", cfg);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("First day of the week shown in the date-picker calendar");
         }
 
         /* ---- Performance section ----------------------------------------- */

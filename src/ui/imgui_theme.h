@@ -26,4 +26,6 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale);
  */
 void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale);
 
+float ThemeDevicePixelScale(void);
+
 #endif /* IMGUI_THEME_H */

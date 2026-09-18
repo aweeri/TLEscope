@@ -53,6 +53,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
     config->night_mode = false;      // default: full-screen red post-process off
+    config->first_day_of_week = 1;   // default: Monday first in the date-picker calendar
     config->custom_data_source_count = 0;
     config->retlector_group_count = 0;
     config->retlector_groups_fetched = false;
@@ -172,6 +173,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             PARSE_FLOAT("earth_rotation_offset", earth_rotation_offset);
             PARSE_FLOAT("orbits_to_draw", orbits_to_draw);
             PARSE_INT("data_stale_threshold_seconds", data_stale_threshold_seconds);
+            PARSE_INT("first_day_of_week", first_day_of_week);
 
             config->show_clouds = ParseJsonBool(text, "show_clouds", config->show_clouds);
             config->show_night_lights = ParseJsonBool(text, "show_night_lights", config->show_night_lights);
@@ -883,6 +885,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
     fprintf(file, "    \"use_local_time\": %s,\n", config->use_local_time ? "true" : "false");
     fprintf(file, "    \"night_mode\": %s,\n", config->night_mode ? "true" : "false");
+    fprintf(file, "    \"first_day_of_week\": %d,\n", config->first_day_of_week);
     fprintf(file, "    \"data_stale_threshold_seconds\": %d,\n", config->data_stale_threshold_seconds);
 
     if (config->custom_data_source_count > 0)
