@@ -1,102 +1,156 @@
 name: Build and Release TLEscope
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
+    branches: ["extremelywip"]
     tags:
-      - 'v*'
+      - "v*"
     paths-ignore:
-      - 'README.md'
-      - 'ROADMAP.md'
-      - 'CONTRIBUTING.md'
-  pull_request:
-    branches: [ "main", "master" ]
-    paths-ignore:
-      - 'README.md'
-      - 'ROADMAP.md'
-      - 'CONTRIBUTING.md'
+      - "README.md"
+      - "ROADMAP.md"
+      - "CONTRIBUTING.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build-linux:
-    name: Build Linux
+    name: Build Linux x86_64
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - name: Install Linux Build Dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc make libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
+          sudo apt-get install -y \
+            g++ make \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
+            libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
 
-      - name: Compile and Bundle Linux
-        run: make linux
+      - name: Build and bundle
+        run: make -j"$(nproc)" linux
 
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
+      - name: Verify architecture
+        run: |
+          file dist/TLEscope-Linux-Portable/TLEscope
+          file dist/TLEscope-Linux-Portable/TLEscope | grep -Eiq 'x86-64|x86_64'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TLEscope-Linux-Portable
           path: dist/TLEscope-Linux-Portable/
           retention-days: 14
+          if-no-files-found: error
 
   build-linux-arm64:
     name: Build Linux ARM64
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - name: Setup ARM64 Cross-Compile
-        uses: cyberjunk/gha-ubuntu-cross@v5
-        with:
-          arch: arm64
-
-      - name: Install ARM64 Build Dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          sudo apt-get install -y -o Dpkg::Options::="--force-overwrite" \
-            libcurl4-openssl-dev:arm64 libgl-dev:arm64 libx11-dev:arm64 \
-            libxrandr-dev:arm64 libxi-dev:arm64 libxcursor-dev:arm64 \
-            libxinerama-dev:arm64 libwayland-dev:arm64 libxkbcommon-dev:arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            g++ make \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
+            libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
 
-      - name: Compile and Bundle Linux ARM64
+      - name: Build and bundle
+        run: make -j"$(nproc)" linux DIST_LINUX=dist/TLEscope-Linux-arm64-Portable
+
+      - name: Verify architecture
         run: |
-          make linux \
-            CC_LINUX=aarch64-linux-gnu-gcc \
-            LIB_LIN_PATH="-Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib" \
-            LDFLAGS_LIN="-Ilib/raylib_lin_arm64/include -Llib/raylib_lin_arm64/lib -lraylib -lcurl -lGL -lm -lpthread -ldl -lrt -lX11" \
-            DIST_LINUX=dist/TLEscope-Linux-arm64-Portable
+          file dist/TLEscope-Linux-arm64-Portable/TLEscope
+          file dist/TLEscope-Linux-arm64-Portable/TLEscope | grep -Eiq 'aarch64|arm64'
 
-      - name: Upload Linux ARM64 Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TLEscope-Linux-arm64-Portable
           path: dist/TLEscope-Linux-arm64-Portable/
           retention-days: 14
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Intel
+            runner: macos-15-intel
+            expect: x86_64
+            artifact: TLEscope-macOS-Intel-Portable
+          - name: Apple-Silicon
+            runner: macos-15
+            expect: arm64
+            artifact: TLEscope-macOS-arm64-Portable
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Build and bundle
+        run: make macos
+
+      - name: Verify architecture
+        run: |
+          file dist/TLEscope-macOS-Portable/TLEscope
+          file dist/TLEscope-macOS-Portable/TLEscope | grep -q "${{ matrix.expect }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/TLEscope-macOS-Portable/
+          retention-days: 14
+          if-no-files-found: error
 
   build-windows:
-    name: Build Windows
+    name: Build Windows x86_64
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         shell: msys2 {0}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - name: Setup MSYS2 (MinGW Environment)
-        uses: msys2/setup-msys2@v2
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
           msystem: MINGW64
           update: true
           install: >-
             make
             git
+            file
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-ngtcp2
@@ -113,45 +167,60 @@ jobs:
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-imagemagick
 
-      - name: Compile and Bundle Windows
+      - name: Build portable application and installer
         run: make win-installer MINGW_PREFIX=/mingw64
 
-      - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v4
+      - name: Verify architecture and runtime dependencies
+        run: |
+          file dist/TLEscope-Win-Portable/TLEscope.exe
+          file dist/TLEscope-Win-Portable/TLEscope.exe | grep -Eiq 'x86-64|x86_64'
+          objdump -p dist/TLEscope-Win-Portable/TLEscope.exe | grep 'DLL Name'
+          if objdump -p dist/TLEscope-Win-Portable/TLEscope.exe | grep -Eiq 'libwinpthread|libstdc\+\+|libgcc|libc\+\+|libunwind'; then
+            echo "TLEscope.exe depends on an unbundled compiler runtime DLL." >&2
+            exit 1
+          fi
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TLEscope-Win-Portable
           path: dist/TLEscope-Win-Portable/
           retention-days: 14
+          if-no-files-found: error
 
-      - name: Upload Windows Installer Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TLEscope-Installer
           path: dist/TLEscope-Installer.exe
           retention-days: 14
+          if-no-files-found: error
 
   build-windows-arm64:
     name: Build Windows ARM64
     runs-on: windows-11-arm
+    timeout-minutes: 25
     defaults:
       run:
         shell: msys2 {0}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - name: Setup MSYS2 (MinGW Environment)
-        uses: msys2/setup-msys2@v2
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
           msystem: CLANGARM64
           update: true
           install: >-
             make
             git
+            file
             mingw-w64-clang-aarch64-make
             mingw-w64-clang-aarch64-clang
+            mingw-w64-clang-aarch64-llvm
             mingw-w64-clang-aarch64-curl
             mingw-w64-clang-aarch64-ngtcp2
             mingw-w64-clang-aarch64-nghttp3
@@ -165,94 +234,116 @@ jobs:
             mingw-w64-clang-aarch64-libiconv
             mingw-w64-clang-aarch64-pkgconf
 
-      - name: Build raylib
-        run: make raylib
+      - name: Build and bundle
+        run: |
+          make windows-arm64 \
+            MINGW_PREFIX=/clangarm64 \
+            CLANG64_PREFIX=/clangarm64 \
+            RAYLIB_MAKE_ARGS="CC=clang AR=llvm-ar"
 
-      - name: Compile and Bundle Windows ARM64
-        run: make windows-arm64
+      - name: Verify architecture and runtime dependencies
+        run: |
+          file dist/TLEscope-Win-arm64-Portable/TLEscope.exe
+          file dist/TLEscope-Win-arm64-Portable/TLEscope.exe | grep -Eiq 'aarch64|arm64'
+          llvm-objdump -p dist/TLEscope-Win-arm64-Portable/TLEscope.exe | grep 'DLL Name'
+          if llvm-objdump -p dist/TLEscope-Win-arm64-Portable/TLEscope.exe | grep -Eiq 'libwinpthread|libstdc\+\+|libgcc|libc\+\+|libunwind'; then
+            echo "TLEscope.exe depends on an unbundled compiler runtime DLL." >&2
+            exit 1
+          fi
 
-      - name: Upload Windows ARM64 Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TLEscope-Win-arm64-Portable
           path: dist/TLEscope-Win-arm64-Portable/
           retention-days: 14
+          if-no-files-found: error
 
   release:
-    name: Publish Release
-    needs: [build-linux, build-linux-arm64, build-windows, build-windows-arm64]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    name: Publish release
+    needs:
+      - build-linux
+      - build-linux-arm64
+      - build-macos
+      - build-windows
+      - build-windows-arm64
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/extremelywip' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
-      
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
 
-      - name: Prepare and Zip Artifacts for Release
+      - name: Prepare release archives
         run: |
+          set -euo pipefail
           cd artifacts
-          # The Makefile bundles into subdirectories, so we zip those folders
+
           chmod +x TLEscope-Linux-Portable/TLEscope
           chmod +x TLEscope-Linux-arm64-Portable/TLEscope
+          chmod +x TLEscope-macOS-Intel-Portable/TLEscope
+          chmod +x TLEscope-macOS-arm64-Portable/TLEscope
 
-          zip -r ../TLEscope-Linux-Portable.zip TLEscope-Linux-Portable/
-          zip -r ../TLEscope-Linux-arm64-Portable.zip TLEscope-Linux-arm64-Portable/
-          zip -r ../TLEscope-Win-Portable.zip TLEscope-Win-Portable/
-          zip -r ../TLEscope-Win-arm64-Portable.zip TLEscope-Win-arm64-Portable/
-          
-          # Move installer out of its artifact subdirectory for flat publishing
+          for artifact in \
+            TLEscope-Linux-Portable \
+            TLEscope-Linux-arm64-Portable \
+            TLEscope-macOS-Intel-Portable \
+            TLEscope-macOS-arm64-Portable \
+            TLEscope-Win-Portable \
+            TLEscope-Win-arm64-Portable
+          do
+            zip -r "../${artifact}.zip" "${artifact}/"
+          done
+
           mv TLEscope-Installer/TLEscope-Installer.exe ../
-          cd ..
 
-      - name: Clean Existing Release Assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update nightly tag
+        if: github.ref == 'refs/heads/extremelywip'
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            gh release delete "${{ github.ref_name }}" -y || true
-          fi
+          git tag -f nightly "$GITHUB_SHA"
+          git push --force origin refs/tags/nightly
 
-      - name: Force Update Nightly Tag
-        if: startsWith(github.ref, 'refs/heads/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          gh release delete nightly --cleanup-tag -y || true
-          git tag -f nightly
-          git push -f origin nightly
-
-      - name: Update Nightly Release
-        if: startsWith(github.ref, 'refs/heads/')
-        uses: softprops/action-gh-release@v2
+      - name: Update nightly release
+        if: github.ref == 'refs/heads/extremelywip'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: nightly
-          name: "Nightly Build"
-          body: "Automated nightly build reflecting the latest commit."
+          target_commitish: ${{ github.sha }}
+          name: Nightly Build
+          body: Automated nightly build reflecting the latest commit on `extremelywip`.
           prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Linux-arm64-Portable.zip
+            TLEscope-macOS-Intel-Portable.zip
+            TLEscope-macOS-arm64-Portable.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
 
-      - name: Publish Release
+      - name: Publish versioned release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Linux-arm64-Portable.zip
+            TLEscope-macOS-Intel-Portable.zip
+            TLEscope-macOS-arm64-Portable.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
