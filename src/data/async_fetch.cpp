@@ -83,6 +83,11 @@ static int parse_payload(const AsyncFetchJob *job, const char *data, size_t size
                 ParseOMMCsv(job->paste_data, strlen(job->paste_data), out, &count,
                             max, "paste", job->format);
             }
+            else if (job->format == FORMAT_OMM_KVN)
+            {
+                ParseOMMKvn(job->paste_data, strlen(job->paste_data), out, &count,
+                            max, "paste", job->format);
+            }
             break;
         }
 
@@ -158,6 +163,10 @@ static int parse_payload(const AsyncFetchJob *job, const char *data, size_t size
                 else if (result.format == FORMAT_OMM_CSV)
                 {
                     ParseOMMCsv(result.data, result.size, out, &count, max, job->name, result.format);
+                }
+                else if (result.format == FORMAT_OMM_KVN)
+                {
+                    ParseOMMKvn(result.data, result.size, out, &count, max, job->name, result.format);
                 }
                 FreeFetchResult(&result);
             }

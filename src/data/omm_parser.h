@@ -29,4 +29,11 @@ int ParseOMMCsv(const char *csv, size_t size,
                 Satellite *sats, int *count, int max,
                 const char *source_name, OrbitalDataFormat fmt);
 
+int ParseOMMKvn(const char *kvn, size_t size,
+                Satellite *sats, int *count, int max,
+                const char *source_name, OrbitalDataFormat fmt);
+
+bool ExtractOMMObjectName(const char *data, size_t size, OrbitalDataFormat fmt,
+                          char *out, size_t out_size);
+
 #endif // OMM_PARSER_H

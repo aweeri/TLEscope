@@ -460,8 +460,21 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::TextColored(badge_col, "[%s]", badge);
             ImGui::SameLine();
 
-            /* name */
-            ImGui::TextUnformatted(s->name);
+            char obj_name[64];
+            const char *display = s->name;
+            if (s->type == SOURCE_CUSTOM_URL)
+            {
+                /* prefer the full URL, which is the identifier */
+                display = (s->identifier[0] != '\0') ? s->identifier : s->name;
+            }
+            else if (s->type == SOURCE_CUSTOM_PASTE)
+            {
+                if (ExtractOMMObjectName(s->paste_data, strlen(s->paste_data), s->format,
+                                         obj_name, sizeof(obj_name)))
+                    display = obj_name;
+            }
+
+            ImGui::TextUnformatted(display);
 
             /* red X remove button on the right */
             float x_pos = ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f;
