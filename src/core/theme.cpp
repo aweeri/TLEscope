@@ -111,6 +111,16 @@ void ThemeInitDefaults(Theme *t)
     t->world.footprint_fill   = ParseHexColor("#FFFFFF22", WHITE);
     t->world.footprint_border = ParseHexColor("#FFFFFF88", WHITE);
 
+    // multi-satellite future ground-track palette
+    t->ground_tracks.palette[0] = ParseHexColor("#66CCFFFF", SKYBLUE);
+    t->ground_tracks.palette[1] = ParseHexColor("#66FF66FF", GREEN);
+    t->ground_tracks.palette[2] = ParseHexColor("#FFAA00FF", ORANGE);
+    t->ground_tracks.palette[3] = ParseHexColor("#FF66CCFF", MAGENTA);
+    t->ground_tracks.palette[4] = ParseHexColor("#AA66FFFF", PURPLE);
+    t->ground_tracks.palette[5] = ParseHexColor("#FF6666FF", RED);
+    t->ground_tracks.palette[6] = ParseHexColor("#66A3FFFF", BLUE);
+    t->ground_tracks.palette[7] = ParseHexColor("#2DD4BFFF", GREEN);
+
     // compact semantic UI palette (match themes/default/theme.json)
     t->ui.text    = ParseHexColor("#FFFFFFFF", WHITE);
     t->ui.text_dim = ParseHexColor("#D3D3D3FF", LIGHTGRAY);
@@ -209,6 +219,7 @@ bool ThemeLoad(const char *theme_name, Theme *t)
 
     const nlohmann::json root_meta     = root.value("meta", nlohmann::json::object());
     const nlohmann::json root_world    = root.value("world", nlohmann::json::object());
+    const nlohmann::json root_ground_tracks = root.value("ground_tracks", nlohmann::json::object());
     const nlohmann::json root_ui       = root.value("ui", nlohmann::json::object());
     const nlohmann::json root_style    = root.value("style", nlohmann::json::object());
     const nlohmann::json root_font     = root.value("font", nlohmann::json::object());
@@ -231,6 +242,22 @@ bool ThemeLoad(const char *theme_name, Theme *t)
     ParseColorField(root_world, "apoapsis", &t->world.apoapsis, t->world.apoapsis);
     ParseColorField(root_world, "footprint_fill", &t->world.footprint_fill, t->world.footprint_fill);
     ParseColorField(root_world, "footprint_border", &t->world.footprint_border, t->world.footprint_border);
+
+    // multi-satellite future ground-track palette
+    auto ground_track_palette = root_ground_tracks.find("palette");
+    if (ground_track_palette != root_ground_tracks.end() && ground_track_palette->is_array())
+    {
+        for (int i = 0; i < GROUND_TRACK_PALETTE_SIZE &&
+                        i < (int)ground_track_palette->size(); i++)
+        {
+            if (ground_track_palette->at(i).is_string())
+            {
+                t->ground_tracks.palette[i] = ParseHexColor(
+                    ground_track_palette->at(i).get_ref<const std::string &>().c_str(),
+                    t->ground_tracks.palette[i]);
+            }
+        }
+    }
 
     // compact UI palette
     ParseColorField(root_ui, "text", &t->ui.text, t->ui.text);

@@ -218,10 +218,10 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
     if (is_2d)
     {
-        /* Future Orbits: master toggle + slider, styled to match the other layer rows (icon cell + label) */
+        /* Future Orbits: master toggle + focused/multi scope + orbit span. */
         bool future_orbits_enabled = ToolSettingGetBool(cfg, LAYERS_KEY_FUTURE_ORBITS, true);
         bool future_orbits_prev = future_orbits_enabled;
-        float future_row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the slider */
+        float future_row_avail = ImGui::GetContentRegionAvail().x;
 
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(future_orbits_enabled ? g_theme.ui.accent : g_theme.ui.text_dim));
         ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
@@ -234,20 +234,43 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine();
         ImGui::Checkbox("Future Orbits", &future_orbits_enabled);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Show the predicted future orbit track on the 2D map");
+            ImGui::SetTooltip("Show predicted future ground tracks on the 2D map");
         if (future_orbits_enabled != future_orbits_prev)
             ToolSettingSetBool(cfg, LAYERS_KEY_FUTURE_ORBITS, future_orbits_enabled);
 
-        /* right-align the slider on the row, like the Labels Sel/All dropdown above */
-        const float slider_w = 140.0f;
-        ImGui::SameLine(future_row_avail - slider_w);
-        ImGui::SetNextItemWidth(slider_w);
         ImGui::BeginDisabled(!future_orbits_enabled);
-        float future_orbits = cfg->orbits_to_draw;
-        if (ImGui::SliderFloat("##future_orbits", &future_orbits, 0.25f, 10.0f, "%.2f"))
-            cfg->orbits_to_draw = future_orbits;
+
+        ImGui::SameLine(future_row_avail - combo_w);
+        ImGui::SetNextItemWidth(combo_w);
+        int future_mode = ToolSettingGetInt(
+            cfg, LAYERS_KEY_FUTURE_ORBITS_MODE, LAYERS_FUTURE_ORBITS_FOCUSED);
+        const char *future_modes[] = { "Sel", "Multi" };
+        if (ImGui::Combo("##future_orbits_mode", &future_mode, future_modes, 2))
+            ToolSettingSetInt(cfg, LAYERS_KEY_FUTURE_ORBITS_MODE, future_mode);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Number of predicted orbits shown on the 2D map");
+            ImGui::SetTooltip(
+                "Sel: hovered satellite, otherwise selected satellite; "
+                "Multi: up to %d active satellite tracks total",
+                LAYERS_FUTURE_ORBITS_MAX_TRACKS);
+
+        ImGui::Indent(icon_w);
+        int orbit_quarters = (int)roundf(cfg->orbits_to_draw * 4.0f);
+        if (orbit_quarters < 1) orbit_quarters = 1;
+        if (orbit_quarters > 40) orbit_quarters = 40;
+
+        const float orbit_value_w =
+            ImGui::CalcTextSize("10.00").x + ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetNextItemWidth(future_row_avail - icon_w - orbit_value_w);
+        ImGui::SliderInt("##future_orbits", &orbit_quarters, 1, 40, "");
+        const bool orbit_slider_hovered = ImGui::IsItemHovered();
+        cfg->orbits_to_draw = orbit_quarters * 0.25f;
+
+        ImGui::SameLine();
+        ImGui::Text("%.2f", cfg->orbits_to_draw);
+        if (orbit_slider_hovered || ImGui::IsItemHovered())
+            ImGui::SetTooltip("Number of predicted orbits shown for each future ground track (0.25-orbit steps)");
+        ImGui::Unindent(icon_w);
+
         ImGui::EndDisabled();
     }
 

@@ -17,6 +17,13 @@
         "footprint_fill": "#FFFFFF22",
         "footprint_border": "#FFFFFF88"
     },
+    "ground_tracks": {
+        "palette": [
+            "#66CCFFFF", "#66FF66FF", "#FFAA00FF",
+            "#FF66CCFF", "#AA66FFFF", "#FF6666FF",
+            "#66A3FFFF", "#2DD4BFFF"
+        ]
+    },
     "ui": {
         "text": "#FFFFFFFF",
         "text_dim": "#D3D3D3FF",
