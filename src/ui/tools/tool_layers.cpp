@@ -492,10 +492,14 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
     const float screen_w = (float)GetScreenWidth();
     const float screen_h = (float)GetScreenHeight();
 
-    /* visible map region (camera view ∩ map rect), used for culling and as
-     * the edge the labels hug when the full map is on screen */
-    Vector2 vis_a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, *ctx->camera2d);
-    Vector2 vis_b = GetScreenToWorld2D((Vector2){screen_w, screen_h}, *ctx->camera2d);
+    
+    const float nav_h = ImGui::GetFrameHeight();
+    const float left_edge = LayoutSidebarVisible(SIDEBAR_LEFT) ? g_layout.left_width : 0.0f;
+    const float right_edge = LayoutSidebarVisible(SIDEBAR_RIGHT) ? (screen_w - g_layout.right_width) : screen_w;
+
+    
+    Vector2 vis_a = GetScreenToWorld2D((Vector2){left_edge, nav_h}, *ctx->camera2d);
+    Vector2 vis_b = GetScreenToWorld2D((Vector2){right_edge, screen_h}, *ctx->camera2d);
     const float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
     const float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
     const float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
@@ -531,8 +535,9 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
 
         Vector2 sp = GetWorldToScreen2D((Vector2){clip_min_x, y}, *ctx->camera2d);
         ImVec2 tsz = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, buf);
-        ImVec2 pos(sp.x + pad, sp.y - tsz.y * 0.5f);
-        if (pos.y + tsz.y < 0.0f || pos.y > screen_h)
+        /* pin to the free left edge so the label can't slide under a sidebar */
+        ImVec2 pos(fmaxf(sp.x + pad, left_edge + pad), sp.y - tsz.y * 0.5f);
+        if (pos.y + tsz.y < nav_h || pos.y > screen_h)
             continue;
 
         dl->AddText(font, font_size, ImVec2(pos.x + 1.0f, pos.y + 1.0f), shadow_col, buf);
@@ -556,10 +561,14 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
 
         Vector2 sp = GetWorldToScreen2D((Vector2){x, clip_min_y}, *ctx->camera2d);
         ImVec2 tsz = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, buf);
-        ImVec2 pos(sp.x - tsz.x * 0.5f, sp.y + pad);
-        if (pos.x < 0.0f || pos.x + tsz.x > screen_w)
+        /* stick just below the nav bar and keep the label inside the free area */
+        ImVec2 pos(sp.x - tsz.x * 0.5f, fmaxf(sp.y + pad, nav_h + pad));
+        const float min_x = left_edge + pad;
+        const float max_x = fmaxf(min_x, right_edge - tsz.x - pad);
+        pos.x = fminf(fmaxf(pos.x, min_x), max_x);
+        if (pos.x + tsz.x < left_edge || pos.x > right_edge)
             continue;
-        if (pos.y + tsz.y < 0.0f || pos.y > screen_h)
+        if (pos.y + tsz.y < nav_h || pos.y > screen_h)
             continue;
 
         dl->AddText(font, font_size, ImVec2(pos.x + 1.0f, pos.y + 1.0f), shadow_col, buf);
