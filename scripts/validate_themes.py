@@ -63,7 +63,7 @@ def main():
             if section not in data:
                 problems.append(f"missing section '{section}'")
                 continue
-            for key in REQUIRED_KEYS[section]:
+            for key in REQUIRED_KEYS.get(section, []):
                 if key not in data[section]:
                     problems.append(f"missing '{section}.{key}'")
 
