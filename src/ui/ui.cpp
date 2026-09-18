@@ -405,9 +405,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
     float row_h   = ImGui::GetFrameHeight();   /* standard widget row height */
     float btn_sz  = row_h;                     /* square icon buttons        */
     float spacing = style.ItemSpacing.x;
-    float row_gap = style.ItemSpacing.y;
+    float row_gap = fminf(style.ItemSpacing.y, 6.0f);
     float pad_x   = style.WindowPadding.x;
-    float pad_y   = style.WindowPadding.y;
+    float pad_y   = fminf(style.WindowPadding.y, 6.0f);
 
     float time_reserve = ImGui::CalcTextSize("0000-00-00 00:00:00 UTC+0000").x;
     float date_w       = ImGui::CalcTextSize("0000-00-00").x + 4.0f * style.FramePadding.x;
@@ -421,10 +421,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         snprintf(speed_str, sizeof(speed_str), "%.1fx", mult);
     float speed_w = ImGui::CalcTextSize(speed_str).x;
 
-    const char *apply_label = ICON_FA_CHECK " Apply";
-    const char *reset_label = ICON_FA_CLOCK " Reset to Now";
-    float action_w = fmaxf(ImGui::CalcTextSize(apply_label).x,
-                           ImGui::CalcTextSize(reset_label).x) + 2.0f * style.FramePadding.x;
+    const char *apply_label = ICON_FA_CHECK;
+    const char *reset_label = ICON_FA_CLOCK;
+    float action_w = btn_sz;
 
     float badge_w = LiveBadgeWidth();
     float play_w  = 4.0f * btn_sz + 3.0f * spacing;   /* backward | play/pause | forward | now */
