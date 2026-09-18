@@ -21,7 +21,8 @@ ifeq ($(MSYSTEM),CLANGARM64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = clang++
 	DIST_WIN_ARM64 = dist/TLEscope-Win-arm64-Portable
-	LDFLAGS_WIN_EXTRA = -Wl,--exclude-libs,libwinpthread.a
+
+	LDFLAGS_WIN_EXTRA =
 else ifeq ($(MSYSTEM),UCRT64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = g++

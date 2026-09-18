@@ -29,6 +29,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get raylib commit
+        id: raylib
+        run: git -C lib/raylib rev-parse HEAD
+
+      # raylib's `raylib` target depends on its .o files, so restoring only
+      # libraylib.a would force a full rebuild anyway. Cache the whole build
+      # output (objects + archive) to skip it on cache hits.
+      - name: Cache raylib build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: lib/raylib/src
+          key: raylib-linux-x64-${{ steps.raylib.outputs.commit }}
+          restore-keys: |
+            raylib-linux-x64-
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -63,6 +78,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+
+      - name: Get raylib commit
+        id: raylib
+        run: git -C lib/raylib rev-parse HEAD
+
+      - name: Cache raylib build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: lib/raylib/src
+          key: raylib-linux-arm64-${{ steps.raylib.outputs.commit }}
+          restore-keys: |
+            raylib-linux-arm64-
 
       - name: Install dependencies
         run: |
@@ -115,6 +142,18 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get raylib commit
+        id: raylib
+        run: git -C lib/raylib rev-parse HEAD
+
+      - name: Cache raylib build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: lib/raylib/src
+          key: raylib-macos-${{ matrix.name }}-${{ steps.raylib.outputs.commit }}
+          restore-keys: |
+            raylib-macos-${{ matrix.name }}-
+
       - name: Build portable application
         run: make macos
 
@@ -165,6 +204,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          cache: true
           install: >-
             make
             git
@@ -184,6 +224,19 @@ jobs:
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-nsis
             mingw-w64-x86_64-imagemagick
+
+      - name: Get raylib commit
+        id: raylib
+        shell: msys2 {0}
+        run: git -C lib/raylib rev-parse HEAD
+
+      - name: Cache raylib build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: lib/raylib/src
+          key: raylib-win-x64-${{ steps.raylib.outputs.commit }}
+          restore-keys: |
+            raylib-win-x64-
 
       - name: Build portable application and installer
         run: make win-installer MINGW_PREFIX=/mingw64
@@ -232,6 +285,7 @@ jobs:
         with:
           msystem: CLANGARM64
           update: true
+          cache: true
           install: >-
             make
             git
@@ -251,6 +305,18 @@ jobs:
             mingw-w64-clang-aarch64-libunistring
             mingw-w64-clang-aarch64-libiconv
             mingw-w64-clang-aarch64-pkgconf
+
+      - name: Get raylib commit
+        id: raylib
+        run: git -C lib/raylib rev-parse HEAD
+
+      - name: Cache raylib build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: lib/raylib/src
+          key: raylib-win-arm64-${{ steps.raylib.outputs.commit }}
+          restore-keys: |
+            raylib-win-arm64-
 
       - name: Build and bundle
         run: |
