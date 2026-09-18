@@ -100,11 +100,13 @@ jobs:
           - name: Intel
             runner: macos-15-intel
             expect: x86_64
-            artifact: TLEscope-macOS-Intel-Portable
+            artifact: TLEscope-macOS-Intel-App
+            archive: TLEscope-macOS-Intel.app.zip
           - name: Apple-Silicon
             runner: macos-15
             expect: arm64
-            artifact: TLEscope-macOS-arm64-Portable
+            artifact: TLEscope-macOS-arm64-App
+            archive: TLEscope-macOS-arm64.app.zip
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
@@ -113,19 +115,35 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Build and bundle
+      - name: Build portable application
         run: make macos
+
+      - name: Build app bundle
+        run: |
+          ./macos_bundle.sh
+          test -x dist/TLEscope.app/Contents/MacOS/TLEscope
+          test -x dist/TLEscope.app/Contents/MacOS/TLEscope.bin
+          test -f dist/TLEscope.app/Contents/Resources/themes/default/theme.json
+          test -f dist/TLEscope.app/Contents/Resources/themes/default/font.ttf
+          plutil -lint dist/TLEscope.app/Contents/Info.plist
 
       - name: Verify architecture
         run: |
-          file dist/TLEscope-macOS-Portable/TLEscope
-          file dist/TLEscope-macOS-Portable/TLEscope | grep -q "${{ matrix.expect }}"
+          file dist/TLEscope.app/Contents/MacOS/TLEscope.bin
+          file dist/TLEscope.app/Contents/MacOS/TLEscope.bin | grep -q "${{ matrix.expect }}"
+
+      - name: Package app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/TLEscope.app \
+            "dist/${{ matrix.archive }}"
+          unzip -l "dist/${{ matrix.archive }}" | grep -q "TLEscope.app/Contents/Resources/themes/default/font.ttf"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.artifact }}
-          path: dist/TLEscope-macOS-Portable/
+          path: dist/${{ matrix.archive }}
           retention-days: 14
           if-no-files-found: error
 
@@ -289,20 +307,18 @@ jobs:
 
           chmod +x TLEscope-Linux-Portable/TLEscope
           chmod +x TLEscope-Linux-arm64-Portable/TLEscope
-          chmod +x TLEscope-macOS-Intel-Portable/TLEscope
-          chmod +x TLEscope-macOS-arm64-Portable/TLEscope
 
           for artifact in \
             TLEscope-Linux-Portable \
             TLEscope-Linux-arm64-Portable \
-            TLEscope-macOS-Intel-Portable \
-            TLEscope-macOS-arm64-Portable \
             TLEscope-Win-Portable \
             TLEscope-Win-arm64-Portable
           do
             zip -r "../${artifact}.zip" "${artifact}/"
           done
 
+          mv TLEscope-macOS-Intel-App/TLEscope-macOS-Intel.app.zip ../
+          mv TLEscope-macOS-arm64-App/TLEscope-macOS-arm64.app.zip ../
           mv TLEscope-Installer/TLEscope-Installer.exe ../
 
       - name: Update nightly tag
@@ -326,8 +342,8 @@ jobs:
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Linux-arm64-Portable.zip
-            TLEscope-macOS-Intel-Portable.zip
-            TLEscope-macOS-arm64-Portable.zip
+            TLEscope-macOS-Intel.app.zip
+            TLEscope-macOS-arm64.app.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe
@@ -342,8 +358,8 @@ jobs:
           files: |
             TLEscope-Linux-Portable.zip
             TLEscope-Linux-arm64-Portable.zip
-            TLEscope-macOS-Intel-Portable.zip
-            TLEscope-macOS-arm64-Portable.zip
+            TLEscope-macOS-Intel.app.zip
+            TLEscope-macOS-arm64.app.zip
             TLEscope-Win-Portable.zip
             TLEscope-Win-arm64-Portable.zip
             TLEscope-Installer.exe

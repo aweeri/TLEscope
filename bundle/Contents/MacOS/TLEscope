@@ -1,4 +1,7 @@
 #!/bin/bash
-# this workaround reeks probably please change it later
-cd "$(dirname "$0")"/../Resources
-../MacOS/TLEscope.bin
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/../Resources"
+
+exec "$SCRIPT_DIR/TLEscope.bin" "$@"
