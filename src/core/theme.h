@@ -10,7 +10,9 @@
  * A theme is a self-contained visual identity for TLEscope. It is loaded
  * from `themes/<name>/theme.json` and covers:
  *   - world  : colors used for 3D/2D raylib scene drawing (Earth, orbits, sats)
- *   - ui     : colors used for the Dear ImGui windows and raylib UI overlays
+ *   - ui     : a compact semantic palette; the full Dear ImGui color set is
+ *              derived from it at apply time (hover/active states are mixed
+ *              from the base surface toward the theme's text color)
  *   - style  : ImGui style variables (rounding, padding, border sizes, ...)
  *   - font   : the UI font file and its sizes
  *   - textures: per-theme texture file names (with fallback to default)
@@ -20,63 +22,27 @@
  * with `= {0}` and overlaid by the JSON parser.
  */
 
-/** semantic + full ImGui color palette */
+/** mix ratio applied to derive a hovered state from a base color */
+#define THEME_STATE_HOVER 0.10f
+/** mix ratio applied to derive an active/pressed state from a base color */
+#define THEME_STATE_ACTIVE 0.18f
+
+/** compact semantic UI palette (11 colors) */
 typedef struct
 {
-    /* semantic colors (used for raylib UI overlays and ImGui accents) */
-    Color text_main;
-    Color text_secondary;
-    Color ui_bg;
-    Color ui_primary;
-    Color ui_secondary;
-    Color ui_accent;
-    Color window_border;
-    Color window_border_focus;
+    Color text;     /* primary text */
+    Color text_dim; /* secondary / disabled text */
+    Color bg;       /* window, panel and overlay background */
+    Color surface;  /* inputs, buttons, tabs, headers, titlebar */
+    Color border;   /* window borders and separators */
+    Color accent;   /* selection, highlight, slider, check mark, plots */
+    Color overlay;  /* modal + docking dimming (alpha matters) */
 
-    /* full ImGui palette (maps 1:1 to ImGuiCol_*) */
-    Color window_bg;
-    Color titlebar;
-    Color titlebar_active;
-    Color titlebar_collapsed;
-    Color frame_bg;
-    Color frame_bg_hovered;
-    Color frame_bg_active;
-    Color button;
-    Color button_hovered;
-    Color button_active;
-    Color header;
-    Color header_hovered;
-    Color header_active;
-    Color tab;
-    Color tab_hovered;
-    Color tab_active;
-    Color tab_unfocused;
-    Color tab_unfocused_active;
-    Color scrollbar_bg;
-    Color scrollbar_grab;
-    Color scrollbar_grab_hovered;
-    Color scrollbar_grab_active;
-    Color separator;
-    Color separator_hovered;
-    Color separator_active;
-    Color check_mark;
-    Color slider_grab;
-    Color slider_grab_active;
-    Color text_selected_bg;
-    Color modal_dim;
-    Color plot_histogram;
-    Color plot_lines;
-    Color resize_grip;
-    Color docking_bg;
-    Color docking_preview;
-
-    /* notification toast colors (ROADMAP section 8.1) */
-    Color notif_info;
-    Color notif_success;
-    Color notif_warning;
-    Color notif_error;
-    Color notif_bg;
-    Color notif_border;
+    /* notification toast accents */
+    Color info;
+    Color success;
+    Color warning;
+    Color error;
 } ThemeUIColors;
 
 /** ImGui style variables */
@@ -142,19 +108,16 @@ typedef struct
     /* world colors (3D/2D raylib scene) */
     struct
     {
-        Color bg;
-        Color orbit_normal;
-        Color orbit_highlighted;
-        Color sat_normal;
-        Color sat_highlighted;
-        Color sat_selected;
-        Color periapsis;
-        Color apoapsis;
-        Color footprint_bg;
-        Color footprint_border;
-        Color scope_bg;
-        Color scope_horizon;
-        Color overlay_dim;
+        Color bg;               /* scene clear color */
+        Color orbit;            /* normal orbit path (alpha allowed) */
+        Color orbit_active;     /* highlighted/active orbit path */
+        Color sat;              /* normal satellite marker */
+        Color sat_hover;        /* hovered satellite marker */
+        Color sat_selected;     /* selected satellite marker */
+        Color periapsis;        /* periapsis marker */
+        Color apoapsis;         /* apoapsis marker */
+        Color footprint_fill;   /* coverage footprint fill (alpha allowed) */
+        Color footprint_border; /* coverage footprint outline */
     } world;
 
     ThemeUIColors ui;
@@ -173,12 +136,29 @@ typedef struct
 /* global theme instance (populated by ThemeLoad) */
 extern Theme g_theme;
 
+/** linear interpolation between two colors (t clamped to [0,1]) */
+Color ThemeMix(Color a, Color b, float t);
+
+/** return `c` with its alpha replaced by `a` (a clamped to [0,1]) */
+Color ThemeAlpha(Color c, float a);
+
+/** hover state of `base`: mixed toward the text color (works on dark & light) */
+static inline Color ThemeHoverOf(Color base, Color text)
+{
+    return ThemeMix(base, text, THEME_STATE_HOVER);
+}
+
+/** active/pressed state of `base`: mixed further toward the text color */
+static inline Color ThemeActiveOf(Color base, Color text)
+{
+    return ThemeMix(base, text, THEME_STATE_ACTIVE);
+}
+
 /** fill the theme with hardcoded defaults (safety net before JSON load) */
 void ThemeInitDefaults(Theme *t);
 
 /**
  * Load `themes/<name>/theme.json` into `t`, overlaying on its current values.
- * Supports the nested schema and falls back to legacy flat keys.
  * Returns true on success (even if the file is missing, defaults remain).
  */
 bool ThemeLoad(const char *theme_name, Theme *t);

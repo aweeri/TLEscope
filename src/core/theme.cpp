@@ -11,7 +11,30 @@
 Theme g_theme = {0};
 
 /* ------------------------------------------------------------------ */
-/* helpers                                                             */
+/* color helpers                                                       */
+/* ------------------------------------------------------------------ */
+
+Color ThemeMix(Color a, Color b, float t)
+{
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return (Color){
+        (unsigned char)(a.r + ((float)b.r - (float)a.r) * t),
+        (unsigned char)(a.g + ((float)b.g - (float)a.g) * t),
+        (unsigned char)(a.b + ((float)b.b - (float)a.b) * t),
+        (unsigned char)(a.a + ((float)b.a - (float)a.a) * t)};
+}
+
+Color ThemeAlpha(Color c, float a)
+{
+    if (a < 0.0f) a = 0.0f;
+    if (a > 1.0f) a = 1.0f;
+    c.a = (unsigned char)(a * 255.0f);
+    return c;
+}
+
+/* ------------------------------------------------------------------ */
+/* parsing helpers                                                     */
 /* ------------------------------------------------------------------ */
 
 /** parse "#RRGGBB" or "#RRGGBBAA" into a raylib Color, else fallback */
@@ -30,23 +53,17 @@ static Color ParseHexColor(const char *hexStr, Color fallback)
     return (Color){(unsigned char)r, (unsigned char)g, (unsigned char)b, (unsigned char)a};
 }
 
-/**
- * Parse a color key from a JSON section, falling back to the same key at the
- * JSON root (legacy flat theme files) and finally to `fallback`.
- */
-static void ParseColorField(cJSON *section, cJSON *root, const char *key,
-                            Color *dst, Color fallback)
+/** parse a color key from a JSON section, falling back to `fallback` */
+static void ParseColorField(cJSON *section, const char *key, Color *dst, Color fallback)
 {
     cJSON *item = section ? cJSON_GetObjectItem(section, key) : NULL;
-    if (!item && root)
-        item = cJSON_GetObjectItem(root, key); /* legacy flat key fallback */
     if (cJSON_IsString(item) && item->valuestring)
         *dst = ParseHexColor(item->valuestring, fallback);
     else
         *dst = fallback;
 }
 
-/** parse a float key from a JSON section (no legacy fallback) */
+/** parse a float key from a JSON section */
 static void ParseFloatField(cJSON *section, const char *key, float *dst, float fallback)
 {
     cJSON *item = section ? cJSON_GetObjectItem(section, key) : NULL;
@@ -82,74 +99,31 @@ void ThemeInitDefaults(Theme *t)
     snprintf(t->description, sizeof(t->description), "Default TLEscope dark theme");
 
     /* world colors (match themes/default/theme.json) */
-    t->world.bg              = ParseHexColor("#101010FF", BLACK);
-    t->world.orbit_normal    = ParseHexColor("#D3D3D326", WHITE);
-    t->world.orbit_highlighted = ParseHexColor("#FFFFFFFF", WHITE);
-    t->world.sat_normal      = ParseHexColor("#FFFFFFAA", WHITE);
-    t->world.sat_highlighted = ParseHexColor("#FFFF00FF", YELLOW);
-    t->world.sat_selected    = ParseHexColor("#00FF00FF", GREEN);
-    t->world.periapsis       = ParseHexColor("#87CEEBFF", SKYBLUE);
-    t->world.apoapsis        = ParseHexColor("#FFA500FF", ORANGE);
-    t->world.footprint_bg    = ParseHexColor("#FFFFFF22", WHITE);
+    t->world.bg               = ParseHexColor("#101010FF", BLACK);
+    t->world.orbit            = ParseHexColor("#D3D3D326", WHITE);
+    t->world.orbit_active     = ParseHexColor("#FFFFFFFF", WHITE);
+    t->world.sat              = ParseHexColor("#FFFFFFAA", WHITE);
+    t->world.sat_hover        = ParseHexColor("#FFFF00FF", YELLOW);
+    t->world.sat_selected     = ParseHexColor("#00FF00FF", GREEN);
+    t->world.periapsis        = ParseHexColor("#87CEEBFF", SKYBLUE);
+    t->world.apoapsis         = ParseHexColor("#FFA500FF", ORANGE);
+    t->world.footprint_fill   = ParseHexColor("#FFFFFF22", WHITE);
     t->world.footprint_border = ParseHexColor("#FFFFFF88", WHITE);
-    t->world.scope_bg        = ParseHexColor("#0A0F19FF", BLACK);
-    t->world.scope_horizon   = ParseHexColor("#2D1E14FF", BROWN);
-    t->world.overlay_dim     = ParseHexColor("#000000B4", BLACK);
 
-    /* semantic UI colors */
-    t->ui.text_main          = ParseHexColor("#FFFFFFFF", WHITE);
-    t->ui.text_secondary     = ParseHexColor("#D3D3D3FF", LIGHTGRAY);
-    t->ui.ui_bg              = ParseHexColor("#000000CC", BLACK);
-    t->ui.ui_primary         = ParseHexColor("#202020FF", DARKGRAY);
-    t->ui.ui_secondary       = ParseHexColor("#404040FF", GRAY);
-    t->ui.ui_accent          = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.window_border      = ParseHexColor("#4A4A4AFF", GRAY);
-    t->ui.window_border_focus = ParseHexColor("#66FF66FF", GREEN);
+    /* compact semantic UI palette (match themes/default/theme.json) */
+    t->ui.text    = ParseHexColor("#FFFFFFFF", WHITE);
+    t->ui.text_dim = ParseHexColor("#D3D3D3FF", LIGHTGRAY);
+    t->ui.bg      = ParseHexColor("#1E1E1EFF", DARKGRAY);
+    t->ui.surface = ParseHexColor("#2E2E2EFF", DARKGRAY);
+    t->ui.border  = ParseHexColor("#4A4A4AFF", GRAY);
+    t->ui.accent  = ParseHexColor("#66FF66FF", GREEN);
+    t->ui.overlay = ParseHexColor("#00000080", BLACK);
 
-    /* full ImGui palette (dark theme derived from the defaults above) */
-    t->ui.window_bg           = ParseHexColor("#1E1E1EFF", DARKGRAY);
-    t->ui.titlebar            = ParseHexColor("#202020FF", DARKGRAY);
-    t->ui.titlebar_active     = ParseHexColor("#252525FF", DARKGRAY);
-    t->ui.titlebar_collapsed  = ParseHexColor("#1A1A1AFF", DARKGRAY);
-    t->ui.frame_bg            = ParseHexColor("#2E2E2EFF", DARKGRAY);
-    t->ui.frame_bg_hovered    = ParseHexColor("#383838FF", DARKGRAY);
-    t->ui.frame_bg_active     = ParseHexColor("#404040FF", GRAY);
-    t->ui.button              = ParseHexColor("#303030FF", DARKGRAY);
-    t->ui.button_hovered      = ParseHexColor("#3A3A3AFF", DARKGRAY);
-    t->ui.button_active       = ParseHexColor("#404040FF", GRAY);
-    t->ui.header              = ParseHexColor("#2E2E2EFF", DARKGRAY);
-    t->ui.header_hovered      = ParseHexColor("#383838FF", DARKGRAY);
-    t->ui.header_active       = ParseHexColor("#404040FF", GRAY);
-    t->ui.tab                 = ParseHexColor("#282828FF", DARKGRAY);
-    t->ui.tab_hovered         = ParseHexColor("#323232FF", DARKGRAY);
-    t->ui.tab_active          = ParseHexColor("#353535FF", DARKGRAY);
-    t->ui.tab_unfocused       = ParseHexColor("#222222FF", DARKGRAY);
-    t->ui.tab_unfocused_active = ParseHexColor("#2A2A2AFF", DARKGRAY);
-    t->ui.scrollbar_bg        = ParseHexColor("#1A1A1AFF", DARKGRAY);
-    t->ui.scrollbar_grab      = ParseHexColor("#4A4A4AFF", GRAY);
-    t->ui.scrollbar_grab_hovered = ParseHexColor("#555555FF", GRAY);
-    t->ui.scrollbar_grab_active  = ParseHexColor("#606060FF", GRAY);
-    t->ui.separator           = ParseHexColor("#3A3A3AFF", GRAY);
-    t->ui.separator_hovered   = ParseHexColor("#4A4A4AFF", GRAY);
-    t->ui.separator_active    = ParseHexColor("#5A5A5AFF", GRAY);
-    t->ui.check_mark          = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.slider_grab         = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.slider_grab_active  = ParseHexColor("#88FF88FF", GREEN);
-    t->ui.text_selected_bg    = ParseHexColor("#66FF6633", GREEN);
-    t->ui.modal_dim           = ParseHexColor("#00000080", BLACK);
-    t->ui.plot_histogram      = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.plot_lines          = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.resize_grip         = ParseHexColor("#66FF6633", GREEN);
-    t->ui.docking_bg          = ParseHexColor("#000000BB", BLACK);
-    t->ui.docking_preview     = ParseHexColor("#66FF6688", GREEN);
-
-    /* notification toast colors (ROADMAP section 8.1) */
-    t->ui.notif_info          = ParseHexColor("#66CCFFFF", SKYBLUE);
-    t->ui.notif_success       = ParseHexColor("#66FF66FF", GREEN);
-    t->ui.notif_warning       = ParseHexColor("#FFAA00FF", ORANGE);
-    t->ui.notif_error         = ParseHexColor("#FF5555FF", RED);
-    t->ui.notif_bg            = ParseHexColor("#1E1E1ECC", DARKGRAY);
-    t->ui.notif_border        = ParseHexColor("#4A4A4AFF", GRAY);
+    /* notification toast accents */
+    t->ui.info    = ParseHexColor("#66CCFFFF", SKYBLUE);
+    t->ui.success = ParseHexColor("#66FF66FF", GREEN);
+    t->ui.warning = ParseHexColor("#FFAA00FF", ORANGE);
+    t->ui.error   = ParseHexColor("#FF5555FF", RED);
 
     /* style (mirrors the previous hardcoded ImGui style) */
     t->style.window_rounding    = 3.0f;
@@ -241,73 +215,29 @@ bool ThemeLoad(const char *theme_name, Theme *t)
     ParseStringField(meta, "description", t->description, sizeof(t->description), t->description);
 
     /* world colors */
-    ParseColorField(world, root, "bg_color", &t->world.bg, t->world.bg);
-    ParseColorField(world, root, "orbit_normal", &t->world.orbit_normal, t->world.orbit_normal);
-    ParseColorField(world, root, "orbit_highlighted", &t->world.orbit_highlighted, t->world.orbit_highlighted);
-    ParseColorField(world, root, "sat_normal", &t->world.sat_normal, t->world.sat_normal);
-    ParseColorField(world, root, "sat_highlighted", &t->world.sat_highlighted, t->world.sat_highlighted);
-    ParseColorField(world, root, "sat_selected", &t->world.sat_selected, t->world.sat_selected);
-    ParseColorField(world, root, "periapsis", &t->world.periapsis, t->world.periapsis);
-    ParseColorField(world, root, "apoapsis", &t->world.apoapsis, t->world.apoapsis);
-    ParseColorField(world, root, "footprint_bg", &t->world.footprint_bg, t->world.footprint_bg);
-    ParseColorField(world, root, "footprint_border", &t->world.footprint_border, t->world.footprint_border);
-    ParseColorField(world, root, "scope_bg", &t->world.scope_bg, t->world.scope_bg);
-    ParseColorField(world, root, "scope_horizon", &t->world.scope_horizon, t->world.scope_horizon);
-    ParseColorField(world, root, "overlay_dim", &t->world.overlay_dim, t->world.overlay_dim);
+    ParseColorField(world, "bg", &t->world.bg, t->world.bg);
+    ParseColorField(world, "orbit", &t->world.orbit, t->world.orbit);
+    ParseColorField(world, "orbit_active", &t->world.orbit_active, t->world.orbit_active);
+    ParseColorField(world, "sat", &t->world.sat, t->world.sat);
+    ParseColorField(world, "sat_hover", &t->world.sat_hover, t->world.sat_hover);
+    ParseColorField(world, "sat_selected", &t->world.sat_selected, t->world.sat_selected);
+    ParseColorField(world, "periapsis", &t->world.periapsis, t->world.periapsis);
+    ParseColorField(world, "apoapsis", &t->world.apoapsis, t->world.apoapsis);
+    ParseColorField(world, "footprint_fill", &t->world.footprint_fill, t->world.footprint_fill);
+    ParseColorField(world, "footprint_border", &t->world.footprint_border, t->world.footprint_border);
 
-    /* semantic + ImGui UI colors */
-    ParseColorField(ui, root, "text_main", &t->ui.text_main, t->ui.text_main);
-    ParseColorField(ui, root, "text_secondary", &t->ui.text_secondary, t->ui.text_secondary);
-    ParseColorField(ui, root, "ui_bg", &t->ui.ui_bg, t->ui.ui_bg);
-    ParseColorField(ui, root, "ui_primary", &t->ui.ui_primary, t->ui.ui_primary);
-    ParseColorField(ui, root, "ui_secondary", &t->ui.ui_secondary, t->ui.ui_secondary);
-    ParseColorField(ui, root, "ui_accent", &t->ui.ui_accent, t->ui.ui_accent);
-    ParseColorField(ui, root, "window_border", &t->ui.window_border, t->ui.window_border);
-    ParseColorField(ui, root, "window_border_focus", &t->ui.window_border_focus, t->ui.window_border_focus);
-
-    ParseColorField(ui, NULL, "window_bg", &t->ui.window_bg, t->ui.window_bg);
-    ParseColorField(ui, NULL, "titlebar", &t->ui.titlebar, t->ui.titlebar);
-    ParseColorField(ui, NULL, "titlebar_active", &t->ui.titlebar_active, t->ui.titlebar_active);
-    ParseColorField(ui, NULL, "titlebar_collapsed", &t->ui.titlebar_collapsed, t->ui.titlebar_collapsed);
-    ParseColorField(ui, NULL, "frame_bg", &t->ui.frame_bg, t->ui.frame_bg);
-    ParseColorField(ui, NULL, "frame_bg_hovered", &t->ui.frame_bg_hovered, t->ui.frame_bg_hovered);
-    ParseColorField(ui, NULL, "frame_bg_active", &t->ui.frame_bg_active, t->ui.frame_bg_active);
-    ParseColorField(ui, NULL, "button", &t->ui.button, t->ui.button);
-    ParseColorField(ui, NULL, "button_hovered", &t->ui.button_hovered, t->ui.button_hovered);
-    ParseColorField(ui, NULL, "button_active", &t->ui.button_active, t->ui.button_active);
-    ParseColorField(ui, NULL, "header", &t->ui.header, t->ui.header);
-    ParseColorField(ui, NULL, "header_hovered", &t->ui.header_hovered, t->ui.header_hovered);
-    ParseColorField(ui, NULL, "header_active", &t->ui.header_active, t->ui.header_active);
-    ParseColorField(ui, NULL, "tab", &t->ui.tab, t->ui.tab);
-    ParseColorField(ui, NULL, "tab_hovered", &t->ui.tab_hovered, t->ui.tab_hovered);
-    ParseColorField(ui, NULL, "tab_active", &t->ui.tab_active, t->ui.tab_active);
-    ParseColorField(ui, NULL, "tab_unfocused", &t->ui.tab_unfocused, t->ui.tab_unfocused);
-    ParseColorField(ui, NULL, "tab_unfocused_active", &t->ui.tab_unfocused_active, t->ui.tab_unfocused_active);
-    ParseColorField(ui, NULL, "scrollbar_bg", &t->ui.scrollbar_bg, t->ui.scrollbar_bg);
-    ParseColorField(ui, NULL, "scrollbar_grab", &t->ui.scrollbar_grab, t->ui.scrollbar_grab);
-    ParseColorField(ui, NULL, "scrollbar_grab_hovered", &t->ui.scrollbar_grab_hovered, t->ui.scrollbar_grab_hovered);
-    ParseColorField(ui, NULL, "scrollbar_grab_active", &t->ui.scrollbar_grab_active, t->ui.scrollbar_grab_active);
-    ParseColorField(ui, NULL, "separator", &t->ui.separator, t->ui.separator);
-    ParseColorField(ui, NULL, "separator_hovered", &t->ui.separator_hovered, t->ui.separator_hovered);
-    ParseColorField(ui, NULL, "separator_active", &t->ui.separator_active, t->ui.separator_active);
-    ParseColorField(ui, NULL, "check_mark", &t->ui.check_mark, t->ui.check_mark);
-    ParseColorField(ui, NULL, "slider_grab", &t->ui.slider_grab, t->ui.slider_grab);
-    ParseColorField(ui, NULL, "slider_grab_active", &t->ui.slider_grab_active, t->ui.slider_grab_active);
-    ParseColorField(ui, NULL, "text_selected_bg", &t->ui.text_selected_bg, t->ui.text_selected_bg);
-    ParseColorField(ui, NULL, "modal_dim", &t->ui.modal_dim, t->ui.modal_dim);
-    ParseColorField(ui, NULL, "plot_histogram", &t->ui.plot_histogram, t->ui.plot_histogram);
-    ParseColorField(ui, NULL, "plot_lines", &t->ui.plot_lines, t->ui.plot_lines);
-    ParseColorField(ui, NULL, "resize_grip", &t->ui.resize_grip, t->ui.resize_grip);
-    ParseColorField(ui, NULL, "docking_bg", &t->ui.docking_bg, t->ui.docking_bg);
-    ParseColorField(ui, NULL, "docking_preview", &t->ui.docking_preview, t->ui.docking_preview);
-
-    /* notification toast colors (ROADMAP section 8.1) */
-    ParseColorField(ui, NULL, "notif_info", &t->ui.notif_info, t->ui.notif_info);
-    ParseColorField(ui, NULL, "notif_success", &t->ui.notif_success, t->ui.notif_success);
-    ParseColorField(ui, NULL, "notif_warning", &t->ui.notif_warning, t->ui.notif_warning);
-    ParseColorField(ui, NULL, "notif_error", &t->ui.notif_error, t->ui.notif_error);
-    ParseColorField(ui, NULL, "notif_bg", &t->ui.notif_bg, t->ui.notif_bg);
-    ParseColorField(ui, NULL, "notif_border", &t->ui.notif_border, t->ui.notif_border);
+    /* compact UI palette */
+    ParseColorField(ui, "text", &t->ui.text, t->ui.text);
+    ParseColorField(ui, "text_dim", &t->ui.text_dim, t->ui.text_dim);
+    ParseColorField(ui, "bg", &t->ui.bg, t->ui.bg);
+    ParseColorField(ui, "surface", &t->ui.surface, t->ui.surface);
+    ParseColorField(ui, "border", &t->ui.border, t->ui.border);
+    ParseColorField(ui, "accent", &t->ui.accent, t->ui.accent);
+    ParseColorField(ui, "overlay", &t->ui.overlay, t->ui.overlay);
+    ParseColorField(ui, "info", &t->ui.info, t->ui.info);
+    ParseColorField(ui, "success", &t->ui.success, t->ui.success);
+    ParseColorField(ui, "warning", &t->ui.warning, t->ui.warning);
+    ParseColorField(ui, "error", &t->ui.error, t->ui.error);
 
     /* style */
     ParseFloatField(style, "window_rounding", &t->style.window_rounding, t->style.window_rounding);

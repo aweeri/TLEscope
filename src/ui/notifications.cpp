@@ -13,6 +13,7 @@
 
 #include "notifications.h"
 #include "ui_layout.h"
+#include "core/theme.h"
 #include "tools/tools_settings.h"
 
 #include <imgui.h>
@@ -145,11 +146,11 @@ static ImVec4 LevelColor(NotifyLevel level)
 {
     switch (level)
     {
-        case NOTIFY_SUCCESS: return ThemeColor(g_theme.ui.notif_success);
-        case NOTIFY_WARNING: return ThemeColor(g_theme.ui.notif_warning);
-        case NOTIFY_ERROR:   return ThemeColor(g_theme.ui.notif_error);
+        case NOTIFY_SUCCESS: return ThemeColor(g_theme.ui.success);
+        case NOTIFY_WARNING: return ThemeColor(g_theme.ui.warning);
+        case NOTIFY_ERROR:   return ThemeColor(g_theme.ui.error);
         case NOTIFY_INFO:
-        default:             return ThemeColor(g_theme.ui.notif_info);
+        default:             return ThemeColor(g_theme.ui.info);
     }
 }
 
@@ -200,8 +201,8 @@ void DrawNotifications(void)
         ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(alpha);
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeColor(g_theme.ui.notif_bg));
-        ImGui::PushStyleColor(ImGuiCol_Border, ThemeColor(g_theme.ui.notif_border));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeColor(ThemeAlpha(g_theme.ui.bg, 0.80f)));
+        ImGui::PushStyleColor(ImGuiCol_Border, ThemeColor(g_theme.ui.border));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad_x, pad_y));

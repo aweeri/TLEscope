@@ -443,12 +443,12 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         };
         float t = s_notch_anim[side];
 
-        ImVec4 fill = lerp4(ThemeColor(g_theme.ui.ui_primary),
-                            ThemeColor(g_theme.ui.ui_accent), 0.45f * t);
+        ImVec4 fill = lerp4(ThemeColor(g_theme.ui.surface),
+                            ThemeColor(g_theme.ui.accent), 0.45f * t);
         fill.w = 0.85f + 0.15f * t;
         if (active) { fill.x *= 0.8f; fill.y *= 0.8f; fill.z *= 0.8f; fill.w = 0.98f; }
 
-        ImVec4 bcol = ThemeColor(g_theme.ui.window_border);
+        ImVec4 bcol = ThemeColor(g_theme.ui.border);
         bcol.w = 0.70f + 0.30f * t;
 
         /* tab-like shape: only the outer (detached) edge is rounded */
@@ -482,7 +482,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
             icon = is_left ? ICON_FA_CHEVRON_RIGHT : ICON_FA_CHEVRON_LEFT;
 
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
-        ImVec4 icon_col = lerp4(ThemeColor(g_theme.ui.text_secondary),
+        ImVec4 icon_col = lerp4(ThemeColor(g_theme.ui.text_dim),
                                 ImVec4(1.0f, 1.0f, 1.0f, 1.0f), 0.6f * t);
         icon_col.w = 0.80f + 0.20f * t;
         dl->AddText(ImVec2(o.x + (tab_w - icon_sz.x) * 0.5f,
@@ -578,8 +578,8 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
         float boundary_x = is_left ? *width : (screen_w - *width);
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
-        Color line_theme = g_theme.ui.window_border;
-        Color drag_theme = g_theme.ui.ui_accent;
+        Color line_theme = g_theme.ui.border;
+        Color drag_theme = g_theme.ui.accent;
 
         if (dragging)
         {
@@ -635,8 +635,8 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     ImVec2 p1 = ImGui::GetItemRectMax();
 
     /* background (theme-aware) */
-    Color hdr_bg   = *open ? g_theme.ui.header       : g_theme.ui.frame_bg;
-    Color hdr_hov  = *open ? g_theme.ui.header_hovered : g_theme.ui.frame_bg_hovered;
+    Color hdr_bg   = g_theme.ui.surface;
+    Color hdr_hov  = ThemeHoverOf(g_theme.ui.surface, g_theme.ui.text);
     ImU32 bg = *open ? IM_COL32(hdr_bg.r, hdr_bg.g, hdr_bg.b, 200) : IM_COL32(hdr_bg.r, hdr_bg.g, hdr_bg.b, 160);
     if (hovered) bg = *open ? IM_COL32(hdr_hov.r, hdr_hov.g, hdr_hov.b, 220) : IM_COL32(hdr_hov.r, hdr_hov.g, hdr_hov.b, 180);
     ImGui::GetWindowDrawList()->AddRectFilled(p0, p1, bg, 4.0f);
@@ -646,8 +646,8 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     ImVec2 chev_sz = ImGui::CalcTextSize(chev);
     ImVec2 icon_sz = ImGui::CalcTextSize(def->icon);
     float y = p0.y + (frame_h - chev_sz.y) * 0.5f;
-    ImU32 text_col = IM_COL32(g_theme.ui.text_main.r, g_theme.ui.text_main.g, g_theme.ui.text_main.b, 255);
-    ImU32 accent_col = IM_COL32(g_theme.ui.ui_accent.r, g_theme.ui.ui_accent.g, g_theme.ui.ui_accent.b, 255);
+    ImU32 text_col = IM_COL32(g_theme.ui.text.r, g_theme.ui.text.g, g_theme.ui.text.b, 255);
+    ImU32 accent_col = IM_COL32(g_theme.ui.accent.r, g_theme.ui.accent.g, g_theme.ui.accent.b, 255);
 
     ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f, y), text_col, chev);
     ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f + chev_sz.x + 6.0f, y), accent_col, def->icon);
@@ -670,7 +670,7 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
     /* draw grip dots - theme-aware (12.1) */
-    Color grip_theme = g_theme.ui.text_secondary;
+    Color grip_theme = g_theme.ui.text_dim;
     if (handle_hovered || handle_active)
         ImGui::GetWindowDrawList()->AddRectFilled(
             ImVec2(h0.x + 1, h0.y + 2), ImVec2(h1.x - 1, h1.y - 2),
@@ -758,7 +758,7 @@ static void DrawInsertionLine(bool is_left, HeaderSlot *slots, int sc, int visib
     {
         float sidebar_x = is_left ? 0.0f : (float)GetScreenWidth() - g_layout.right_width;
         float sidebar_w = is_left ? g_layout.left_width : g_layout.right_width;
-        Color drop_theme = g_theme.ui.ui_accent;
+        Color drop_theme = g_theme.ui.accent;
         ImGui::GetForegroundDrawList()->AddLine(
             ImVec2(sidebar_x, line_y), ImVec2(sidebar_x + sidebar_w, line_y),
             IM_COL32(drop_theme.r, drop_theme.g, drop_theme.b, 220), 2.0f);
@@ -904,12 +904,12 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,            ThemeColor(g_theme.ui.window_bg));
-    ImGui::PushStyleColor(ImGuiCol_Border,               ThemeColor(g_theme.ui.window_border));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg,          ThemeColor(g_theme.ui.scrollbar_bg));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab,        ThemeColor(g_theme.ui.scrollbar_grab));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ThemeColor(g_theme.ui.scrollbar_grab_hovered));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive,  ThemeColor(g_theme.ui.scrollbar_grab_active));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,            ThemeColor(g_theme.ui.bg));
+    ImGui::PushStyleColor(ImGuiCol_Border,               ThemeColor(g_theme.ui.border));
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg,          ThemeColor(g_theme.ui.bg));
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab,        ThemeColor(ThemeMix(g_theme.ui.surface, g_theme.ui.text, 0.25f)));
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ThemeColor(ThemeMix(g_theme.ui.surface, g_theme.ui.text, 0.35f)));
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive,  ThemeColor(ThemeMix(g_theme.ui.surface, g_theme.ui.text, 0.45f)));
 
     const char *win_name = is_left ? "##sidebar_left" : "##sidebar_right";
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -1051,6 +1051,9 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
+            ImGui::Checkbox("Night Mode (Red)", &cfg->night_mode);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Render the entire screen (scene + UI) in monochrome red for dark adaptation (F10)");
             ImGui::Checkbox("VSync", &cfg->hint_vsync);
             if (ImGui::Checkbox("Use Local Time", &cfg->use_local_time))
             {
@@ -1159,7 +1162,7 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 
                     ImGui::SameLine();
                     snprintf(btn_id, sizeof(btn_id), "%s##remove_%d", ICON_FA_XMARK, i);
-                    Color err_theme = g_theme.ui.notif_error;
+                    Color err_theme = g_theme.ui.error;
                     ImGui::PushStyleColor(ImGuiCol_Text,
                         IM_COL32(err_theme.r, err_theme.g, err_theme.b, 255));
                     if (ImGui::Button(btn_id, ImVec2(btn_w, btn_w)))

@@ -15,11 +15,9 @@ themes/
 │   ├── font.ttf
 │   ├── earth.png
 │   └── ...
-├── girlypop/
-│   ├── theme.json
-│   └── font.ttf
-└── trans-test/
-    └── theme.json
+└── girlypop/
+    ├── theme.json
+    └── font.ttf
 ```
 
 ---
@@ -37,6 +35,10 @@ themes/
 
 ## theme.json format
 
+The color model is deliberately **compact**: a theme declares only the base
+colors, and TLEscope derives every Dear ImGui hover/active shade from them.
+There are **21 colors** in total — 10 `world` + 11 `ui`.
+
 ```jsonc
 {
     // ── Metadata ────────────────────────────────────────────────
@@ -49,68 +51,33 @@ themes/
 
     // ── World colors: 3D/2D scene drawing (Earth, orbits, sats) ──
     "world": {
-        "bg_color":           "#101010FF",  // clear color
-        "orbit_normal":       "#D3D3D326",  // normal orbit path (alpha allowed)
-        "orbit_highlighted":  "#FFFFFFFF",  // active/hovered orbit path
-        "sat_normal":         "#FFFFFFAA",  // unselected satellite marker
-        "sat_highlighted":    "#FFFF00FF",  // hovered satellite marker
-        "sat_selected":       "#00FF00FF",  // selected satellite marker
-        "periapsis":          "#87CEEBFF",  // periapsis marker
-        "apoapsis":           "#FFA500FF",  // apoapsis marker
-        "footprint_bg":       "#FFFFFF22",  // coverage footprint fill
-        "footprint_border":   "#FFFFFF88",  // coverage footprint outline
-        "scope_bg":           "#0A0F19FF",  // scope window background
-        "scope_horizon":      "#2D1E14FF",  // scope horizon line
-        "overlay_dim":        "#000000B4"   // modal overlay dimming
+        "bg":               "#101010FF",  // clear color
+        "orbit":            "#D3D3D326",  // normal orbit path (alpha allowed)
+        "orbit_active":     "#FFFFFFFF",  // active/hovered orbit path
+        "sat":              "#FFFFFFAA",  // unselected satellite marker
+        "sat_hover":        "#FFFF00FF",  // hovered satellite marker
+        "sat_selected":     "#00FF00FF",  // selected satellite marker
+        "periapsis":        "#87CEEBFF",  // periapsis marker
+        "apoapsis":         "#FFA500FF",  // apoapsis marker
+        "footprint_fill":   "#FFFFFF22",  // coverage footprint fill
+        "footprint_border": "#FFFFFF88"   // coverage footprint outline
     },
 
-    // ── UI colors: semantic + Dear ImGui palette ────────────────
+    // ── UI colors: compact semantic palette ─────────────────────
     "ui": {
-        "text_main":            "#FFFFFFFF",  // primary text
-        "text_secondary":       "#D3D3D3FF",  // secondary/dimmed text
-        "ui_bg":                "#000000CC",  // UI overlay background
-        "ui_primary":           "#202020FF",  // primary surface
-        "ui_secondary":         "#404040FF",  // secondary surface
-        "ui_accent":            "#66FF66FF",  // accent (buttons, highlights)
-        "window_border":        "#4A4A4AFF",  // unfocused window border
-        "window_border_focus":  "#66FF66FF",  // focused window border
+        "text":     "#FFFFFFFF",  // primary text
+        "text_dim": "#D3D3D3FF",  // secondary / disabled text
+        "bg":       "#1E1E1EFF",  // window, panel and overlay background
+        "surface":  "#2E2E2EFF",  // inputs, buttons, tabs, headers, titlebar
+        "border":   "#4A4A4AFF",  // window borders and separators
+        "accent":   "#66FF66FF",  // selection, highlight, slider, check, plots
+        "overlay":  "#00000080",  // modal + docking dimming (alpha matters)
 
-        // full ImGui palette (maps to ImGuiCol_*)
-        "window_bg":            "#1E1E1EFF",  // window background
-        "titlebar":             "#202020FF",  // unfocused title bar
-        "titlebar_active":      "#252525FF",  // focused title bar
-        "titlebar_collapsed":   "#1A1A1AFF",
-        "frame_bg":             "#2E2E2EFF",  // input frame background
-        "frame_bg_hovered":     "#383838FF",
-        "frame_bg_active":      "#404040FF",
-        "button":               "#303030FF",
-        "button_hovered":       "#3A3A3AFF",
-        "button_active":        "#404040FF",
-        "header":               "#2E2E2EFF",  // collapsing headers, menu
-        "header_hovered":       "#383838FF",
-        "header_active":        "#404040FF",
-        "tab":                  "#282828FF",
-        "tab_hovered":          "#323232FF",
-        "tab_active":           "#353535FF",
-        "tab_unfocused":        "#222222FF",
-        "tab_unfocused_active": "#2A2A2AFF",
-        "scrollbar_bg":         "#1A1A1AFF",
-        "scrollbar_grab":       "#4A4A4AFF",
-        "scrollbar_grab_hovered": "#555555FF",
-        "scrollbar_grab_active":  "#606060FF",
-        "separator":            "#3A3A3AFF",
-        "separator_hovered":    "#4A4A4AFF",
-        "separator_active":     "#5A5A5AFF",
-        "check_mark":           "#66FF66FF",  // checkbox tick
-        "slider_grab":          "#66FF66FF",  // slider handle
-        "slider_grab_active":   "#88FF88FF",
-        "text_selected_bg":     "#66FF6633",  // text selection highlight
-        "modal_dim":            "#00000080",  // modal window dimming
-        "plot_histogram":       "#66FF66FF",  // plots
-        "plot_lines":           "#66FF66FF",
-        "resize_grip":          "#66FF6633",  // window resize corner
-        "docking_bg":           "#000000BB",  // dock space background
-        "docking_preview":      "#66FF6688"   // dock preview highlight
+        // notification toast accents
+        "info":     "#66CCFFFF",
+        "success":  "#66FF66FF",
+        "warning":  "#FFAA00FF",
+        "error":    "#FF5555FF"
     },
 
     // ── Style: ImGui style variables ────────────────────────────
@@ -168,18 +135,36 @@ themes/
 
 ---
 
+## How the UI palette is expanded
+
+Only the base `ui` colors are stored. When a theme is applied,
+[`ThemeApplyToImGui()`](../src/ui/imgui_theme.cpp:24) derives the full
+`ImGuiCol_*` set:
+
+| Base color | Derived ImGui colors |
+|------------|----------------------|
+| `text` | `Text`, `Drawer`/navigation highlights |
+| `text_dim` | `TextDisabled` |
+| `bg` | `WindowBg`, `ChildBg`, `PopupBg`, `TitleBg`, `TitleBgCollapsed`, `ScrollbarBg`, `TabUnfocused` |
+| `surface` | `FrameBg`, `Button`, `Header`, `MenuBarBg`, `TitleBgActive`, `TabHovered`, `TabActive` |
+| `border` | `Border`, `Separator` |
+| `accent` | `CheckMark`, `SliderGrab`, `PlotLines`, `PlotHistogram`, `NavCursor`, `ResizeGrip`, docking preview |
+| `overlay` | `ModalWindowDimBg`, `DockingBg` |
+
+Interactive states are mixed from the base color **toward the theme's `text`
+color**, so the same rule works on dark *and* light themes:
+
+- hovered = `mix(base, text, 0.10)`
+- active  = `mix(base, text, 0.18)`
+
+This is why light themes (like `daylight`) automatically get *darker* hover
+states while dark themes get *lighter* ones — no hand-tuned grey per theme.
+
 ## Color format
 
 Colors use 8-digit hex `#RRGGBBAA` (alpha in the last two digits).
 All fields are optional — any key you omit inherits the **default theme's**
-value, so minimal themes like the transparency test can override only a few
-colors.
-
-## Legacy (flat) format
-
-For backward compatibility, old flat `theme.json` files that put the color
-keys at the root level (e.g. `"bg_color": "#101010FF"` instead of inside
-`world`) are still parsed. New themes should use the nested format above.
+value, so a theme can override only a few colors.
 
 ## Asset fallback
 

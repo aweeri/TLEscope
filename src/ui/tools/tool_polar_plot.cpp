@@ -40,7 +40,7 @@ void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
     double aos_epoch = pass->aos_epoch;
     double los_epoch = pass->los_epoch;
 
-    Color notch_col = g_theme.ui.notif_warning;
+    Color notch_col = g_theme.ui.warning;
 
     /* helper to compute the satellite's draw-space position at an epoch */
     auto pos_at = [&](double epoch) -> Vector3 {
@@ -120,8 +120,8 @@ void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
 static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
 {
     /* concentric rings for 0°, 30°, 60°, 90° elevation — theme-aware (12.2) */
-    Color grid_theme = g_theme.ui.text_secondary;
-    Color label_theme = g_theme.ui.text_secondary;
+    Color grid_theme = g_theme.ui.text_dim;
+    Color label_theme = g_theme.ui.text_dim;
     int rings[4] = { 90, 60, 30, 0 };
     ImU32 ring_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80);
     ImU32 ring_col_bold = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 160);
@@ -178,8 +178,8 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
     /* background circle - theme-aware (12.2) */
-    Color bg_theme = g_theme.ui.window_bg;
-    Color accent_theme = g_theme.ui.ui_accent;
+    Color bg_theme = g_theme.ui.bg;
+    Color accent_theme = g_theme.ui.accent;
     dl->AddCircleFilled(center, radius + 4.0f,
                         IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 200), 64);
     DrawPolarPlotGrid(dl, center, radius);
@@ -190,9 +190,9 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
     {
         SatPass *pass = &passes[g_ui.selected_pass_idx];
-        Color path_col = g_theme.ui.ui_accent;
-        Color marker_col = g_theme.ui.notif_warning;
-        Color maxel_col = g_theme.ui.notif_success;
+        Color path_col = g_theme.ui.accent;
+        Color marker_col = g_theme.ui.warning;
+        Color maxel_col = g_theme.ui.success;
 
         /* project a (az, el) pair to canvas coords (same as the live dot) */
         auto project = [&](double az, double el) -> ImVec2 {
@@ -303,7 +303,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     {
         const char *msg = "No satellite selected";
         ImVec2 msg_sz = ImGui::CalcTextSize(msg);
-        Color msg_theme = g_theme.ui.text_secondary;
+        Color msg_theme = g_theme.ui.text_dim;
         dl->AddText(ImVec2(center.x - msg_sz.x * 0.5f, center.y - msg_sz.y * 0.5f),
                     IM_COL32(msg_theme.r, msg_theme.g, msg_theme.b, 160), msg);
     }

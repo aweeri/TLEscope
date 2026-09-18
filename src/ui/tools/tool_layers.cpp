@@ -113,7 +113,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     const float icon_w = 24.0f;
 
     auto DrawLayerCheckbox = [&](const char *label, bool *value, const char *icon, const char *tooltip) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(*value ? g_theme.ui.ui_accent : g_theme.ui.text_secondary));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(*value ? g_theme.ui.accent : g_theme.ui.text_dim));
         ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
         /* center the icon within a fixed-width cell so all rows align */
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
@@ -129,7 +129,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
     auto DrawSectionHeader = [&](const char *title) {
         ImGui::Spacing();
-        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", title);
+        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s", title);
         ImGui::Separator();
     };
 
@@ -223,7 +223,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         bool future_orbits_prev = future_orbits_enabled;
         float future_row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the slider */
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(future_orbits_enabled ? g_theme.ui.ui_accent : g_theme.ui.text_secondary));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(future_orbits_enabled ? g_theme.ui.accent : g_theme.ui.text_dim));
         ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
         const char *icon = ICON_FA_CLOCK_ROTATE_LEFT;
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
@@ -272,7 +272,7 @@ static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *p
                                const MapDetailLine *lines, int line_count,
                                float line_width, float alpha)
 {
-    Color color = g_theme.ui.text_main;
+    Color color = g_theme.ui.text;
     color.a = (unsigned char)(color.a * alpha);
 
     for (int i = 0; i < line_count; i++)
@@ -362,13 +362,13 @@ static void DrawMapDetailLines3D(const SceneContext *sctx, AppConfig *cfg)
     rlDrawRenderBatchActive();
     if (show_coast)
     {
-        Color c = g_theme.ui.text_main;
+        Color c = g_theme.ui.text;
         c.a = (unsigned char)(c.a * 0.5f);
         DrawDetailLines3D(coast_verts, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, c, rot_rad);
     }
     if (show_border)
     {
-        Color c = g_theme.ui.text_main;
+        Color c = g_theme.ui.text;
         c.a = (unsigned char)(c.a * 0.20f);
         DrawDetailLines3D(border_verts, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, c, rot_rad);
     }
@@ -401,9 +401,9 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         const float thin_width = 0.8f / zoom;
         const float strong_width = 1.1f / zoom;
 
-        Color thin_color = g_theme.ui.text_main;
+        Color thin_color = g_theme.ui.text;
         thin_color.a = (unsigned char)(thin_color.a * 0.15f);
-        Color strong_color = g_theme.ui.text_main;
+        Color strong_color = g_theme.ui.text;
         strong_color.a = (unsigned char)(strong_color.a * 0.28f);
 
         const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
@@ -506,7 +506,7 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
     const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
 
     const float font_size = font->FontSize * 0.8f;
-    Color label_col = g_theme.ui.text_main;
+    Color label_col = g_theme.ui.text;
     label_col.a = (unsigned char)(label_col.a * 0.7f);
     const ImU32 col = IM_COL32(label_col.r, label_col.g, label_col.b, label_col.a);
     const ImU32 shadow_col = IM_COL32(0, 0, 0, 160);

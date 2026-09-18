@@ -89,7 +89,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     if (!*ctx->selected_sat)
     {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "No satellite selected.\nClick a satellite in the 3D view or in the Satellite Manager.");
         ImGui::PopTextWrapPos();
         return;
@@ -145,7 +145,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         /* Geocentric (J2000) row */
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "Geocentric:");
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Geocentric:");
         ImGui::TableNextColumn();
         ImGui::TextUnformatted("");
 
@@ -164,7 +164,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         /* Topocentric (from home) row */
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "Topocentric:");
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Topocentric:");
         ImGui::TableNextColumn();
         ImGui::TextUnformatted("");
 

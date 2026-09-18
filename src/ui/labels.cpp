@@ -198,9 +198,9 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
          * it must outrank its own apo/peri labels (priority 5) and every
          * other satellite label so the focused sat is never occluded */
         if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 10; }
-        else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 9; }
-        else if (is_active)   { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 2; }
-        else                  { c.color = ToImU32(g_theme.world.sat_normal);      c.priority = 1; }
+        else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_hover); c.priority = 9; }
+        else if (is_active)   { c.color = ToImU32(g_theme.world.sat_hover); c.priority = 2; }
+        else                  { c.color = ToImU32(g_theme.world.sat);      c.priority = 1; }
         cands.push_back(c);
     }
 
@@ -368,7 +368,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             double range = get_sat_range(active, epoch, *home);
             LabelCandidate c;
             snprintf(c.text, sizeof(c.text), "%.1f km", range);
-            c.color = ToImU32(g_theme.ui.ui_accent);
+            c.color = ToImU32(g_theme.ui.accent);
             c.priority = 5;
             c.size = size;
             c.centered = true;
@@ -419,7 +419,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                          return a.priority > b.priority;
                      });
 
-    ImU32 bg_col = ToImU32(g_theme.ui.ui_bg);
+    ImU32 bg_col = ToImU32(ThemeAlpha(g_theme.ui.bg, 0.82f));
     ImU32 border_col = IM_COL32(255, 255, 255, 36);
     ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
 

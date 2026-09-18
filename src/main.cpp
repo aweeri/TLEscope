@@ -4,6 +4,10 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <rlgl.h>
+/* Raw GL entry point(s) for the night-mode backbuffer copy
+ * (glGenTextures/glTexImage2D/glCopyTexSubImage2D). rlgl.h only pulls in the
+ * GLAD loader inside its implementation unit, so expose it here as well. */
+#include <external/glad.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +51,7 @@ static AppConfig cfg = []() -> AppConfig {
     c.show_slant_range = false;
     c.show_scattering = false;
     c.hint_vsync = false;
+    c.night_mode = false;
     return c;
 }();
 
@@ -102,7 +107,7 @@ static Color CoverageSelectFill(Color base)
  *  `base`'s alpha so the footprint stays transparent. */
 static Color CoverageHoverFill(Color base)
 {
-    return CoverageTintFill(base, g_theme.world.sat_highlighted, COVERAGE_HOVER_TINT);
+    return CoverageTintFill(base, g_theme.world.sat_hover, COVERAGE_HOVER_TINT);
 }
 
 /** manual mesh generation for the planetary spheres */
@@ -166,7 +171,7 @@ static Mesh GenEarthMesh(float radius, int slices, int rings)
 /** render orbit lines in 3d space */
 static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step)
 {
-    Color orbitColor = ApplyAlpha(is_highlighted ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, alpha);
+    Color orbitColor = ApplyAlpha(is_highlighted ? g_theme.world.orbit_active : g_theme.world.orbit, alpha);
 
     if (is_highlighted)
     {
@@ -195,9 +200,9 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
                 if (cfg.highlight_sunlit)
                 {
                     if (!is_sat_eclipsed(raw_pos, base_sun_dir))
-                        drawCol = ApplyAlpha(g_theme.world.sat_highlighted, alpha);
+                        drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
                     else
-                        drawCol = ApplyAlpha(g_theme.world.orbit_normal, alpha);
+                        drawCol = ApplyAlpha(g_theme.world.orbit, alpha);
                 }
                 DrawLine3D(prev_pos, pos, drawCol);
             }
@@ -250,12 +255,12 @@ static void DrawLoadingScreen(float progress, const char *message, Texture2D log
     Rectangle barOutline = {(screenW - barW) / 2, startY, barW, barH};
     Rectangle barProgress = {barOutline.x + 3, barOutline.y + 3, (barW - 6) * progress, barH - 6};
 
-    DrawRectangleRoundedLinesEx(barOutline, 0.5f, 16, 2.0f, g_theme.ui.text_main);
+    DrawRectangleRoundedLinesEx(barOutline, 0.5f, 16, 2.0f, g_theme.ui.text);
     if (progress > 0.0f)
-        DrawRectangleRounded(barProgress, 0.5f, 16, g_theme.ui.text_secondary);
+        DrawRectangleRounded(barProgress, 0.5f, 16, g_theme.ui.text_dim);
 
     Vector2 msgSize = MeasureTextEx(customFont, message, 18 * cfg.ui_scale, 1.0f);
-    DrawUIText(customFont, message, (screenW - msgSize.x) / 2, barOutline.y + barH + 20 * cfg.ui_scale, 18 * cfg.ui_scale, g_theme.ui.text_main);
+    DrawUIText(customFont, message, (screenW - msgSize.x) / 2, barOutline.y + barH + 20 * cfg.ui_scale, 18 * cfg.ui_scale, g_theme.ui.text);
 
     EndDrawing();
 }
@@ -452,6 +457,15 @@ int main(void)
     Shader shader2D = LoadShaderFromMemory(NULL, Shaders::fs2D);
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
     int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
+
+    /* full-screen monochrome-red post-process (night / dark-adaptation mode).
+     * It is applied as a single screen-space pass over a GPU copy of the
+     * default (MSAA) framebuffer, so ImGui's DPI-based scissor math stays
+     * valid and antialiasing is preserved. nightTex holds the backbuffer copy
+     * and is (re)allocated at device-pixel size when the window changes. */
+    Shader shaderNight = LoadShaderFromMemory(NULL, Shaders::fsNight);
+    int nightIntensityLoc = GetShaderLocation(shaderNight, "intensity");
+    Texture2D nightTex = {0};
 
     Shader shaderCloud = LoadShaderFromMemory(NULL, Shaders::fsCloud3D);
     int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
@@ -791,6 +805,11 @@ int main(void)
             if (IsKeyPressed(KEY_L)) {
                 cfg.show_markers = !cfg.show_markers;
                 LOG_DEBUG("Markers: %s", cfg.show_markers ? "ON" : "OFF");
+            }
+            if (IsKeyPressed(KEY_F10)) {
+                cfg.night_mode = !cfg.night_mode;
+                LOG_INFO("Night mode: %s", cfg.night_mode ? "ON" : "OFF");
+                NotifyPush(NOTIFY_INFO, ICON_FA_MOON, cfg.night_mode ? "Night mode ON" : "Night mode OFF");
             }
 
             if (IsKeyPressed(KEY_HOME))
@@ -1375,6 +1394,9 @@ int main(void)
         /* ground coverage scope: Sel (active satellite only) or All (every active satellite) */
         int gc_mode = ToolSettingGetInt(&cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
 
+        /* The frame is rendered exactly as normal to the default (MSAA)
+         * framebuffer. Night mode is applied afterwards as a single
+         * screen-space post-process pass just before EndDrawing() (below). */
         BeginDrawing();
         ClearBackground(g_theme.world.bg);
 
@@ -1462,10 +1484,10 @@ int main(void)
                 if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
                 {
                     Vector4 gc_color_2d = {
-                        g_theme.world.footprint_bg.r / 255.0f,
-                        g_theme.world.footprint_bg.g / 255.0f,
-                        g_theme.world.footprint_bg.b / 255.0f,
-                        g_theme.world.footprint_bg.a / 255.0f
+                        g_theme.world.footprint_fill.r / 255.0f,
+                        g_theme.world.footprint_fill.g / 255.0f,
+                        g_theme.world.footprint_fill.b / 255.0f,
+                        g_theme.world.footprint_fill.a / 255.0f
                     };
                     SetShaderValue(g_coverage_shaders.shader2D, g_coverage_shaders.colorLoc2D,
                                    &gc_color_2d, SHADER_UNIFORM_VEC4);
@@ -1662,14 +1684,14 @@ int main(void)
                         if (hovered_sat != NULL && hovered_sat != selected_sat && hovered_sat->is_active)
                         {
                             draw_highlighted_2d(hovered_sat,
-                                                CoverageHoverFill(g_theme.world.footprint_bg),
-                                                g_theme.world.sat_highlighted);
+                                                CoverageHoverFill(g_theme.world.footprint_fill),
+                                                g_theme.world.sat_hover);
                         }
 
                         if (selected_sat != NULL && selected_sat->is_active)
                         {
                             draw_highlighted_2d(selected_sat,
-                                                CoverageSelectFill(g_theme.world.footprint_bg),
+                                                CoverageSelectFill(g_theme.world.footprint_fill),
                                                 g_theme.world.sat_selected);
                         }
                     }
@@ -1686,7 +1708,7 @@ int main(void)
                         continue;
 
                     bool is_hl = (active_sat == &satellites[i]);
-                    Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
+                    Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_hover : g_theme.world.sat;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
                     if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat) && ToolSettingGetBool(&cfg, LAYERS_KEY_FUTURE_ORBITS, true))
@@ -1725,13 +1747,13 @@ int main(void)
                             {
                                 if (fabs(track_pts[j].x - track_pts[j - 1].x) < map_w * 0.6f)
                                 {
-                                    Color drawCol = ApplyAlpha(is_hl ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, sat_alpha);
+                                    Color drawCol = ApplyAlpha(is_hl ? g_theme.world.orbit_active : g_theme.world.orbit, sat_alpha);
                                     if (cfg.highlight_sunlit)
                                     {
                                         if (is_sunlit_arr[j])
-                                            drawCol = ApplyAlpha(g_theme.world.sat_highlighted, sat_alpha);
+                                            drawCol = ApplyAlpha(g_theme.world.sat_hover, sat_alpha);
                                         else
-                                            drawCol = ApplyAlpha(is_hl ? g_theme.world.orbit_highlighted : g_theme.world.orbit_normal, sat_alpha);
+                                            drawCol = ApplyAlpha(is_hl ? g_theme.world.orbit_active : g_theme.world.orbit, sat_alpha);
                                     }
                                     DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, 2.0f / Camera2DParams.zoom, drawCol);
                                 }
@@ -1801,7 +1823,7 @@ int main(void)
                         float x_off = offset_i * map_w;
                         Vector2 p1 = {hx + x_off, hy};
                         Vector2 p2 = {sx + x_off, sy};
-                        DrawLineEx(p1, p2, 2.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.ui_accent, 0.8f));
+                        DrawLineEx(p1, p2, 2.0f / Camera2DParams.zoom, ApplyAlpha(g_theme.ui.accent, 0.8f));
                     }
                 }
 
@@ -2029,17 +2051,17 @@ int main(void)
                                    &sat_pos_draw, SHADER_UNIFORM_VEC3);
                     
                     /* selection tint wins over hover when both apply */
-                    Color fill_col   = g_theme.world.footprint_bg;
+                    Color fill_col   = g_theme.world.footprint_fill;
                     Color border_col = g_theme.world.footprint_border;
                     if (sat == selected_sat)
                     {
-                        fill_col   = CoverageSelectFill(g_theme.world.footprint_bg);
+                        fill_col   = CoverageSelectFill(g_theme.world.footprint_fill);
                         border_col = g_theme.world.sat_selected;
                     }
                     else if (sat == hovered_sat)
                     {
-                        fill_col   = CoverageHoverFill(g_theme.world.footprint_bg);
-                        border_col = g_theme.world.sat_highlighted;
+                        fill_col   = CoverageHoverFill(g_theme.world.footprint_fill);
+                        border_col = g_theme.world.sat_hover;
                     }
 
                     Vector4 color = {
@@ -2084,7 +2106,7 @@ int main(void)
                 if (is_hl && !(is_pov_mode && &satellites[i] == selected_sat))
                 {
                     Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                    DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(g_theme.world.orbit_highlighted, sat_alpha));
+                    DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
                 }
             }
 
@@ -2106,7 +2128,7 @@ int main(void)
                 rlDrawRenderBatchActive();
                 rlDisableDepthTest();
                 rlDisableDepthMask();
-                DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(g_theme.ui.ui_accent, 0.6f));
+                DrawLine3D(h_pos3d, s_pos3d, ApplyAlpha(g_theme.ui.accent, 0.6f));
                 rlDrawRenderBatchActive();
                 rlEnableDepthTest();
                 rlEnableDepthMask();
@@ -2147,7 +2169,7 @@ int main(void)
                 perp1 = Vector3Normalize(perp1);
                 Vector3 perp2 = Vector3CrossProduct(dir, perp1);
 
-                Color lineCol = ApplyAlpha(g_theme.ui.ui_accent, 0.4f);
+                Color lineCol = ApplyAlpha(g_theme.ui.accent, 0.4f);
 
                 /* same overlay treatment as the slant range line: keep the
                  * cone visible through clouds / scattering / footprint */
@@ -2224,7 +2246,7 @@ int main(void)
                 {
                     if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
-                        Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_highlighted : g_theme.world.sat_normal;
+                        Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_hover : g_theme.world.sat;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
                         /* rotate the icon so its bottom-right corner points toward the earth
@@ -2325,7 +2347,7 @@ int main(void)
         if (LayoutSettingsOpen())
         {
             DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                          g_theme.ui.modal_dim);
+                          g_theme.ui.overlay);
         }
 
         /* apply any completed async fetch results to the global satellite array.
@@ -2349,22 +2371,75 @@ int main(void)
 
             char fps_str[64];
             TextCopy(fps_str, TextFormat("FPS: %d", GetFPS()));
-            DrawUIText(customFont, fps_str, x, y, stat_size, g_theme.ui.text_main);
+            DrawUIText(customFont, fps_str, x, y, stat_size, g_theme.ui.text);
             y += stat_size + 4.0f * cfg.ui_scale;
 
             char frame_str[64];
             TextCopy(frame_str, TextFormat("Frame time: %.2f ms", GetFrameTime() * 1000.0f));
-            DrawUIText(customFont, frame_str, x, y, stat_size, g_theme.ui.text_secondary);
+            DrawUIText(customFont, frame_str, x, y, stat_size, g_theme.ui.text_dim);
             y += stat_size + 4.0f * cfg.ui_scale;
 
             char sat_str[64];
             TextCopy(sat_str, TextFormat("Satellites: %d", sat_count));
-            DrawUIText(customFont, sat_str, x, y, stat_size, g_theme.ui.text_secondary);
+            DrawUIText(customFont, sat_str, x, y, stat_size, g_theme.ui.text_dim);
             y += stat_size + 4.0f * cfg.ui_scale;
 
             char time_str[128];
             TextCopy(time_str, TextFormat("Time: %s", datetime_str));
-            DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_secondary);
+            DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_dim);
+        }
+
+        /* Night mode: single screen-space post-process pass. Everything above
+         * (3D/2D scene + raylib UI + ImGui) was drawn to the default MSAA
+         * framebuffer. Flush the queued raylib/rlImGui geometry, copy the
+         * resolved backbuffer into nightTex, then blit it back through the red
+         * shader. No intermediate render texture is involved. */
+        if (cfg.night_mode)
+        {
+            int nw = GetRenderWidth();
+            int nh = GetRenderHeight();
+            if (nw > 0 && nh > 0)
+            {
+                /* (re)allocate the backbuffer copy at device-pixel size */
+                if (nightTex.id == 0 || nightTex.width != nw || nightTex.height != nh)
+                {
+                    if (nightTex.id != 0) UnloadTexture(nightTex);
+
+                    glGenTextures(1, &nightTex.id);
+                    rlActiveTextureSlot(0);
+                    glBindTexture(GL_TEXTURE_2D, nightTex.id);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, nw, nh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                    nightTex.width = nw;
+                    nightTex.height = nh;
+                    nightTex.mipmaps = 1;
+                    nightTex.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+                }
+
+                /* make sure every queued raylib/rlImGui draw has landed in the
+                 * framebuffer before we copy it */
+                rlDrawRenderBatchActive();
+
+                /* GPU copy of the backbuffer colour (resolves MSAA) */
+                rlActiveTextureSlot(0);
+                rlEnableTexture(nightTex.id);
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, nw, nh);
+
+                /* draw one fullscreen quad through the red shader; the negative
+                 * source height flips the bottom-up GL copy back upright */
+                float night_intensity = 1.0f;
+                SetShaderValue(shaderNight, nightIntensityLoc, &night_intensity, SHADER_UNIFORM_FLOAT);
+                BeginShaderMode(shaderNight);
+                DrawTexturePro(nightTex,
+                               (Rectangle){ 0.0f, 0.0f, (float)nw, (float)-nh },
+                               (Rectangle){ 0.0f, 0.0f, (float)GetScreenWidth(), (float)GetScreenHeight() },
+                               (Vector2){ 0.0f, 0.0f }, 0.0f, WHITE);
+                EndShaderMode();
+            }
         }
 
         EndDrawing();
@@ -2383,6 +2458,9 @@ int main(void)
     UnloadModel(earthModel);
     UnloadShader(shader3D);
     UnloadShader(shader2D);
+    UnloadShader(shaderNight);
+    if (nightTex.id != 0)
+        UnloadTexture(nightTex);
     UnloadShader(shaderCloud);
     UnloadShader(shaderMoon);
     UnloadTexture(cloudTexture);

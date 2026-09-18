@@ -31,7 +31,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     if (sat_count == 0)
     {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "No satellites loaded yet.");
         ImGui::TextWrapped("Add data sources in the Data Sources tab, then pull to populate this list.");
         ImGui::PopTextWrapPos();
@@ -81,7 +81,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     ImGui::SameLine();
 
     /* Active-only filter (funnel icon) */
-    ImGui::PushStyleColor(ImGuiCol_Text, active_only ? ThemeColor(g_theme.ui.ui_accent) : ThemeColor(g_theme.ui.text_secondary));
+    ImGui::PushStyleColor(ImGuiCol_Text, active_only ? ThemeColor(g_theme.ui.accent) : ThemeColor(g_theme.ui.text_dim));
     if (ImGui::Button(ICON_FA_FILTER "##active_only", ImVec2(btn_w, btn_w)))
         active_only = !active_only;
     ImGui::PopStyleColor();
@@ -100,7 +100,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     }
     if (search_active || active_only)
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "%d / %d satellites", displayed, sat_count);
     }
 
@@ -143,7 +143,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 
         if (!active)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
         }
 
         char label[128];

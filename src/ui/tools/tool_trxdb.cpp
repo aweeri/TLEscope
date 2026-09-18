@@ -322,7 +322,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
 
     if (!norad || !*norad)
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "No satellite selected.\nSelect a satellite to query TRXDB.");
         ImGui::PopTextWrapPos();
         return;
@@ -417,9 +417,9 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
     }
 
     /* header */
-    ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s TRXDB", ICON_FA_SATELLITE_DISH);
+    ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s TRXDB", ICON_FA_SATELLITE_DISH);
     ImGui::SameLine();
-    ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "NORAD %s", norad);
+    ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "NORAD %s", norad);
 
     bool fetching = false;
     {
@@ -447,7 +447,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
 
     if (fetching)
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "%s Fetching TRXDB data...", ICON_FA_SPINNER);
         ImGui::PopTextWrapPos();
         return;
@@ -455,7 +455,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
 
     if (!s_info_valid)
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.notif_error),
+        ImGui::TextColored(ThemeColor(g_theme.ui.error),
                            "%s Failed to fetch object data from TRXDB.", ICON_FA_CIRCLE_INFO);
         ImGui::PopTextWrapPos();
         return;

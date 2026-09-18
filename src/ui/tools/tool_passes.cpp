@@ -166,7 +166,7 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
             ImGui::Dummy(bar_sz);
 
             ImDrawList *dl = ImGui::GetWindowDrawList();
-            Color fill = g_theme.ui.notif_success;
+            Color fill = g_theme.ui.success;
             dl->AddRectFilled(bar_pos, ImVec2(bar_pos.x + bar_sz.x, bar_pos.y + bar_sz.y),
                               IM_COL32(fill.r, fill.g, fill.b, 200), 1.0f);
             float fill_w = bar_sz.x * (float)progress;

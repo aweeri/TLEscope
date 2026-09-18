@@ -36,14 +36,14 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
         char aos_str[64], los_str[64];
         epoch_to_datetime_str(win_aos, aos_str);
         epoch_to_datetime_str(win_los, los_str);
-        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "Target: %s", target->name);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "AOS: %s", aos_str);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "LOS: %s", los_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "Target: %s", target->name);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "AOS: %s", aos_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "LOS: %s", los_str);
         ImGui::Separator();
     }
     else
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "No pass selected. Use \"Analyze in Doppler\" on a pass row.");
         ImGui::Separator();
     }

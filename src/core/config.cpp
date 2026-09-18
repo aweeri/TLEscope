@@ -52,6 +52,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_first_run_dialog = false; //default
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
+    config->night_mode = false;      // default: full-screen red post-process off
     config->custom_data_source_count = 0;
     config->retlector_group_count = 0;
     config->retlector_groups_fetched = false;
@@ -185,6 +186,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             config->hint_vsync = ParseJsonBool(text, "hint_vsync", config->hint_vsync);
             config->show_first_run_dialog = ParseJsonBool(text, "show_first_run_dialog", config->show_first_run_dialog);
             config->use_local_time = ParseJsonBool(text, "use_local_time", config->use_local_time);
+            config->night_mode = ParseJsonBool(text, "night_mode", config->night_mode);
 
             // load manual orbital data entries
             char *mt_ptr = strstr(text, "\"manual_entries\"");
@@ -827,6 +829,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_ground_coverage = true;
         config->show_apsides = true;
         config->hint_vsync = true;
+        config->night_mode = false;
         /* first run: a single default home location, no forced example marker */
         location_count = 0;
         int home_idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);
@@ -879,6 +882,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     fprintf(file, "    \"hint_vsync\": %s,\n", config->hint_vsync ? "true" : "false");
     fprintf(file, "    \"show_first_run_dialog\": %s,\n", config->show_first_run_dialog ? "true" : "false");
     fprintf(file, "    \"use_local_time\": %s,\n", config->use_local_time ? "true" : "false");
+    fprintf(file, "    \"night_mode\": %s,\n", config->night_mode ? "true" : "false");
     fprintf(file, "    \"data_stale_threshold_seconds\": %d,\n", config->data_stale_threshold_seconds);
 
     if (config->custom_data_source_count > 0)

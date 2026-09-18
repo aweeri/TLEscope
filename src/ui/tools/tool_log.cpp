@@ -88,11 +88,11 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
         ImVec4 color;
         switch (e->level)
         {
-            case LOG_LEVEL_DEBUG: color = ThemeColor(g_theme.ui.text_secondary); break;
-            case LOG_LEVEL_INFO:  color = ThemeColor(g_theme.ui.text_main); break;
+            case LOG_LEVEL_DEBUG: color = ThemeColor(g_theme.ui.text_dim); break;
+            case LOG_LEVEL_INFO:  color = ThemeColor(g_theme.ui.text); break;
             case LOG_LEVEL_WARN:  color = ImVec4(1.0f, 0.9f, 0.4f, 1.0f); break;
             case LOG_LEVEL_ERROR: color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break;
-            default:              color = ThemeColor(g_theme.ui.text_main);
+            default:              color = ThemeColor(g_theme.ui.text);
         }
 
         /* optionally include the timestamp prefix */
@@ -109,7 +109,7 @@ void DrawPanelLog(UIContext *ctx, AppConfig *cfg)
             ImGui::TextUnformatted(""); /* advance cursor by one line height */
             ImVec2 row_max = ImGui::GetCursorScreenPos();
             row_max.x = row_min.x + ImGui::GetContentRegionAvail().x;
-            Color row_theme = g_theme.ui.frame_bg;
+            Color row_theme = g_theme.ui.surface;
             ImGui::GetWindowDrawList()->AddRectFilled(row_min, row_max,
                 IM_COL32(row_theme.r, row_theme.g, row_theme.b, 40));
             /* restore cursor to start of line */

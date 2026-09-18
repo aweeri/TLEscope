@@ -228,7 +228,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
                 float group_w = width + 2.0f * arrow_w + 2.0f;  /* up + input + down */
                 float label_x = (group_w - label_w) * 0.5f;
                 if (label_x > 0.0f) ImGui::Dummy(ImVec2(label_x, 0.0f));
-                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", label);
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", label);
                 if (label_x > 0.0f) ImGui::SameLine(0.0f, 0.0f);
                 ImGui::Dummy(ImVec2(group_w - label_x - label_w, 0.0f));
 
@@ -288,7 +288,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + action_x);
 
             /* Apply time button */
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
             if (ImGui::Button(ICON_FA_CHECK "##settime", ImVec2(btn_sz, btn_sz)))
             {
                 *ctx->current_epoch = local_fields_to_epoch(
@@ -301,7 +301,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             ImGui::SameLine(0.0f, spacing);
 
             /* Reset to Now button */
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
             if (ImGui::Button(ICON_FA_CLOCK "##resetnow", ImVec2(btn_sz, btn_sz)))
             {
                 *ctx->current_epoch = get_current_real_time_epoch();
@@ -316,7 +316,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             ImGui::SameLine(0.0f, spacing);
 
             /* collapse button INSIDE the expanded panel so the setter can always be exited */
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
             if (ImGui::Button(ICON_FA_CHEVRON_DOWN "##collapse", ImVec2(btn_sz, btn_sz)))
             {
                 g_layout.bottom_bar_expanded = false;
@@ -334,11 +334,11 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         epoch_to_datetime_str(*ctx->current_epoch, time_str);
 
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", time_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", time_str);
         ImGui::SameLine(0.0f, spacing * 2);
 
         /* slow down / reverse */
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
         if (ImGui::Button(ICON_FA_BACKWARD "##backward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, false);
@@ -350,7 +350,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 
         /* play/pause */
         bool is_paused = (*ctx->time_multiplier == 0.0);
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.ui_accent));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
         if (ImGui::Button(is_paused ? (ICON_FA_PLAY "##playpause") : (ICON_FA_PAUSE "##playpause"), ImVec2(btn_sz, btn_sz)))
         {
             if (is_paused)
@@ -369,7 +369,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         /* accelerate */
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
         if (ImGui::Button(ICON_FA_FORWARD "##forward", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->time_multiplier = StepTimeMultiplier(*ctx->time_multiplier, true);
@@ -380,7 +380,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine(0.0f, spacing);
 
         /* reset to now */
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.plot_histogram));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.accent));
         if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT "##reset", ImVec2(btn_sz, btn_sz)))
         {
             *ctx->current_epoch = get_current_real_time_epoch();
@@ -393,7 +393,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
 
         /* expand/collapse arrow — clicking makes the time setter slide UP from behind */
         bool is_expanded = g_layout.bottom_bar_expanded;
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_secondary));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
         if (ImGui::Button(is_expanded ? ICON_FA_CHEVRON_DOWN "##expand2" : ICON_FA_CHEVRON_UP "##expand", ImVec2(btn_sz, btn_sz)))
         {
             g_layout.bottom_bar_expanded = !g_layout.bottom_bar_expanded;
@@ -412,7 +412,7 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             snprintf(speed_str, sizeof(speed_str), "0.0x");
         else
             snprintf(speed_str, sizeof(speed_str), "%.1fx", mult);
-        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", speed_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s", speed_str);
 
         /* capture actual notch rect for sidebar layout (ui_layout reads this) */
         ImVec2 bb_pos  = ImGui::GetWindowPos();
@@ -574,7 +574,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
         const char *title = ICON_FA_SATELLITE "  Welcome to TLEscope";
         float title_w = ImGui::CalcTextSize(title).x;
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - title_w) * 0.5f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s", title);
+        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s", title);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -597,6 +597,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->show_night_lights = false;
             cfg->show_scattering = false;
             cfg->show_skybox = false;
+            cfg->night_mode = false;
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);
@@ -609,6 +610,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->show_night_lights = true;
             cfg->show_scattering = true;
             cfg->show_skybox = true;
+            cfg->night_mode = false;
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);

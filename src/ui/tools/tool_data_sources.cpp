@@ -340,14 +340,14 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
      *  Active Selections List
      * ==================================================================== */
     ImGui::Separator();
-    ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s Active Selections",
+    ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s Active Selections",
                        ICON_FA_LIST);
     ImGui::Separator();
 
     int sel_count = DataSelectionCount();
     if (sel_count == 0)
     {
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                            "No sources selected. Add sources from the sections above.");
     }
     else
@@ -355,7 +355,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         /* show count */
         char count_str[32];
         snprintf(count_str, sizeof(count_str), "%d source(s) selected", sel_count);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary), "%s", count_str);
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", count_str);
 
         /* scrollable list of selections */
         ImGui::BeginChild("##active_selections", ImVec2(0, fminf(sel_count * 28.0f, 200.0f)),
@@ -435,7 +435,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         else
         {
             /* show progress while the worker thread fetches/parses in the background */
-            ImGui::TextColored(ThemeColor(g_theme.ui.ui_accent), "%s Pulling data...",
+            ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s Pulling data...",
                                ICON_FA_SPINNER);
             ImGui::SameLine();
             static float spinner_angle = 0.0f;
@@ -448,7 +448,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             {
                 ImGui::ProgressBar((float)done / (float)s_pull_total,
                                    ImVec2(avail_w, 0.0f), "");
-                ImGui::TextColored(ThemeColor(g_theme.ui.text_secondary),
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
                                    "%d / %d sources", done, s_pull_total);
             }
 

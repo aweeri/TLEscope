@@ -36,69 +36,81 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale)
      * and tripping ImGui's NewFrame() assertion. */
     style = ImGuiStyle();
 
-    /* ── colour palette ──────────────────────────────────────────── */
-    style.Colors[ImGuiCol_Text]                 = ColorToImVec4(t->ui.text_main);
-    style.Colors[ImGuiCol_TextDisabled]         = ColorToImVec4(t->ui.text_secondary);
-    style.Colors[ImGuiCol_WindowBg]             = ColorToImVec4(t->ui.window_bg);
-    style.Colors[ImGuiCol_ChildBg]              = ColorToImVec4(t->ui.window_bg);  /* derive from window bg */
-    style.Colors[ImGuiCol_PopupBg]              = ColorToImVec4(t->ui.window_bg);
-    style.Colors[ImGuiCol_Border]               = ColorToImVec4(t->ui.window_border);
+    /* ── colour palette ──────────────────────────────────────────────
+     * The full ImGuiCol_* set is derived from the compact theme palette.
+     * Interactive states are mixed from a base color toward the theme's
+     * text color, so a single rule produces readable hover/active shades
+     * on both dark and light themes. */
+    const Color text = t->ui.text;
+    const Color bg = t->ui.bg;
+    const Color surface = t->ui.surface;
+    const Color border = t->ui.border;
+    const Color accent = t->ui.accent;
+
+    /* mid-tone used for scrollbar grabs, between surface and text */
+    const Color grab = ThemeMix(surface, text, 0.25f);
+
+    style.Colors[ImGuiCol_Text]                 = ColorToImVec4(text);
+    style.Colors[ImGuiCol_TextDisabled]         = ColorToImVec4(t->ui.text_dim);
+    style.Colors[ImGuiCol_WindowBg]             = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_ChildBg]              = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_PopupBg]              = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_Border]               = ColorToImVec4(border);
     style.Colors[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
 
-    style.Colors[ImGuiCol_FrameBg]              = ColorToImVec4(t->ui.frame_bg);
-    style.Colors[ImGuiCol_FrameBgHovered]       = ColorToImVec4(t->ui.frame_bg_hovered);
-    style.Colors[ImGuiCol_FrameBgActive]        = ColorToImVec4(t->ui.frame_bg_active);
+    style.Colors[ImGuiCol_FrameBg]              = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_FrameBgHovered]       = ColorToImVec4(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_FrameBgActive]        = ColorToImVec4(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_TitleBg]              = ColorToImVec4(t->ui.titlebar);
-    style.Colors[ImGuiCol_TitleBgActive]        = ColorToImVec4(t->ui.titlebar_active);
-    style.Colors[ImGuiCol_TitleBgCollapsed]     = ColorToImVec4(t->ui.titlebar_collapsed);
+    style.Colors[ImGuiCol_TitleBg]              = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_TitleBgActive]        = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_TitleBgCollapsed]     = ColorToImVec4(bg);
 
-    style.Colors[ImGuiCol_MenuBarBg]            = ColorToImVec4(t->ui.ui_primary);
+    style.Colors[ImGuiCol_MenuBarBg]            = ColorToImVec4(surface);
 
-    style.Colors[ImGuiCol_ScrollbarBg]          = ColorToImVec4(t->ui.scrollbar_bg);
-    style.Colors[ImGuiCol_ScrollbarGrab]        = ColorToImVec4(t->ui.scrollbar_grab);
-    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ColorToImVec4(t->ui.scrollbar_grab_hovered);
-    style.Colors[ImGuiCol_ScrollbarGrabActive]  = ColorToImVec4(t->ui.scrollbar_grab_active);
+    style.Colors[ImGuiCol_ScrollbarBg]          = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_ScrollbarGrab]        = ColorToImVec4(grab);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ColorToImVec4(ThemeMix(surface, text, 0.35f));
+    style.Colors[ImGuiCol_ScrollbarGrabActive]  = ColorToImVec4(ThemeMix(surface, text, 0.45f));
 
-    style.Colors[ImGuiCol_CheckMark]            = ColorToImVec4(t->ui.check_mark);
-    style.Colors[ImGuiCol_SliderGrab]           = ColorToImVec4(t->ui.slider_grab);
-    style.Colors[ImGuiCol_SliderGrabActive]     = ColorToImVec4(t->ui.slider_grab_active);
+    style.Colors[ImGuiCol_CheckMark]            = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_SliderGrab]           = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_SliderGrabActive]     = ColorToImVec4(ThemeMix(accent, text, 0.25f));
 
-    style.Colors[ImGuiCol_Button]               = ColorToImVec4(t->ui.button);
-    style.Colors[ImGuiCol_ButtonHovered]        = ColorToImVec4(t->ui.button_hovered);
-    style.Colors[ImGuiCol_ButtonActive]         = ColorToImVec4(t->ui.button_active);
+    style.Colors[ImGuiCol_Button]               = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_ButtonHovered]        = ColorToImVec4(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_ButtonActive]         = ColorToImVec4(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_Header]               = ColorToImVec4(t->ui.header);
-    style.Colors[ImGuiCol_HeaderHovered]        = ColorToImVec4(t->ui.header_hovered);
-    style.Colors[ImGuiCol_HeaderActive]         = ColorToImVec4(t->ui.header_active);
+    style.Colors[ImGuiCol_Header]               = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_HeaderHovered]        = ColorToImVec4(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_HeaderActive]         = ColorToImVec4(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_Separator]            = ColorToImVec4(t->ui.separator);
-    style.Colors[ImGuiCol_SeparatorHovered]     = ColorToImVec4(t->ui.separator_hovered);
-    style.Colors[ImGuiCol_SeparatorActive]      = ColorToImVec4(t->ui.separator_active);
+    style.Colors[ImGuiCol_Separator]            = ColorToImVec4(border);
+    style.Colors[ImGuiCol_SeparatorHovered]     = ColorToImVec4(ThemeMix(border, text, 0.25f));
+    style.Colors[ImGuiCol_SeparatorActive]      = ColorToImVec4(ThemeMix(border, text, 0.35f));
 
-    style.Colors[ImGuiCol_ResizeGrip]           = ColorToImVec4(t->ui.resize_grip);
-    style.Colors[ImGuiCol_ResizeGripHovered]    = ColorToImVec4(t->ui.ui_accent);
-    style.Colors[ImGuiCol_ResizeGripActive]     = ColorToImVec4(t->ui.slider_grab_active);
+    style.Colors[ImGuiCol_ResizeGrip]           = ColorToImVec4(ThemeAlpha(accent, 0.20f));
+    style.Colors[ImGuiCol_ResizeGripHovered]    = ColorToImVec4(ThemeAlpha(accent, 0.60f));
+    style.Colors[ImGuiCol_ResizeGripActive]     = ColorToImVec4(accent);
 
-    style.Colors[ImGuiCol_Tab]                  = ColorToImVec4(t->ui.tab);
-    style.Colors[ImGuiCol_TabHovered]           = ColorToImVec4(t->ui.tab_hovered);
-    style.Colors[ImGuiCol_TabActive]            = ColorToImVec4(t->ui.tab_active);
-    style.Colors[ImGuiCol_TabUnfocused]         = ColorToImVec4(t->ui.tab_unfocused);
-    style.Colors[ImGuiCol_TabUnfocusedActive]   = ColorToImVec4(t->ui.tab_unfocused_active);
+    style.Colors[ImGuiCol_Tab]                  = ColorToImVec4(ThemeMix(bg, surface, 0.5f));
+    style.Colors[ImGuiCol_TabHovered]           = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_TabActive]            = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_TabUnfocused]         = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_TabUnfocusedActive]   = ColorToImVec4(ThemeMix(bg, surface, 0.5f));
 #ifdef IMGUI_HAS_DOCK
-style.Colors[ImGuiCol_DockingBg]            = ColorToImVec4(t->ui.docking_bg);
-style.Colors[ImGuiCol_DockingPreview]       = ColorToImVec4(t->ui.docking_preview);
+    style.Colors[ImGuiCol_DockingBg]            = ColorToImVec4(t->ui.overlay);
+    style.Colors[ImGuiCol_DockingPreview]       = ColorToImVec4(ThemeAlpha(accent, 0.50f));
 #endif
 
+    style.Colors[ImGuiCol_PlotLines]            = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_PlotHistogram]        = ColorToImVec4(accent);
 
-    style.Colors[ImGuiCol_PlotLines]            = ColorToImVec4(t->ui.plot_lines);
-    style.Colors[ImGuiCol_PlotHistogram]        = ColorToImVec4(t->ui.plot_histogram);
+    style.Colors[ImGuiCol_TextSelectedBg]       = ColorToImVec4(ThemeAlpha(accent, 0.25f));
+    style.Colors[ImGuiCol_ModalWindowDimBg]     = ColorToImVec4(t->ui.overlay);
 
-    style.Colors[ImGuiCol_TextSelectedBg]       = ColorToImVec4(t->ui.text_selected_bg);
-    style.Colors[ImGuiCol_ModalWindowDimBg]     = ColorToImVec4(t->ui.modal_dim);
-
-    style.Colors[ImGuiCol_NavCursor]            = ColorToImVec4(t->ui.ui_accent);
-    style.Colors[ImGuiCol_NavWindowingHighlight]= ColorToImVec4(t->ui.ui_accent);
+    style.Colors[ImGuiCol_NavCursor]            = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_NavWindowingHighlight]= ColorToImVec4(accent);
 
     /* ── style variables ──────────────────────────────────────────── */
     style.WindowRounding          = t->style.window_rounding;
