@@ -370,6 +370,32 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         }
                     }
 
+                    /* Enforce the documented invariant: when at least one
+                     * location exists, exactly one of them is the home location.
+                     * Older/malformed settings may contain none (or several). */
+                    if (location_count == 0)
+                    {
+                        int idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);
+                        if (idx >= 0)
+                            SetHomeLocation(idx);
+                        LOG_WARN("No saved locations found; created default Home location");
+                    }
+                    else
+                    {
+                        int home_idx = GetHomeLocationIndex();
+                        if (home_idx < 0)
+                        {
+                            SetHomeLocation(0);
+                            LOG_WARN("No saved home location found; promoted '%s'",
+                                     locations[0].name);
+                        }
+                        else
+                        {
+                            /* SetHomeLocation also clears duplicate home flags. */
+                            SetHomeLocation(home_idx);
+                        }
+                    }
+
                     // load UI layout (sidebar geometry + panel arrangement)
                     {
                         UILayoutPersist *L = &config->ui_layout;

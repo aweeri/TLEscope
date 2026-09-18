@@ -47,7 +47,7 @@ int AddLocation(const char *name, float lat, float lon, float alt)
     loc->lat = lat;
     loc->lon = lon;
     loc->alt = alt;
-    loc->is_home = false;
+    loc->is_home = (location_count == 0);
 
     return location_count++;
 }
@@ -64,9 +64,10 @@ void RemoveLocation(int idx)
         locations[i] = locations[i + 1];
     location_count--;
 
-    /* if we removed the home location, promote the first remaining one */
-    if (was_home && location_count > 0)
-        locations[0].is_home = true;
+    /* Always preserve the invariant when at least one location remains.
+     * This also repairs malformed state where no location was marked home. */
+    if (location_count > 0 && (was_home || GetHomeLocationIndex() < 0))
+        SetHomeLocation(0);
 }
 
 void UpdateLocation(int idx, const char *name, float lat, float lon, float alt)
