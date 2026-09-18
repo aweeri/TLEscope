@@ -356,6 +356,7 @@ typedef struct
     int custom_entry_count;
 
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
+    int network_timeout_seconds;       // HTTP request timeout, 15-300 seconds (default 45)
 
     UILayoutPersist ui_layout;  // sidebar/panel layout persistence
 

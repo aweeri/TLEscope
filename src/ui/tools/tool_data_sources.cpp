@@ -128,21 +128,29 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         static std::atomic<bool> s_fetch_done{false};
         static RetlectorGroup s_pending[MAX_RETLECTOR_GROUPS];
         static int s_pending_count = 0;
-        static std::thread s_fetch_thread;
+        static long s_pending_http_code = 0;
+        static bool s_fetch_attempted = false;
         static int s_retlector_combo_idx = 0;
 
         if (ImGui::CollapsingHeader("Retlector"))
         {
-            /* async fetch of retlector groups */
-            if (!cfg->retlector_groups_fetched && !s_fetch_running.load())
+            if (!cfg->retlector_groups_fetched &&
+                !s_fetch_running.load() &&
+                !s_fetch_attempted)
             {
+                s_fetch_attempted = true;
                 s_fetch_running = true;
                 s_fetch_done = false;
-                s_fetch_thread = std::thread([]() {
-                    s_pending_count = FetchRetlectorGroups(s_pending, MAX_RETLECTOR_GROUPS);
+                s_pending_http_code = 0;
+
+                std::thread([]() {
+                    long http_code = 0;
+                    int count = FetchRetlectorGroups(
+                        s_pending, MAX_RETLECTOR_GROUPS, &http_code);
+                    s_pending_http_code = http_code;
+                    s_pending_count = count;
                     s_fetch_done = true;
-                });
-                s_fetch_thread.detach();
+                }).detach();
             }
 
             if (s_fetch_done.load())
@@ -158,10 +166,26 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                     NotifyPush(NOTIFY_INFO, ICON_FA_SATELLITE_DISH,
                                "Discovered %d new data sources", s_pending_count);
                 }
+                else if (s_pending_http_code == 403)
+                {
+                    LOG_WARN("Retlector group discovery blocked by network (HTTP 403)");
+                    NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                               "Retlector blocked by network (HTTP 403)");
+                }
+                else if (s_pending_http_code > 0)
+                {
+                    LOG_ERROR("Retlector group discovery failed (HTTP %ld)",
+                              s_pending_http_code);
+                    NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                               "Retlector unavailable (HTTP %ld)", s_pending_http_code);
+                }
                 else
                 {
-                    LOG_ERROR("Failed to fetch retlector groups");
+                    LOG_ERROR("Retlector group discovery failed");
+                    NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                               "Retlector network request failed");
                 }
+
                 s_fetch_done = false;
                 s_fetch_running = false;
             }
@@ -177,7 +201,6 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             else if (cfg->retlector_group_count > 0)
             {
-                /* dropdown + add button */
                 if (s_retlector_combo_idx >= cfg->retlector_group_count)
                     s_retlector_combo_idx = 0;
 
@@ -186,17 +209,18 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 if (ImGui::BeginCombo("##retlector_group", combo_preview))
                 {
                     static char search_buf[64] = "";
-                    bool search_active = (search_buf[0] != '\0');
                     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-                    ImGui::InputTextWithHint("##retlector_search", ICON_FA_MAGNIFYING_GLASS " Search groups...",
+                    ImGui::InputTextWithHint("##retlector_search",
+                                             ICON_FA_MAGNIFYING_GLASS " Search groups...",
                                              search_buf, sizeof(search_buf));
                     ImGui::Separator();
 
                     for (int i = 0; i < cfg->retlector_group_count; i++)
                     {
-                        if (search_active &&
+                        if (search_buf[0] != '\0' &&
                             !str_contains_ic(cfg->retlector_groups[i].name, search_buf))
                             continue;
+
                         bool is_selected = (i == s_retlector_combo_idx);
                         if (ImGui::Selectable(cfg->retlector_groups[i].name, is_selected))
                             s_retlector_combo_idx = i;
@@ -207,24 +231,35 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 }
 
                 ImGui::SameLine();
-
-                /* Add to Selection button (plus icon) */
                 if (ImGui::Button(ICON_FA_PLUS "##add_retlector"))
                 {
                     const char *name = cfg->retlector_groups[s_retlector_combo_idx].name;
                     if (!DataSelectionAdd(SOURCE_RETLECTOR, name, name, NULL, FORMAT_OMM_CSV))
-                    {
                         LOG_DEBUG("Retlector group '%s' already in selection list", name);
-                    }
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Add this group to the active selections list");
             }
-            else
+            else if (s_fetch_attempted)
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f), "Failed to reach retlector.eu");
+                if (s_pending_http_code == 403)
+                    ImGui::TextColored(ThemeColor(g_theme.ui.warning),
+                                       "Retlector blocked by network (HTTP 403)");
+                else if (s_pending_http_code > 0)
+                    ImGui::TextColored(ThemeColor(g_theme.ui.warning),
+                                       "Retlector unavailable (HTTP %ld)",
+                                       s_pending_http_code);
+                else
+                    ImGui::TextColored(ThemeColor(g_theme.ui.warning),
+                                       "Failed to reach retlector.eu");
+
                 if (ImGui::SmallButton("Retry"))
+                {
+                    s_pending_count = 0;
+                    s_pending_http_code = 0;
+                    s_fetch_attempted = false;
                     cfg->retlector_groups_fetched = false;
+                }
             }
         }
     }

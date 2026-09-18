@@ -7,6 +7,8 @@
 #include <string.h>
 #include <time.h>
 #include <curl/curl.h>
+#include <chrono>
+#include <thread>
 #include <nlohmann/json.hpp>
 
 // -- Built-in Source Lists --------------------------------------------------
@@ -222,6 +224,35 @@ static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *u
 
 // -- HTTP Fetch -------------------------------------------------------------
 
+static bool http_status_success(long http_code)
+{
+    return http_code >= 200 && http_code < 300;
+}
+
+static bool http_status_retryable(long http_code)
+{
+    switch (http_code)
+    {
+        case 408:
+        case 425:
+        case 429:
+        case 502:
+        case 503:
+        case 504:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool reset_memory_buffer(MemoryBuf *chunk)
+{
+    free(chunk->memory);
+    chunk->memory = (char*)malloc(1);
+    chunk->size = 0;
+    return chunk->memory != NULL;
+}
+
 static FetchResult http_fetch(const char *url)
 {
     FetchResult result = {0};
@@ -230,6 +261,11 @@ static FetchResult http_fetch(const char *url)
     struct MemoryBuf chunk = {0};
     chunk.memory = (char*)malloc(1);
     chunk.size = 0;
+    if (!chunk.memory)
+    {
+        LOG_ERROR("Failed to allocate HTTP response buffer");
+        return result;
+    }
 
     CURL *curl = curl_easy_init();
     if (!curl)
@@ -257,17 +293,39 @@ static FetchResult http_fetch(const char *url)
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 #endif
 
-    CURLcode res = curl_easy_perform(curl);
+    const int max_attempts = 3;
+    CURLcode res = CURLE_OK;
     long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
 
+    for (int attempt = 1; attempt <= max_attempts; attempt++)
+    {
+        res = curl_easy_perform(curl);
+        http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+        if (res != CURLE_OK || http_status_success(http_code))
+            break;
+
+        if (!http_status_retryable(http_code) || attempt == max_attempts)
+            break;
+
+        const int delay_seconds = 1 << (attempt - 1);
+        LOG_WARN("HTTP %ld from %s; retrying in %d s (%d/%d)",
+                 http_code, url, delay_seconds, attempt + 1, max_attempts);
+
+        if (!reset_memory_buffer(&chunk))
+        {
+            res = CURLE_OUT_OF_MEMORY;
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(delay_seconds));
+    }
+
+    curl_easy_cleanup(curl);
     result.http_code = http_code;
 
-    // error handling per Celestrak guidelines:
-    // 301, 403, 404, 500 -> halt retries to prevent IP ban
-    if (res == CURLE_OK && http_code != 301 && http_code != 403 &&
-        http_code != 404 && http_code != 500)
+    if (res == CURLE_OK && http_status_success(http_code))
     {
         result.data = chunk.memory;
         result.size = chunk.size;
@@ -276,7 +334,10 @@ static FetchResult http_fetch(const char *url)
     }
     else
     {
-        LOG_ERROR("HTTP fetch failed: %s (HTTP %ld)", url, http_code);
+        if (res == CURLE_OK)
+            LOG_ERROR("HTTP fetch failed: %s (HTTP %ld)", url, http_code);
+        else
+            LOG_ERROR("HTTP transport failed: %s (%s)", url, curl_easy_strerror(res));
         free(chunk.memory);
     }
 
@@ -362,12 +423,14 @@ static void copy_str(char *dst, size_t dst_size, const std::string &src)
     dst[n] = '\0';
 }
 
-int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups)
+int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_code)
 {
+    if (out_http_code) *out_http_code = 0;
     if (!groups || max_groups <= 0) return -1;
 
     const char *url = "https://retlector.eu/api/v1/groups";
     FetchResult result = http_fetch(url);
+    if (out_http_code) *out_http_code = result.http_code;
     if (!result.success)
     {
         LOG_ERROR("Failed to fetch retlector groups from %s", url);
