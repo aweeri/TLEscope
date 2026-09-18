@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["extremelywip"]
+    paths-ignore:
+      - "README.md"
+      - "ROADMAP.md"
+      - "CONTRIBUTING.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-smoke:
+    name: Linux build and startup smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            g++ make xvfb xauth \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
+            libwayland-dev libxkbcommon-dev libcurl4-openssl-dev
+
+      - name: Build
+        run: make -j"$(nproc)" linux
+
+      - name: Verify startup
+        working-directory: dist/TLEscope-Linux-Portable
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/tlescope-home"
+          set +e
+          HOME="$RUNNER_TEMP/tlescope-home" \
+            timeout 10s xvfb-run -a -s "-screen 0 1280x720x24" \
+            ./TLEscope > "$RUNNER_TEMP/tlescope-smoke.log" 2>&1
+          status=$?
+          set -e
+
+          cat "$RUNNER_TEMP/tlescope-smoke.log"
+
+          if [ "$status" -eq 124 ]; then
+            exit 0
+          fi
+
+          echo "TLEscope exited before the smoke-test window completed (status $status)." >&2
+          exit 1
