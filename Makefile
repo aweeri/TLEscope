@@ -14,11 +14,14 @@ RAYLIB_MAKE_ARGS ?=
 CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
 CXXFLAGS_WIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
+LDFLAGS_WIN_EXTRA =
+
 # Sets _WIN variables for each possible architecture
 ifeq ($(MSYSTEM),CLANGARM64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = clang++
 	DIST_WIN_ARM64 = dist/TLEscope-Win-arm64-Portable
+	LDFLAGS_WIN_EXTRA = -Wl,--exclude-libs,libwinpthread.a
 else ifeq ($(MSYSTEM),UCRT64)
 	PKG_CONFIG_WIN ?= pkg-config
 	CC_WIN = g++
@@ -46,7 +49,7 @@ endif
 
 # Link against the static raylib built from the submodule, plus per-OS system libs
 LDFLAGS_LIN = $(RAYLIB_LIB) -lcurl -lGL -lX11 -lm -lpthread -ldl -lrt
-LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows
+LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows $(LDFLAGS_WIN_EXTRA)
 DIST_LINUX = dist/TLEscope-Linux-Portable
 DIST_WIN   = dist/TLEscope-Win-Portable
 
