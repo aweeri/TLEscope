@@ -2,7 +2,7 @@ GIT_VERSION     := $(shell scripts/version.sh describe 2>/dev/null || echo "vUnk
 GIT_VERSION_NUM := $(shell scripts/version.sh num 2>/dev/null || echo "0.0.0.0")
 
 CC_LINUX = g++
-CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/nlohmann/include -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/nlohmann/single_include -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\"
 
 # raylib is built from the git submodule (lib/raylib)
 RAYLIB_SRC   = lib/raylib/src
