@@ -194,8 +194,11 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         c.anchor = anchor;
         c.size = size;
         c.centered = false;
-        if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 4; }
-        else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 3; }
+        /* the selected/hovered satellite's name always wins decluttering:
+         * it must outrank its own apo/peri labels (priority 5) and every
+         * other satellite label so the focused sat is never occluded */
+        if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 10; }
+        else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 9; }
         else if (is_active)   { c.color = ToImU32(g_theme.world.sat_highlighted); c.priority = 2; }
         else                  { c.color = ToImU32(g_theme.world.sat_normal);      c.priority = 1; }
         cands.push_back(c);
