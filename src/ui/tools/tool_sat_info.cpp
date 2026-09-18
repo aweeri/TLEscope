@@ -95,12 +95,21 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         return;
     }
 
+    Satellite *sat = *ctx->selected_sat;
+    Location *home = GetHomeLocation();
+    if (!home)
+    {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextColored(ThemeColor(g_theme.ui.warning),
+                           "No home location is configured. Add or select a Home location in Settings.");
+        ImGui::PopTextWrapPos();
+        return;
+    }
+
     ImGui::PushTextWrapPos(0.0f);
 
-    Satellite *sat = *ctx->selected_sat;
-
     /* -- Observer geometry (home location) --------------------------------- */
-    Vector3 obs_eci = calc_observer_eci(GetHomeLocation(), ctx->gmst_deg);
+    Vector3 obs_eci = calc_observer_eci(home, ctx->gmst_deg);
     double current_unix = get_unix_from_epoch(*ctx->current_epoch);
 
     double topo_dec = 0.0, topo_ra = 0.0;
@@ -200,12 +209,12 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 
         double az = 0.0, el = 0.0;
         get_az_el(sat->current_pos, ctx->gmst_deg,
-                  GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt,
+                  home->lat, home->lon, home->alt,
                   &az, &el);
         InfoRow("Azimuth", "%.2f\xc2\xb0", az);
         InfoRow("Elevation", "%.2f\xc2\xb0", el);
 
-        double range = get_sat_range(sat, *ctx->current_epoch, *GetHomeLocation());
+        double range = get_sat_range(sat, *ctx->current_epoch, *home);
         InfoRow("Range", "%.1f km", range);
 
         ImGui::EndTable();
