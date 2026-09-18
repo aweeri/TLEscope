@@ -265,11 +265,12 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 
     /* ---- Plot satellite position ---- */
     Satellite *sat = *ctx->selected_sat;
-    if (sat && sat->is_active)
+    Location *home = GetHomeLocation();
+    if (sat && sat->is_active && home)
     {
         double az = 0.0, el = 0.0;
         get_az_el(sat->current_pos, ctx->gmst_deg,
-                  GetHomeLocation()->lat, GetHomeLocation()->lon, GetHomeLocation()->alt,
+                  home->lat, home->lon, home->alt,
                   &az, &el);
 
         /* convert azimuth (degrees from North, clockwise) to canvas angle
@@ -301,7 +302,9 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     }
     else
     {
-        const char *msg = "No satellite selected";
+        const char *msg = (sat && sat->is_active && !home)
+                            ? "No home location configured"
+                            : "No satellite selected";
         ImVec2 msg_sz = ImGui::CalcTextSize(msg);
         Color msg_theme = g_theme.ui.text_dim;
         dl->AddText(ImVec2(center.x - msg_sz.x * 0.5f, center.y - msg_sz.y * 0.5f),
