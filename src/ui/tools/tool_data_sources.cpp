@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
 #include <ctime>
 #include <thread>
 #include <atomic>
@@ -27,6 +28,62 @@
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
+
+/* case-insensitive alphabetical comparison for sorting source lists */
+static int CiStrCmp(const char *a, const char *b)
+{
+    while (*a && *b)
+    {
+        unsigned char ca = (unsigned char)tolower((unsigned char)*a);
+        unsigned char cb = (unsigned char)tolower((unsigned char)*b);
+        if (ca != cb) return (int)ca - (int)cb;
+        a++;
+        b++;
+    }
+    return (*a) ? 1 : ((*b) ? -1 : 0);
+}
+
+/* insertion sort the (mutable) Retlector groups alphabetically by name */
+static void SortRetlectorGroups(RetlectorGroup *groups, int count)
+{
+    for (int i = 1; i < count; i++)
+    {
+        RetlectorGroup key = groups[i];
+        int j = i - 1;
+        while (j >= 0 && CiStrCmp(groups[j].name, key.name) > 0)
+        {
+            groups[j + 1] = groups[j];
+            j--;
+        }
+        groups[j + 1] = key;
+    }
+}
+
+static int *GetCelestrakSortedIndex(void)
+{
+    static int *s_idx = NULL;
+    static bool s_built = false;
+    if (!s_built)
+    {
+        int n = NUM_CELESTRAK_SOURCES;
+        s_idx = (int *)malloc((size_t)n * sizeof(int));
+        for (int i = 0; i < n; i++) s_idx[i] = i;
+        for (int i = 1; i < n; i++)
+        {
+            int key = s_idx[i];
+            int j = i - 1;
+            while (j >= 0 && CiStrCmp(CELESTRAK_SOURCES[s_idx[j]].name,
+                                      CELESTRAK_SOURCES[key].name) > 0)
+            {
+                s_idx[j + 1] = s_idx[j];
+                j--;
+            }
+            s_idx[j + 1] = key;
+        }
+        s_built = true;
+    }
+    return s_idx;
+}
 
 static bool PasteTleHasNameLine(const char *data)
 {
@@ -95,6 +152,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                     for (int i = 0; i < s_pending_count && i < MAX_RETLECTOR_GROUPS; i++)
                         cfg->retlector_groups[i] = s_pending[i];
                     cfg->retlector_group_count = s_pending_count;
+                    SortRetlectorGroups(cfg->retlector_groups, cfg->retlector_group_count);
                     cfg->retlector_groups_fetched = true;
                     LOG_INFO("Loaded %d retlector groups", s_pending_count);
                     NotifyPush(NOTIFY_INFO, ICON_FA_SATELLITE_DISH,
@@ -127,8 +185,18 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 ImGui::SetNextItemWidth(avail_w * 0.65f);
                 if (ImGui::BeginCombo("##retlector_group", combo_preview))
                 {
+                    static char search_buf[64] = "";
+                    bool search_active = (search_buf[0] != '\0');
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    ImGui::InputTextWithHint("##retlector_search", ICON_FA_MAGNIFYING_GLASS " Search groups...",
+                                             search_buf, sizeof(search_buf));
+                    ImGui::Separator();
+
                     for (int i = 0; i < cfg->retlector_group_count; i++)
                     {
+                        if (search_active &&
+                            !str_contains_ic(cfg->retlector_groups[i].name, search_buf))
+                            continue;
                         bool is_selected = (i == s_retlector_combo_idx);
                         if (ImGui::Selectable(cfg->retlector_groups[i].name, is_selected))
                             s_retlector_combo_idx = i;
@@ -171,12 +239,23 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         if (s_celestrak_combo_idx >= NUM_CELESTRAK_SOURCES)
             s_celestrak_combo_idx = 0;
 
+        int *celestrak_idx = GetCelestrakSortedIndex();
         const char *combo_preview = CELESTRAK_SOURCES[s_celestrak_combo_idx].name;
         ImGui::SetNextItemWidth(avail_w * 0.65f);
         if (ImGui::BeginCombo("##celestrak_group", combo_preview))
         {
-            for (int i = 0; i < NUM_CELESTRAK_SOURCES; i++)
+            static char search_buf[64] = "";
+            bool search_active = (search_buf[0] != '\0');
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            ImGui::InputTextWithHint("##celestrak_search", ICON_FA_MAGNIFYING_GLASS " Search sources...",
+                                     search_buf, sizeof(search_buf));
+            ImGui::Separator();
+
+            for (int k = 0; k < NUM_CELESTRAK_SOURCES; k++)
             {
+                int i = celestrak_idx[k];
+                if (search_active && !str_contains_ic(CELESTRAK_SOURCES[i].name, search_buf))
+                    continue;
                 bool is_selected = (i == s_celestrak_combo_idx);
                 if (ImGui::Selectable(CELESTRAK_SOURCES[i].name, is_selected))
                     s_celestrak_combo_idx = i;
