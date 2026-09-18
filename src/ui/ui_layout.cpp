@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cfloat>
 #include <algorithm>
 
 /* -- Layout constants ------------------------------------------------------ */
@@ -368,31 +369,47 @@ static int s_left_hc = 0, s_right_hc = 0;
  *  Also draws a notch on the visible sidebar edge so the user can hide it. */
 static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_visible)
 {
-    float screen_w = (float)GetScreenWidth();
-    float notch_x, notch_y = nav_h + 12.0f;
+    const float screen_w = ImGui::GetIO().DisplaySize.x;
     float notch_w = NOTCH_W, notch_h = NOTCH_H;
 
+
+    float notch_y = nav_h + content_h * 0.25f - notch_h * 0.5f;
+    const float notch_y_max = nav_h + content_h - notch_h; /* may be < nav_h for tiny content_h */
+    notch_y = (notch_y < nav_h) ? nav_h : ((notch_y > notch_y_max) ? notch_y_max : notch_y);
+    if (notch_y < nav_h) notch_y = nav_h; /* ensure lower bound always wins */
+
+    float notch_x;
     if (sidebar_visible)
     {
-        /* notch sits at the outer edge of the visible sidebar, mostly
+        /* notch sits at the inner edge of the visible sidebar, mostly
          * sticking out into the canvas so it never covers panel controls.
          * Left: 4px overlap into the sidebar (the rest sticks out right).
-         * Right: fully outside the sidebar (sticks out left). */
+         * Right: 4px overlap into the sidebar (the rest sticks out left). */
         float sidebar_edge = is_left ? g_layout.left_width : (screen_w - g_layout.right_width);
         notch_x = is_left ? (sidebar_edge - 4.0f) : (sidebar_edge - notch_w + 4.0f);
     }
     else
     {
-        /* notch sits at the screen edge */
+        /* notch sits flush at the screen edge */
         notch_x = is_left ? 0.0f : (screen_w - notch_w);
     }
 
-    ImGui::SetNextWindowPos(ImVec2(notch_x, notch_y), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(notch_w, notch_h), ImGuiCond_Always);
+    /* smooth per-side hover/press animation (0 = idle, 1 = fully engaged) */
+    static float s_notch_anim[2] = {0.0f, 0.0f};
+    int side = is_left ? 0 : 1;
+
+    /* while engaged the tab stretches away from its attached edge */
+    float grow  = 4.0f * s_notch_anim[side];
+    float tab_w = notch_w + grow;
+    float win_x = is_left ? notch_x : (notch_x - grow);
+
+    ImGui::SetNextWindowPos(ImVec2(win_x, notch_y), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(tab_w, notch_h), ImGuiCond_Always);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
 
     if (ImGui::Begin(is_left ? "##notch_left" : "##notch_right", NULL,
@@ -400,44 +417,64 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground))
     {
+        /* absolute origin of the tab within the window (WindowPadding is 0) */
+        const ImVec2 o = ImGui::GetCursorScreenPos();
+
         bool hovered = ImGui::IsWindowHovered();
-        bool clicked = ImGui::InvisibleButton("##notch_btn", ImVec2(notch_w, notch_h));
+        bool clicked = ImGui::InvisibleButton("##notch_btn", ImVec2(tab_w, notch_h));
+        bool active  = ImGui::IsItemActive();
+
+        /* ~0.1s animation toward the hover/press target */
+        float dt = ImGui::GetIO().DeltaTime;
+        if (dt > 0.1f) dt = 0.1f;
+        float target = (hovered || active) ? 1.0f : 0.0f;
+        s_notch_anim[side] += (target - s_notch_anim[side]) * (1.0f - std::exp(-dt / 0.06f));
+
+        if (hovered)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
-        /* background: rounded rect with subtle border - theme-aware (12.1) */
-        Color bg_theme = g_theme.ui.ui_primary;
-        Color border_theme = g_theme.ui.window_border;
-        Color icon_theme = g_theme.ui.text_secondary;
-        ImU32 bg_col = hovered ? IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 230)
-                               : IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 210);
-        ImU32 border_col = hovered ? IM_COL32(border_theme.r, border_theme.g, border_theme.b, 230)
-                                   : IM_COL32(border_theme.r, border_theme.g, border_theme.b, 180);
-        float rounding = 4.0f;
+        /* theme-aware colors (12.1): ui_primary fill, window_border border,
+         * ui_accent hover blend, text_secondary icon. */
+        auto lerp4 = [](const ImVec4 &a, const ImVec4 &b, float u) {
+            return ImVec4(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u,
+                          a.z + (b.z - a.z) * u, a.w + (b.w - a.w) * u);
+        };
+        float t = s_notch_anim[side];
 
-        /* clip the rounded rect on the screen-edge side so it sits flush */
-        if (is_left)
-            dl->AddRectFilled(ImVec2(0, 0), ImVec2(notch_w, notch_h), bg_col, rounding,
-                              ImDrawFlags_RoundCornersRight);
-        else
-            dl->AddRectFilled(ImVec2(0, 0), ImVec2(notch_w, notch_h), bg_col, rounding,
-                              ImDrawFlags_RoundCornersLeft);
+        ImVec4 fill = lerp4(ThemeColor(g_theme.ui.ui_primary),
+                            ThemeColor(g_theme.ui.ui_accent), 0.45f * t);
+        fill.w = 0.85f + 0.15f * t;
+        if (active) { fill.x *= 0.8f; fill.y *= 0.8f; fill.z *= 0.8f; fill.w = 0.98f; }
 
-        /* border lines */
-        if (is_left)
+        ImVec4 bcol = ThemeColor(g_theme.ui.window_border);
+        bcol.w = 0.70f + 0.30f * t;
+
+        /* tab-like shape: only the outer (detached) edge is rounded */
+        const float       rounding = 6.0f;
+        const ImDrawFlags corners  = is_left ? ImDrawFlags_RoundCornersRight
+                                             : ImDrawFlags_RoundCornersLeft;
+        ImVec2 p0 = o;
+        ImVec2 p1 = ImVec2(o.x + tab_w, o.y + notch_h);
+
+        if (sidebar_visible)
         {
-            dl->AddLine(ImVec2(notch_w - 1, 0), ImVec2(notch_w - 1, notch_h), border_col, 1.0f);
-            dl->AddLine(ImVec2(0, 0), ImVec2(notch_w - 1, 0), border_col, 1.0f);
-            dl->AddLine(ImVec2(0, notch_h - 1), ImVec2(notch_w - 1, notch_h - 1), border_col, 1.0f);
-        }
-        else
-        {
-            dl->AddLine(ImVec2(0, 0), ImVec2(0, notch_h), border_col, 1.0f);
-            dl->AddLine(ImVec2(0, 0), ImVec2(notch_w - 1, 0), border_col, 1.0f);
-            dl->AddLine(ImVec2(0, notch_h - 1), ImVec2(notch_w - 1, notch_h - 1), border_col, 1.0f);
+            float clip_x = is_left ? g_layout.left_width
+                                   : (ImGui::GetIO().DisplaySize.x - g_layout.right_width);
+            ImVec2 cmin = is_left ? ImVec2(clip_x, p0.y) : ImVec2(0.0f, p0.y);
+            ImVec2 cmax = is_left ? ImVec2(FLT_MAX, p1.y) : ImVec2(clip_x, p1.y);
+            dl->PushClipRect(cmin, cmax, true);
         }
 
-        /* chevron icon: points inward when sidebar is hidden, outward when visible */
+        dl->AddRectFilled(p0, p1, ImGui::GetColorU32(fill), rounding, corners);
+        /* the 1px stroke is centered on the path, so inset it by 0.5px to stop
+         * the window clip rect trimming the outer half of the top/attached side */
+        dl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(p1.x - 0.5f, p1.y - 0.5f),
+                    ImGui::GetColorU32(bcol), rounding, corners, 1.0f);
+
+        /* chevron icon: points inward when the sidebar is visible (collapse),
+         * outward when it is hidden (expand). */
         const char *icon;
         if (sidebar_visible)
             icon = is_left ? ICON_FA_CHEVRON_LEFT : ICON_FA_CHEVRON_RIGHT;
@@ -445,10 +482,14 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
             icon = is_left ? ICON_FA_CHEVRON_RIGHT : ICON_FA_CHEVRON_LEFT;
 
         ImVec2 icon_sz = ImGui::CalcTextSize(icon);
-        ImU32 icon_col = hovered ? IM_COL32(icon_theme.r, icon_theme.g, icon_theme.b, 255)
-                                 : IM_COL32(icon_theme.r, icon_theme.g, icon_theme.b, 200);
-        dl->AddText(ImVec2((notch_w - icon_sz.x) * 0.5f, (notch_h - icon_sz.y) * 0.5f),
-                    icon_col, icon);
+        ImVec4 icon_col = lerp4(ThemeColor(g_theme.ui.text_secondary),
+                                ImVec4(1.0f, 1.0f, 1.0f, 1.0f), 0.6f * t);
+        icon_col.w = 0.80f + 0.20f * t;
+        dl->AddText(ImVec2(o.x + (tab_w - icon_sz.x) * 0.5f,
+                           o.y + (notch_h - icon_sz.y) * 0.5f),
+                    ImGui::GetColorU32(icon_col), icon);
+
+        if (sidebar_visible) dl->PopClipRect();
 
         if (clicked)
         {
@@ -495,7 +536,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
     }
     ImGui::End();
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(4);
 }
 
 /* ========================================================================== */
@@ -516,12 +557,14 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
 
     if (ImGui::Begin(is_left ? "##resize_left" : "##resize_right", NULL,
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground))
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus))
     {
         ImGui::InvisibleButton("##grip", ImVec2(HANDLE_WIDTH, content_h));
 
@@ -559,18 +602,18 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
                 *width = fmaxf(MIN_SIDEBAR_W, fminf(MAX_SIDEBAR_W, mouse_x));
                 /* deliberate snap-hide: only when the cursor is dragged fully
                  * past the screen edge (12.1) - not merely near it */
-                if (mouse_x <= 0.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
+                if (mouse_x <= 0.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(4); return; }
             }
             else
             {
                 *width = fmaxf(MIN_SIDEBAR_W, fminf(MAX_SIDEBAR_W, screen_w - mouse_x));
-                if (mouse_x >= screen_w) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(3); return; }
+                if (mouse_x >= screen_w) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(4); return; }
             }
         }
     }
     ImGui::End();
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(4);
 }
 
 /* ========================================================================== */
@@ -872,7 +915,8 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
                              ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_AlwaysVerticalScrollbar;
+                             ImGuiWindowFlags_AlwaysVerticalScrollbar |
+                             ImGuiWindowFlags_NoBringToFrontOnFocus;
     if (ImGui::Begin(win_name, NULL, flags))
     {
         int *order = is_left ? g_layout.left_order : g_layout.right_order;
@@ -1386,7 +1430,8 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
      * A notch appears on the visible sidebar edge (to hide it) and at the
      * screen edge when the sidebar is hidden (to restore it). */
     float nav_h2 = ImGui::GetFrameHeight();
-    float content_h = display_w;
+    /* content area height (below the nav bar) - used to center the notches */
+    float content_h = ImGui::GetIO().DisplaySize.y - nav_h2;
     DrawNotch(true,  nav_h2, content_h, g_layout.left_visible  && !g_layout.left_hidden);
     DrawNotch(false, nav_h2, content_h, g_layout.right_visible && !g_layout.right_hidden);
 
