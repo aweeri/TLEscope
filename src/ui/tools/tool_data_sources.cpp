@@ -436,10 +436,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         snprintf(count_str, sizeof(count_str), "%d source(s) selected", sel_count);
         ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", count_str);
 
-        /* scrollable list of selections */
-        ImGui::BeginChild("##active_selections", ImVec2(0, fminf(sel_count * 28.0f, 200.0f)),
-                          true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-
+        // render the selections directly into the tool panel so they scroll with the panel itself.
         for (int i = 0; i < sel_count; i++)
         {
             DataSourceSelection *s = DataSelectionAt(i);
@@ -491,8 +488,6 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
             ImGui::PopID();
         }
-
-        ImGui::EndChild();
     }
 
     /* ====================================================================

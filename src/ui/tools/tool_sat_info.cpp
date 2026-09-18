@@ -84,7 +84,6 @@ static double calc_topocentric_ang_speed(Satellite *sat, double current_unix, Ve
 void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
-    float avail_w = ImGui::GetContentRegionAvail().x;
 
     if (!*ctx->selected_sat)
     {
@@ -118,105 +117,38 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     calc_geocentric_radec(sat->current_pos, &geo_dec, &geo_ra);
     double ang_speed = calc_topocentric_ang_speed(sat, current_unix, obs_eci);
 
-    /* -- Header info (NORAD, name, active) --------------------------------- */
-    if (ImGui::BeginTable("##sat_header", 2, ImGuiTableFlags_SizingFixedFit))
+    double az = 0.0, el = 0.0;
+    get_az_el(sat->current_pos, ctx->gmst_deg,
+              home->lat, home->lon, home->alt,
+              &az, &el);
+    double range = get_sat_range(sat, *ctx->current_epoch, *home);
+
+    double pos_r = Vector3Length(sat->current_pos);
+    double sat_lat = 0.0, sat_lon = 0.0;
+    if (pos_r > 0.001)
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
-        InfoRow("Name:", "%s", sat->name);
-        InfoRow("NORAD:", "%s", sat->norad_id);
-        InfoRow("Active:", "%s", sat->is_active ? "Yes" : "No");
-        ImGui::EndTable();
+        sat_lat = asin(sat->current_pos.y / pos_r) * RAD2DEG;
+        double lon_rad = atan2(-sat->current_pos.z, sat->current_pos.x)
+                         - ctx->gmst_deg * DEG2RAD;
+        sat_lon = lon_rad * RAD2DEG;
+        while (sat_lon < -180.0) sat_lon += 360.0;
+        while (sat_lon > 180.0)  sat_lon -= 360.0;
+        if (sat_lat > 90.0)  sat_lat -= 180.0;
+        if (sat_lat < -90.0) sat_lat += 180.0;
     }
 
-    /* -- Orbital Elements -------------------------------------------------- */
-    ImGui::Separator();
-    ImGui::Text("%s Orbital Elements", ICON_FA_SATELLITE);
-    if (ImGui::BeginTable("##orbital_elements", 2, ImGuiTableFlags_SizingFixedFit))
+    /* -- Basic info -------------------------------------------------------- */
+    if (ImGui::BeginTable("##sat_basic", 2, ImGuiTableFlags_SizingFixedFit))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 110.0f);
         ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
-        InfoRow("Inclination", "%.4f\xc2\xb0", sat->inclination * RAD2DEG);
-        InfoRow("Eccentricity", "%.6f", sat->eccentricity);
+        InfoRow("Name", "%s", sat->name);
+        InfoRow("NORAD", "%s", sat->norad_id);
+        InfoRow("Latitude", "%.4f\xc2\xb0", sat_lat);
+        InfoRow("Longitude", "%.4f\xc2\xb0", sat_lon);
+        InfoRow("Period", "%.2f min", (2.0 * PI / sat->mean_motion) / 60.0);
         InfoRow("Apogee", "%.1f km", calc_apogee_km(sat));
         InfoRow("Perigee", "%.1f km", calc_perigee_km(sat));
-        ImGui::EndTable();
-    }
-
-    /* -- Sky Position ------------------------------------------------------ */
-    ImGui::Separator();
-    ImGui::Text("%s Sky Position", ICON_FA_BINOCULARS);
-    if (ImGui::BeginTable("##sky_position", 2, ImGuiTableFlags_SizingFixedFit))
-    {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
-
-        /* Geocentric (J2000) row */
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Geocentric:");
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted("");
-
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("  RA");
-        ImGui::TableNextColumn();
-        DrawClickableRADec("", geo_ra, &g_ui.ra_format, true);
-
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("  Dec");
-        ImGui::TableNextColumn();
-        DrawClickableRADec("", geo_dec, &g_ui.dec_format, false);
-
-        /* Topocentric (from home) row */
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Topocentric:");
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted("");
-
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("  RA");
-        ImGui::TableNextColumn();
-        DrawClickableRADec("", topo_ra, &g_ui.ra_format, true);
-
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("  Dec");
-        ImGui::TableNextColumn();
-        DrawClickableRADec("", topo_dec, &g_ui.dec_format, false);
-
-        /* Angular speed */
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("Ang. Speed");
-        ImGui::TableNextColumn();
-        ImGui::Text("%.4f\xc2\xb0/s", ang_speed);
-
-        ImGui::EndTable();
-    }
-
-    /* -- From Home Location ------------------------------------------------ */
-    ImGui::Separator();
-    ImGui::Text("%s From Home Location", ICON_FA_HOUSE);
-    if (ImGui::BeginTable("##home_location", 2, ImGuiTableFlags_SizingFixedFit))
-    {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
-
-        double az = 0.0, el = 0.0;
-        get_az_el(sat->current_pos, ctx->gmst_deg,
-                  home->lat, home->lon, home->alt,
-                  &az, &el);
-        InfoRow("Azimuth", "%.2f\xc2\xb0", az);
-        InfoRow("Elevation", "%.2f\xc2\xb0", el);
-
-        double range = get_sat_range(sat, *ctx->current_epoch, *home);
-        InfoRow("Range", "%.1f km", range);
-
         ImGui::EndTable();
     }
 
@@ -225,18 +157,89 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     ImGui::PushID("sat_adv");
     if (ImGui::CollapsingHeader(ICON_FA_GEAR " Advanced Orbital Data"))
     {
-        if (ImGui::BeginTable("##advanced", 2, ImGuiTableFlags_SizingFixedFit))
+        ImGui::Text("%s Orbital Elements", ICON_FA_SATELLITE);
+        if (ImGui::BeginTable("##orbital_elements", 2, ImGuiTableFlags_SizingFixedFit))
         {
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
 
+            InfoRow("Inclination", "%.4f\xc2\xb0", sat->inclination * RAD2DEG);
+            InfoRow("Eccentricity", "%.6f", sat->eccentricity);
             InfoRow("RAAN", "%.4f\xc2\xb0", sat->raan * RAD2DEG);
             InfoRow("Arg of Perigee", "%.4f\xc2\xb0", sat->arg_perigee * RAD2DEG);
             InfoRow("Mean Anomaly", "%.4f\xc2\xb0", sat->mean_anomaly * RAD2DEG);
             InfoRow("Mean Motion", "%.6f rev/day", sat->mean_motion * 86400.0 / (2.0 * PI));
             InfoRow("Semi-major Axis", "%.3f km", sat->semi_major_axis);
             InfoRow("B* Drag", "%.4e", sat->bstar);
-            InfoRow("Period", "%.2f min", (2.0 * PI / sat->mean_motion) / 60.0);
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("%s Sky Position", ICON_FA_BINOCULARS);
+        if (ImGui::BeginTable("##sky_position", 2, ImGuiTableFlags_SizingFixedFit))
+        {
+            ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+
+            /* Geocentric (J2000) row */
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Geocentric:");
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("  RA");
+            ImGui::TableNextColumn();
+            DrawClickableRADec("", geo_ra, &g_ui.ra_format, true);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("  Dec");
+            ImGui::TableNextColumn();
+            DrawClickableRADec("", geo_dec, &g_ui.dec_format, false);
+
+            /* Topocentric (from home) row */
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Topocentric:");
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("  RA");
+            ImGui::TableNextColumn();
+            DrawClickableRADec("", topo_ra, &g_ui.ra_format, true);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("  Dec");
+            ImGui::TableNextColumn();
+            DrawClickableRADec("", topo_dec, &g_ui.dec_format, false);
+
+            /* Angular speed */
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Ang. Speed");
+            ImGui::TableNextColumn();
+            ImGui::Text("%.4f\xc2\xb0/s", ang_speed);
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("%s From Home Location", ICON_FA_HOUSE);
+        if (ImGui::BeginTable("##home_location", 2, ImGuiTableFlags_SizingFixedFit))
+        {
+            ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+
+            InfoRow("Azimuth", "%.2f\xc2\xb0", az);
+            InfoRow("Elevation", "%.2f\xc2\xb0", el);
+            InfoRow("Range", "%.1f km", range);
 
             ImGui::EndTable();
         }
@@ -289,21 +292,6 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         }
     }
     ImGui::PopID();
-
-    /* -- Activate / Deactivate -------------------------------------------- */
-    ImGui::Separator();
-    if (sat->is_active && ImGui::Button("Deactivate", ImVec2(avail_w, 0)))
-    {
-        sat->is_active = false;
-        SaveSatSelection(cfg);
-        SaveAppConfig("settings.json", cfg);
-    }
-    else if (!sat->is_active && ImGui::Button("Activate", ImVec2(avail_w, 0)))
-    {
-        sat->is_active = true;
-        SaveSatSelection(cfg);
-        SaveAppConfig("settings.json", cfg);
-    }
 
     ImGui::PopTextWrapPos();
 }
