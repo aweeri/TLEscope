@@ -70,7 +70,7 @@ void FreeFetchResult(FetchResult *result);
 /** fetch available groups from retlector.eu API.
  *  parses the JSON response into RetlectorGroup array.
  *  returns number of groups parsed, or -1 on error. */
-int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups);
+int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_code);
 
 // -- Format Detection --------------------------------------------------------
 

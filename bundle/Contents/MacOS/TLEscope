@@ -4,4 +4,33 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../Resources"
 
+# Finder-launched apps do not inherit shell proxy environment variables.
+# If none are already present, mirror static macOS HTTP/HTTPS proxy settings
+# so libcurl follows the same network path as Safari. PAC evaluation is not
+# implemented here; explicit environment variables still take precedence.
+SYSTEM_PROXY="$(/usr/sbin/scutil --proxy 2>/dev/null || true)"
+
+proxy_value() {
+    printf '%s\n' "$SYSTEM_PROXY" | /usr/bin/awk -F ' : ' -v key="$1" '
+        $1 ~ "^[[:space:]]*" key "$" { print $2; exit }
+    '
+}
+
+if [[ -z "${https_proxy:-}${HTTPS_PROXY:-}" && "$(proxy_value HTTPSEnable)" == "1" ]]; then
+    HTTPS_HOST="$(proxy_value HTTPSProxy)"
+    HTTPS_PORT="$(proxy_value HTTPSPort)"
+    if [[ -n "$HTTPS_HOST" && "$HTTPS_PORT" =~ ^[0-9]+$ ]]; then
+        export https_proxy="http://${HTTPS_HOST}:${HTTPS_PORT}"
+        export HTTPS_PROXY="$https_proxy"
+    fi
+fi
+
+if [[ -z "${http_proxy:-}${HTTP_PROXY:-}" && "$(proxy_value HTTPEnable)" == "1" ]]; then
+    HTTP_HOST="$(proxy_value HTTPProxy)"
+    HTTP_PORT="$(proxy_value HTTPPort)"
+    if [[ -n "$HTTP_HOST" && "$HTTP_PORT" =~ ^[0-9]+$ ]]; then
+        export http_proxy="http://${HTTP_HOST}:${HTTP_PORT}"
+    fi
+fi
+
 exec "$SCRIPT_DIR/TLEscope.bin" "$@"

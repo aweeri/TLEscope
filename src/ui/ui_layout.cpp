@@ -14,6 +14,7 @@
 #include "core/theme.h"
 #include "core/config.h"
 #include "core/location.h"
+#include "data/curl_diagnostics.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -1250,6 +1251,25 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             {
                 cfg->data_stale_threshold_seconds = stale_values[current_stale_idx];
             }
+        }
+
+        /* ---- Network section --------------------------------------------- */
+        if (ImGui::CollapsingHeader("Network"))
+        {
+            if (cfg->network_timeout_seconds < 15) cfg->network_timeout_seconds = 15;
+            if (cfg->network_timeout_seconds > 300) cfg->network_timeout_seconds = 300;
+
+            int timeout_seconds = cfg->network_timeout_seconds;
+            ImGui::Text("HTTP request timeout:");
+            if (ImGui::SliderInt("##network_timeout", &timeout_seconds, 15, 300, "%d s"))
+            {
+                cfg->network_timeout_seconds = timeout_seconds;
+                TLEscopeSetCurlTimeoutSeconds(timeout_seconds);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Maximum time for a network request. Default: 45 seconds. Connection timeout remains 15 seconds.");
+
+            ImGui::TextDisabled("Default: 45 s. Range: 15-300 s.");
         }
 
         /* ---- Notifications section (ROADMAP section 8.1) ---------------- */

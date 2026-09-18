@@ -4,6 +4,7 @@
 #include "location.h"
 #include "util/log.h"
 #include "ui/tools/tools_settings.h"
+#include "data/curl_diagnostics.h"
 
 #include <nlohmann/json.hpp>
 
@@ -40,6 +41,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->retlector_groups_fetched = false;
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
+    config->network_timeout_seconds = 45;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
     config->tool_settings.count = 0;  // tool-owned settings start empty
@@ -157,6 +159,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->earth_rotation_offset = get_float("earth_rotation_offset", config->earth_rotation_offset);
                     config->orbits_to_draw = get_float("orbits_to_draw", config->orbits_to_draw);
                     config->data_stale_threshold_seconds = get_int("data_stale_threshold_seconds", config->data_stale_threshold_seconds);
+                    config->network_timeout_seconds = get_int("network_timeout_seconds", config->network_timeout_seconds);
+                    if (config->network_timeout_seconds < 15) config->network_timeout_seconds = 15;
+                    if (config->network_timeout_seconds > 300) config->network_timeout_seconds = 300;
                     config->first_day_of_week = get_int("first_day_of_week", config->first_day_of_week);
 
                     config->show_clouds = get_bool("show_clouds", config->show_clouds);
@@ -565,6 +570,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         SaveAppConfig(filename, config);
     }
 
+    TLEscopeSetCurlTimeoutSeconds(config->network_timeout_seconds);
+
     // load theme from the selected theme directory
     ThemeInitDefaults(&g_theme);
     if (!ThemeLoad(config->theme, &g_theme))
@@ -600,6 +607,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["night_mode"] = config->night_mode;
     root["first_day_of_week"] = config->first_day_of_week;
     root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
+    root["network_timeout_seconds"] = config->network_timeout_seconds;
 
     if (config->custom_data_source_count > 0)
     {
