@@ -18,16 +18,30 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 
 /* -- Layers panel persistence keys (see tool_layers.cpp) ------------------- */
 
-/* master switch for the 2D "Future Orbits" track (bool, default true) */
-#define LAYERS_KEY_FUTURE_ORBITS "layers.future_orbits"
+/* universal Orbits layer (see tool_layers.cpp) */
+#define LAYERS_KEY_ORBITS          "layers.orbits"            /* master: kill ALL orbit drawing, both views */
+#define LAYERS_KEY_ORBITS_DIMMED   "layers.orbits_unselected" /* draw unselected (dimmed) orbit lines */
 
-/* Future Orbits scope: focused track, all active tracks, or favorites. */
+/* number of predicted (future) orbit steps drawn for each ground track in 2D
+ * mode (float, in 0.25-orbit increments, default 2.0). */
+#define LAYERS_KEY_FUTURE_ORBITS_STEPS "layers.orbits_steps"
+#define LAYERS_FUTURE_ORBITS_STEPS_DEFAULT 2.0f
+#define LAYERS_FUTURE_ORBITS_STEPS_MIN    0.25f
+#define LAYERS_FUTURE_ORBITS_STEPS_MAX    5.0f
+
+/* future ground-track scope for the 2D map: focused, all active, or favorites. */
 #define LAYERS_KEY_FUTURE_ORBITS_MODE       "layers.future_orbits_mode"
 #define LAYERS_FUTURE_ORBITS_FOCUSED        0
 #define LAYERS_FUTURE_ORBITS_MULTI          1
 #define LAYERS_FUTURE_ORBITS_FAV            2
 
-/* 3D scene: lit-up colored orbit paths for favorite satellites (bool) */
+/* sunlit-highlight scope for orbit drawing: 0 = Sel (active satellite only), 1 = All (every active satellite), 2 = fav (favorites) */
+#define LAYERS_KEY_ORBITS_SUNLIT_SCOPE      "layers.orbits_sunlit_scope"
+#define LAYERS_ORBITS_SUNLIT_SELECTED       0
+#define LAYERS_ORBITS_SUNLIT_ALL            1
+#define LAYERS_ORBITS_SUNLIT_FAV            2
+
+/* favourite (starred) satellite orbit coloring (checkbox 2, bool default false) */
 #define LAYERS_KEY_FAV_ORBITS_3D "layers.favorite_orbits_3d"
 
 /* universal master switch for the Earth surface texture (bool, default true).

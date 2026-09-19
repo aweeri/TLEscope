@@ -9,6 +9,7 @@
 
 #include "ui_layout.h"
 #include "tools/tools.h"
+#include "tools/tools_settings.h"
 #include "notifications.h"
 #include "core/astro.h"
 #include "core/theme.h"
@@ -29,6 +30,13 @@
 #include <algorithm>
 
 /* -- Layout constants ------------------------------------------------------ */
+
+/* future-orbit steps for the 2D ground tracks (float, 0.25-orbit grid,
+ * default 2.0). Same backing key + constants as tools_common.h */
+#define LAYERS_KEY_FUTURE_ORBITS_STEPS      "layers.orbits_steps"
+#define LAYERS_FUTURE_ORBITS_STEPS_DEFAULT  2.0f
+#define LAYERS_FUTURE_ORBITS_STEPS_MIN      0.25f
+#define LAYERS_FUTURE_ORBITS_STEPS_MAX      5.0f
 
 static const float HANDLE_WIDTH   = 6.0f;   /* resize strip width          */
 static const float NOTCH_W        = 26.0f;  /* show/hide notch width       */
@@ -1070,6 +1078,24 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 SaveAppConfig("settings.json", cfg);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("First day of the week shown in the date-picker calendar");
+
+            /* number of predicted (future) orbit steps drawn for each ground
+             * track in 2D mode. Float slider with a 0.25-orbit sub-step grid
+             * (snapped both on-screen and on write), default 2.0. */
+            ImGui::Separator();
+            float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
+                                                     LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);
+            orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f; /* snap to 0.25 grid */
+            if (ImGui::SliderFloat("Orbit Steps", &orbits_steps, LAYERS_FUTURE_ORBITS_STEPS_MIN,
+                                   LAYERS_FUTURE_ORBITS_STEPS_MAX, "%.2f"))
+            {
+                orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f;
+                orbits_steps = fmaxf(LAYERS_FUTURE_ORBITS_STEPS_MIN, orbits_steps);
+                orbits_steps = fminf(LAYERS_FUTURE_ORBITS_STEPS_MAX, orbits_steps);
+                ToolSettingSetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS, orbits_steps);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("How many predicted orbits are drawn for each future ground track in 2D mode.\nRange: 0.25 - 5.0 orbits, in 0.25-orbit steps. Default: 2.0");
         }
 
         /* ---- Performance section ----------------------------------------- */
