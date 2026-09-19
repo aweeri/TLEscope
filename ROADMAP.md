@@ -1,105 +1,45 @@
-# TLEscope v4.0.0 Roadmap
+# v4 Roadmap
 
----
+- Build the real Scope window, a planetarium view with a circular viewport like looking through a telescope, instead of the inline wireframe cone that currently lives in main, with mouse dragging and dedicated controls for az/el.
 
-## HIGH PRIORITY (Performance & Half-Done Features)
+- Make the LEO/HEO/GEO and trails checkboxes in the scope sidebar actually do something, right now they are set in the tool panel but never read by any renderer, so they are dead prefs.
 
-### Data & Performance
-- [IN PROGRESS] **Data staleness:** Add per-source age display ("2h ago") in Data Sources panel with amber/red warnings
-- [IN PROGRESS] **SGP4 performance:** Add `calculate_position_kepler()` fast path for predictions, reduce SGP4 calls
+- Wire the orbit-arch renderer that already exists but is never called (draw_satellite_orbit_arch) into the scope, and add lock-on so az/el auto-track the selected object.
 
-### UI Tools (In Progress)
-- [IN PROGRESS] **Polar plot:** Add clickable rotator steering, max-elevation marker, time position indicator on pass path
-- [IN PROGRESS] **Doppler:** Add frequency graph over time (X=time, Y=Hz), implement CSV export handler
-- [IN PROGRESS] **Rotator:** Add settings UI (host/port/protocols), persist config, implement overlay drawing, visual feedback
-- [IN PROGRESS] **Scope view:** Redesign as large circular window with targeting/locking, beam visualization, layer toggles
+- Keep beam narrowing in the scope so you can examine satellites that sit close together, and highlight favorites so they stand out among all the active sats.
 
----
+- Add a real rotator settings window for host, port, formats, protocols and park position, the tool panel has no inputs for any of these today.
 
-## MEDIUM PRIORITY (Polish & UX)
+- Hook up the rotator overlay draws (RotatorDrawScopeOverlay and RotatorDrawPolarOverlay) that are declared but never called, so the scope and polar plot show which way the rotator is pointing.
 
-### Data & Info
-- [TODO] **Sat Info:** Show epoch age and data age with "stale" badge when threshold exceeded
+- Add proper manual az/el control plus lock-on, and prediction-driven auto tracking that predicts AOS, aligns the rotator, follows the pass, then parks.
 
-### UI Refinements
-- [TODO] **Polar plot:** Add floating window option (currently capped at 360px)
-- [TODO] **Doppler:** Add preset frequency buttons (2m, 70cm, 23cm, S-band, X-band)
-- [TODO] **Time controls:** Surface auto-warp to event (next AOS/pass/sunrise) in UI
-- [TODO] **Scope:** Add floating resizable window option
+- Finish the Doppler panel, the export CSV button body is literally empty, there is no graph and no preset band buttons, only a frequency input and a pass handoff from a right-click.
 
----
+- Keep Doppler selective and only show it when asked, tied to the selected pass, since it is not a universally needed metric.
 
-## LOW PRIORITY (New Features - Post v4.0.0)
+- Make the polar plot show the nearest upcoming pass by default unless the user picks a different one, and clicking a satellite should immediately show its current or imminent path.
 
-### Layers
-- [TODO] Van Allen belts layer (translucent bands)
-- [TODO] Magnetosphere layer (dipole field visualization)
-- [TODO] Sensor swath visualizer (FOV-driven ground footprint: line/square/circle)
-- [TODO] Layer panel polish (icons, tooltips, consistency)
-- [TODO] 2D mode layer separation (layers panel switches to 2D-specific layers when in 2D map view)
-- [TODO] 2D map overlays (country borders, lat/lon grid lines, equator/tropics, etc.)
+- Add drag-to-scrub on the polar plot so you can drag the dot and simulate the satellite moving over time, then clean up the surrounding text so it stops looking rough.
 
-### Extra Tools
-- [TODO] Sensor swath refinement (follow pass, off-nadir offset)
-- [TODO] Orbit classification badges (LEO/MEO/GEO/HEO/Molniya auto-classify)
-- [TODO] Sun/Moon/eclipse readout (solar system panel)
-- [TODO] Pass favorites/watchlist (star satellites, prioritize in lists)
-- [TODO] Session summary on exit (satellites tracked, passes predicted, time spent)
-- [TODO] Keyboard shortcut cheat-sheet (hold-key overlay)
-- [TODO] Next pass strip (compact readout: next AOS, sat, max elevation)
+- Re-implement the camera auto-rotate toggle that aligns the terminator vertically with the seasons, it is not just disabled, it is completely gone from the code and settings, so build it from scratch.
 
----
+- Replace the glitchy sun that is drawn as a dot lost inside the skybox with something more photorealistic.
 
-## COMPLETED IN v4.0.0
+- Redesign the time control bar, it technically works but the whole thing needs a UX overhaul.
 
-### Data & Backend
-- Multi-source pulling (Retlector, CelesTrak, custom URLs, pasted data)
-- Local time support with UTC toggle (persisted, applied everywhere)
+- Review and revamp all themes, default, amber and daylight, for readability, aesthetics and general appeal.
 
-### Passes
-- Two pass modes (single-sat + all-active)
-- Richer pass entries (unique IDs, AOS/LOS times, max elevation)
-- Pass progress bar (green bar for ongoing passes)
-- Click to open in Polar Plot
-- Pass to Doppler handoff
-- Pass list height capping
+- Add the Keplerian fast path to cut per-frame SGP4 and GPU calls, it does not exist yet, all we have is the orbit cache that bakes paths into a vertex buffer.
 
-### UI & Theming
-- Toast notification system (top-right, auto-dismiss, theme-aware)
-- Sidebar notch visibility (theme-aware, deliberate snap-hide)
-- Theme review (all hardcoded colors routed through theme)
-- Settings expansion (notifications, pass defaults, scope defaults)
+- Finish eliminating per-frame allocations in the render loop, mostly done but the adaptive orbit cache resolution heuristic is stubbed with unused params, so make that real.
 
-### Locations & Persistence
-- Unified locations system (markers + home in one list)
-- Home designation (house button, single home flag)
-- Persist critical settings (active sats, data selections, rotator, time preference)
+- Rework the backend for better long-term accuracy, atmospheric drag is already fed into SGP4 through B*, but the dev wants it hardened and actually demonstrated to be better.
 
-### Layers
-- Apoapsis/periapsis text labels (altitude in km)
+- Consolidate the long wall of render toggles for earth texture, nightlights, clouds and scattering into cleaner no-bullshit preset views instead of a dozen checkboxes.
 
----
+- Render data-age badges, the per-source 2h ago amber/red state and a stale badge on sat info, the backend fields already exist but the UI never draws them.
 
-## RELEASE CHECKLIST (v4.0.0 Definition of Done)
+- Hook validate_themes into the Makefile and CI, widen the CI branch gating that currently only fires on extremelywip, and do the final docs pass on the README feature list and CREDITS.
 
-### Functional
-- [ ] Data staleness enforced and surfaced per source
-- [ ] Doppler shows frequency graph and exports valid CSV
-- [ ] Rotator connects, configurable, persists, auto-steers
-- [ ] Scope view: large window, targeting, locking, beam highlight, layers
-- [ ] Van Allen and magnetosphere layers render
-- [ ] Sensor swath visualizer (line/square/circle from FOV)
-
-### Performance
-- [ ] SGP4 calls reduced via Keplerian fast path
-- [ ] Pass prediction over 24h smooth for all active satellites
-- [ ] No per-frame allocations in render loop
-
-### Polish
-- [ ] Every panel capped to reasonable sidebar height
-- [ ] No duplicate-ID UI bugs in lists
-
-### Docs
-- [ ] README feature list updated
-- [ ] CREDITS updated
-- [ ] Settings documented
+- Land the scope and rotator as dedicated windows rather than squeezing them into the existing sidebar layout, since the left and right panels are done and meant to stay untouched.
