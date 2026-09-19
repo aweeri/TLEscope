@@ -14,15 +14,12 @@
 #include "tools/tools.h"
 #include "notifications.h"
 #include "core/astro.h"
-#include "io/rotator.h"
 #include "core/config.h"
 #include "core/theme.h"
 #include "imgui_theme.h"
-#include "data/provider.h"
-#include "data/cache.h"
 #include "data/storage.h"
-#include "data/omm_parser.h"
 #include "util/log.h"
+#include "tools/tools_common.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -39,13 +36,6 @@
 #include "imgui.h"
 #include "rlImGui.h"
 #include "IconsFontAwesome6.h"
-
-/* -- Helpers --------------------------------------------------------------- */
-
-static ImVec4 ThemeColor(const Color &c)
-{
-    return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
-}
 
 /* -- UIState instance ------------------------------------------------------ */
 
@@ -126,16 +116,6 @@ double StepTimeMultiplier(double current, bool increase)
             return current * 2.0;
         }
     }
-}
-
-double unix_to_epoch(double target_unix)
-{
-    struct tm *gmt = gmtime((time_t *)&target_unix);
-    if (!gmt) return get_current_real_time_epoch();
-    int year = gmt->tm_year + 1900;
-    double day_of_year = gmt->tm_yday + 1.0;
-    double fraction = (gmt->tm_hour + gmt->tm_min / 60.0 + gmt->tm_sec / 3600.0) / 24.0;
-    return (year * 1000.0) + day_of_year + fraction;
 }
 
 /* -- Modal state (static to this file) ------------------------------------- */

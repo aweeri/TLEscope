@@ -200,8 +200,6 @@ Available accessors:
 | `ToolSettingGetBool` / `ToolSettingSetBool` | `(AppConfig*, key, bool)` |
 | `ToolSettingGetInt` / `ToolSettingSetInt` | `(AppConfig*, key, int)` |
 | `ToolSettingGetFloat` / `ToolSettingSetFloat` | `(AppConfig*, key, float)` |
-| `ToolSettingGetString` / `ToolSettingSetString` | `(AppConfig*, key, const char*)` |
-
 **Key convention:** namespace keys by the tool, e.g. `"mytool.show_cube"`,
 `"mytool.color"`. This avoids collisions between tools.
 

@@ -16,7 +16,7 @@ void DrawSceneHooks(SceneContext *sctx, AppConfig *cfg)
     if (!ImGui::GetCurrentContext())
         return;
 
-    for (int i = 0; i < g_panel_count; i++)
+    for (int i = 0; i < PANEL_COUNT; i++)
     {
         if (g_panel_defs[i].draw_scene)
             g_panel_defs[i].draw_scene(sctx, cfg);

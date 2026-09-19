@@ -230,7 +230,6 @@ void UIRequestExit(void);
 Color ApplyAlpha(Color c, float alpha);
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color);
 double StepTimeMultiplier(double current, bool increase);
-double unix_to_epoch(double target_unix);
 bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius);
 
 #endif // UI_H

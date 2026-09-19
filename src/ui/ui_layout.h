@@ -107,7 +107,6 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg);
 /* panel visibility helpers (used by menus, shortcuts, other dialogs) */
 void LayoutTogglePanel(PanelId id);
 void LayoutOpenPanel(PanelId id);
-void LayoutClosePanel(PanelId id);
 bool LayoutIsPanelOpen(PanelId id);
 void LayoutSetPanelSide(PanelId id, SidebarSide side);
 SidebarSide LayoutPanelCurrentSide(PanelId id);
@@ -115,7 +114,6 @@ SidebarSide LayoutPanelCurrentSide(PanelId id);
 /* settings modal helpers */
 bool LayoutSettingsOpen(void);
 void LayoutOpenSettings(void);
-void LayoutCloseSettings(void);
 
 /* tools modal helpers */
 bool LayoutToolsOpen(void);
@@ -129,6 +127,5 @@ void LayoutSetBottomBarVisible(bool visible);
 /* sidebar helpers used by other modules */
 bool LayoutSidebarVisible(SidebarSide side);
 void LayoutSetSidebarVisible(SidebarSide side, bool visible);
-SidebarSide PanelSide(PanelId id);
 
 #endif /* UI_LAYOUT_H */

@@ -53,12 +53,9 @@ void LogMessage(LogLevel level, const char *format, ...);
 /** clear all log entries */
 void LogClear(void);
 
-/** get the total number of entries currently in the buffer */
-int LogGetCount(void);
-
 /** lock the log buffer for reading; returns pointer to entries array and count.
  *  Must be paired with LogUnlock(). The entries are in ring order; use
- *  LogGetCount() to know how many are valid. */
+ *  LogLock()'s out_count to know how many are valid. */
 const LogEntry *LogLock(int *out_count);
 
 /** unlock the log buffer after reading */

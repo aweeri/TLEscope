@@ -12,18 +12,6 @@
 
 #include "imgui.h"
 
-static const char *LogLevelFilterLabel(int idx)
-{
-    switch (idx)
-    {
-        case 0:  return "ALL";
-        case 1:  return "INFO+";
-        case 2:  return "WARN+";
-        case 3:  return "ERROR";
-        default: return "ALL";
-    }
-}
-
 static LogLevel LogLevelFilterMinLevel(int idx)
 {
     switch (idx)

@@ -1,6 +1,7 @@
 #include "imgui_theme.h"
 #include "core/theme.h"
 #include "util/log.h"
+#include "tools/tools_common.h"
 
 #include <imgui.h>
 #include <raylib.h>
@@ -11,11 +12,6 @@
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
-
-static ImVec4 ColorToImVec4(Color c)
-{
-    return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
-}
 
 /* ------------------------------------------------------------------ */
 /* apply colours + style                                               */
@@ -50,67 +46,67 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale)
     /* mid-tone used for scrollbar grabs, between surface and text */
     const Color grab = ThemeMix(surface, text, 0.25f);
 
-    style.Colors[ImGuiCol_Text]                 = ColorToImVec4(text);
-    style.Colors[ImGuiCol_TextDisabled]         = ColorToImVec4(t->ui.text_dim);
-    style.Colors[ImGuiCol_WindowBg]             = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_ChildBg]              = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_PopupBg]              = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_Border]               = ColorToImVec4(border);
+    style.Colors[ImGuiCol_Text]                 = ThemeColor(text);
+    style.Colors[ImGuiCol_TextDisabled]         = ThemeColor(t->ui.text_dim);
+    style.Colors[ImGuiCol_WindowBg]             = ThemeColor(bg);
+    style.Colors[ImGuiCol_ChildBg]              = ThemeColor(bg);
+    style.Colors[ImGuiCol_PopupBg]              = ThemeColor(bg);
+    style.Colors[ImGuiCol_Border]               = ThemeColor(border);
     style.Colors[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
 
-    style.Colors[ImGuiCol_FrameBg]              = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_FrameBgHovered]       = ColorToImVec4(ThemeHoverOf(surface, text));
-    style.Colors[ImGuiCol_FrameBgActive]        = ColorToImVec4(ThemeActiveOf(surface, text));
+    style.Colors[ImGuiCol_FrameBg]              = ThemeColor(surface);
+    style.Colors[ImGuiCol_FrameBgHovered]       = ThemeColor(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_FrameBgActive]        = ThemeColor(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_TitleBg]              = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_TitleBgActive]        = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_TitleBgCollapsed]     = ColorToImVec4(bg);
+    style.Colors[ImGuiCol_TitleBg]              = ThemeColor(bg);
+    style.Colors[ImGuiCol_TitleBgActive]        = ThemeColor(surface);
+    style.Colors[ImGuiCol_TitleBgCollapsed]     = ThemeColor(bg);
 
-    style.Colors[ImGuiCol_MenuBarBg]            = ColorToImVec4(surface);
+    style.Colors[ImGuiCol_MenuBarBg]            = ThemeColor(surface);
 
-    style.Colors[ImGuiCol_ScrollbarBg]          = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_ScrollbarGrab]        = ColorToImVec4(grab);
-    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ColorToImVec4(ThemeMix(surface, text, 0.35f));
-    style.Colors[ImGuiCol_ScrollbarGrabActive]  = ColorToImVec4(ThemeMix(surface, text, 0.45f));
+    style.Colors[ImGuiCol_ScrollbarBg]          = ThemeColor(bg);
+    style.Colors[ImGuiCol_ScrollbarGrab]        = ThemeColor(grab);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ThemeColor(ThemeMix(surface, text, 0.35f));
+    style.Colors[ImGuiCol_ScrollbarGrabActive]  = ThemeColor(ThemeMix(surface, text, 0.45f));
 
-    style.Colors[ImGuiCol_CheckMark]            = ColorToImVec4(accent);
-    style.Colors[ImGuiCol_SliderGrab]           = ColorToImVec4(accent);
-    style.Colors[ImGuiCol_SliderGrabActive]     = ColorToImVec4(ThemeMix(accent, text, 0.25f));
+    style.Colors[ImGuiCol_CheckMark]            = ThemeColor(accent);
+    style.Colors[ImGuiCol_SliderGrab]           = ThemeColor(accent);
+    style.Colors[ImGuiCol_SliderGrabActive]     = ThemeColor(ThemeMix(accent, text, 0.25f));
 
-    style.Colors[ImGuiCol_Button]               = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_ButtonHovered]        = ColorToImVec4(ThemeHoverOf(surface, text));
-    style.Colors[ImGuiCol_ButtonActive]         = ColorToImVec4(ThemeActiveOf(surface, text));
+    style.Colors[ImGuiCol_Button]               = ThemeColor(surface);
+    style.Colors[ImGuiCol_ButtonHovered]        = ThemeColor(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_ButtonActive]         = ThemeColor(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_Header]               = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_HeaderHovered]        = ColorToImVec4(ThemeHoverOf(surface, text));
-    style.Colors[ImGuiCol_HeaderActive]         = ColorToImVec4(ThemeActiveOf(surface, text));
+    style.Colors[ImGuiCol_Header]               = ThemeColor(surface);
+    style.Colors[ImGuiCol_HeaderHovered]        = ThemeColor(ThemeHoverOf(surface, text));
+    style.Colors[ImGuiCol_HeaderActive]         = ThemeColor(ThemeActiveOf(surface, text));
 
-    style.Colors[ImGuiCol_Separator]            = ColorToImVec4(border);
-    style.Colors[ImGuiCol_SeparatorHovered]     = ColorToImVec4(ThemeMix(border, text, 0.25f));
-    style.Colors[ImGuiCol_SeparatorActive]      = ColorToImVec4(ThemeMix(border, text, 0.35f));
+    style.Colors[ImGuiCol_Separator]            = ThemeColor(border);
+    style.Colors[ImGuiCol_SeparatorHovered]     = ThemeColor(ThemeMix(border, text, 0.25f));
+    style.Colors[ImGuiCol_SeparatorActive]      = ThemeColor(ThemeMix(border, text, 0.35f));
 
-    style.Colors[ImGuiCol_ResizeGrip]           = ColorToImVec4(ThemeAlpha(accent, 0.20f));
-    style.Colors[ImGuiCol_ResizeGripHovered]    = ColorToImVec4(ThemeAlpha(accent, 0.60f));
-    style.Colors[ImGuiCol_ResizeGripActive]     = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_ResizeGrip]           = ThemeColor(ThemeAlpha(accent, 0.20f));
+    style.Colors[ImGuiCol_ResizeGripHovered]    = ThemeColor(ThemeAlpha(accent, 0.60f));
+    style.Colors[ImGuiCol_ResizeGripActive]     = ThemeColor(accent);
 
-    style.Colors[ImGuiCol_Tab]                  = ColorToImVec4(ThemeMix(bg, surface, 0.5f));
-    style.Colors[ImGuiCol_TabHovered]           = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_TabActive]            = ColorToImVec4(surface);
-    style.Colors[ImGuiCol_TabUnfocused]         = ColorToImVec4(bg);
-    style.Colors[ImGuiCol_TabUnfocusedActive]   = ColorToImVec4(ThemeMix(bg, surface, 0.5f));
+    style.Colors[ImGuiCol_Tab]                  = ThemeColor(ThemeMix(bg, surface, 0.5f));
+    style.Colors[ImGuiCol_TabHovered]           = ThemeColor(surface);
+    style.Colors[ImGuiCol_TabActive]            = ThemeColor(surface);
+    style.Colors[ImGuiCol_TabUnfocused]         = ThemeColor(bg);
+    style.Colors[ImGuiCol_TabUnfocusedActive]   = ThemeColor(ThemeMix(bg, surface, 0.5f));
 #ifdef IMGUI_HAS_DOCK
-    style.Colors[ImGuiCol_DockingBg]            = ColorToImVec4(t->ui.overlay);
-    style.Colors[ImGuiCol_DockingPreview]       = ColorToImVec4(ThemeAlpha(accent, 0.50f));
+    style.Colors[ImGuiCol_DockingBg]            = ThemeColor(t->ui.overlay);
+    style.Colors[ImGuiCol_DockingPreview]       = ThemeColor(ThemeAlpha(accent, 0.50f));
 #endif
 
-    style.Colors[ImGuiCol_PlotLines]            = ColorToImVec4(accent);
-    style.Colors[ImGuiCol_PlotHistogram]        = ColorToImVec4(accent);
+    style.Colors[ImGuiCol_PlotLines]            = ThemeColor(accent);
+    style.Colors[ImGuiCol_PlotHistogram]        = ThemeColor(accent);
 
-    style.Colors[ImGuiCol_TextSelectedBg]       = ColorToImVec4(ThemeAlpha(accent, 0.25f));
-    style.Colors[ImGuiCol_ModalWindowDimBg]     = ColorToImVec4(t->ui.overlay);
+    style.Colors[ImGuiCol_TextSelectedBg]       = ThemeColor(ThemeAlpha(accent, 0.25f));
+    style.Colors[ImGuiCol_ModalWindowDimBg]     = ThemeColor(t->ui.overlay);
 
-    style.Colors[ImGuiCol_NavCursor]            = ColorToImVec4(accent);
-    style.Colors[ImGuiCol_NavWindowingHighlight]= ColorToImVec4(accent);
+    style.Colors[ImGuiCol_NavCursor]            = ThemeColor(accent);
+    style.Colors[ImGuiCol_NavWindowingHighlight]= ThemeColor(accent);
 
     /* ── style variables ──────────────────────────────────────────── */
     style.WindowRounding          = t->style.window_rounding;

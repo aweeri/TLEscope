@@ -39,10 +39,4 @@ void CachePut(const char *url, const char *data, size_t size, OrbitalDataFormat 
 /** invalidate all cache entries */
 void CacheClear(void);
 
-/** save cache to disk */
-bool CacheSave(const char *filename);
-
-/** load cache from disk */
-bool CacheLoad(const char *filename);
-
 #endif // CACHE_H

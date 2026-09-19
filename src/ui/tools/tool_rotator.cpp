@@ -42,16 +42,6 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg)
         {
             RotatorPollNow();
         }
-
-        ImGui::Separator();
-        ImGui::Text("Raw Commands:");
-        static char cmd_buf[64] = "";
-        ImGui::SetNextItemWidth(avail_w);
-        ImGui::InputText("##cmd", cmd_buf, sizeof(cmd_buf));
-        if (ImGui::Button("Send", ImVec2(avail_w, 0)))
-        {
-            RotatorSendCustomNow();
-        }
     }
     else
     {

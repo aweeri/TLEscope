@@ -33,10 +33,4 @@ float ToolSettingGetFloat(AppConfig *cfg, const char *key, float def);
 /** write a float setting */
 void ToolSettingSetFloat(AppConfig *cfg, const char *key, float val);
 
-/** read a string setting, returning def if the key is absent */
-const char *ToolSettingGetString(AppConfig *cfg, const char *key, const char *def);
-
-/** write a string setting */
-void ToolSettingSetString(AppConfig *cfg, const char *key, const char *val);
-
 #endif /* TOOLS_SETTINGS_H */

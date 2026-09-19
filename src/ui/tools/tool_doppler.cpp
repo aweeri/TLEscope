@@ -8,9 +8,6 @@
 #include "core/config.h"
 #include "core/theme.h"
 
-#include <cstdio>
-#include <cmath>
-
 #include "imgui.h"
 
 void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
@@ -21,8 +18,6 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
     ImGui::PushTextWrapPos(0.0f);
 
     static float freq = 145800000.0f; /* default: 2m band */
-    static float csv_res = 1.0f;
-    static char csv_path[128] = "doppler_export.csv";
 
     /* ---- 2.5: consume a pass handed off from the Passes panel ----
      * When a pass row's "Doppler" action was clicked, g_ui.locked_pass_sat /
@@ -50,15 +45,6 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
 
     ImGui::SetNextItemWidth(avail_w);
     ImGui::InputFloat("Frequency (Hz)", &freq, 1000.0f, 1000000.0f, "%.0f");
-    ImGui::SetNextItemWidth(avail_w);
-    ImGui::InputFloat("CSV Resolution (s)", &csv_res, 0.1f, 10.0f);
-    ImGui::SetNextItemWidth(avail_w);
-    ImGui::InputText("Export Path", csv_path, sizeof(csv_path));
-
-    if (ImGui::Button("Export CSV", ImVec2(avail_w, 0)))
-    {
-        /* TODO: Implement CSV export (ROADMAP 4.1) */
-    }
 
     ImGui::PopTextWrapPos();
 }

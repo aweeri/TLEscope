@@ -9,6 +9,7 @@
 
 #include "ui_layout.h"
 #include "tools/tools.h"
+#include "tools/tools_common.h"
 #include "tools/tools_settings.h"
 #include "notifications.h"
 #include "core/astro.h"
@@ -30,13 +31,6 @@
 #include <algorithm>
 
 /* -- Layout constants ------------------------------------------------------ */
-
-/* future-orbit steps for the 2D ground tracks (float, 0.25-orbit grid,
- * default 2.0). Same backing key + constants as tools_common.h */
-#define LAYERS_KEY_FUTURE_ORBITS_STEPS      "layers.orbits_steps"
-#define LAYERS_FUTURE_ORBITS_STEPS_DEFAULT  2.0f
-#define LAYERS_FUTURE_ORBITS_STEPS_MIN      0.25f
-#define LAYERS_FUTURE_ORBITS_STEPS_MAX      5.0f
 
 static const float HANDLE_WIDTH   = 6.0f;   /* resize strip width          */
 static const float NOTCH_W        = 26.0f;  /* show/hide notch width       */
@@ -73,13 +67,6 @@ static float GetContentHeight(float x0, float x1)
 
     float h = bottom - nav_h;
     return (h < 50.0f) ? 50.0f : h;
-}
-
-/* -- Helper ---------------------------------------------------------------- */
-
-static ImVec4 ThemeColor(const Color &c)
-{
-    return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
 }
 
 /* -- Globals --------------------------------------------------------------- */
@@ -259,12 +246,6 @@ void LayoutOpenPanel(PanelId id)
     EnsureSidebar(g_panel_defs[id].default_side);
 }
 
-void LayoutClosePanel(PanelId id)
-{
-    if (id < 0 || id >= PANEL_COUNT) return;
-    g_layout.panel_open[id] = false;
-}
-
 /** move a panel to the given sidebar, appending it to that side's order.
  *  Removes it from the source side's order first. Each sidebar can hold up
  *  to MAX_PANELS panels, so a move never evicts another panel. */
@@ -325,12 +306,6 @@ bool LayoutIsPanelOpen(PanelId id)
 
 /* -- Sidebar visibility helpers --------------------------------------------- */
 
-SidebarSide PanelSide(PanelId id)
-{
-    if (id < 0 || id >= PANEL_COUNT) return SIDEBAR_NONE;
-    return g_panel_defs[id].default_side;
-}
-
 bool LayoutSidebarVisible(SidebarSide side)
 {
     if (side == SIDEBAR_LEFT) return g_layout.left_visible && !g_layout.left_hidden;
@@ -353,7 +328,6 @@ void LayoutSetBottomBarVisible(bool visible) { g_layout.show_bottom_bar = visibl
 
 bool LayoutSettingsOpen(void) { return g_layout.settings_open; }
 void LayoutOpenSettings(void) { g_layout.settings_open = true; }
-void LayoutCloseSettings(void) { g_layout.settings_open = false; }
 
 bool LayoutToolsOpen(void) { return g_layout.tools_open; }
 void LayoutOpenTools(void) { g_layout.tools_open = true; }

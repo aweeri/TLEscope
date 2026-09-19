@@ -89,12 +89,6 @@ void LogClear(void)
     s_count = 0;
 }
 
-int LogGetCount(void)
-{
-    std::lock_guard<std::mutex> lock(s_mutex);
-    return s_count;
-}
-
 const LogEntry *LogLock(int *out_count)
 {
     s_mutex.lock();

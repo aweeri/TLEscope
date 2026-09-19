@@ -90,20 +90,3 @@ void ToolSettingSetFloat(AppConfig *cfg, const char *key, float val)
         return;
     snprintf(s->value, sizeof(s->value), "%g", (double)val);
 }
-
-const char *ToolSettingGetString(AppConfig *cfg, const char *key, const char *def)
-{
-    ToolSetting *s = FindSetting(cfg, key);
-    if (!s)
-        return def;
-    return s->value;
-}
-
-void ToolSettingSetString(AppConfig *cfg, const char *key, const char *val)
-{
-    ToolSetting *s = FindOrCreateSetting(cfg, key);
-    if (!s)
-        return;
-    strncpy(s->value, val, sizeof(s->value) - 1);
-    s->value[sizeof(s->value) - 1] = '\0';
-}

@@ -29,12 +29,6 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 #define LAYERS_FUTURE_ORBITS_STEPS_MIN    0.25f
 #define LAYERS_FUTURE_ORBITS_STEPS_MAX    5.0f
 
-/* future ground-track scope for the 2D map: focused, all active, or favorites. */
-#define LAYERS_KEY_FUTURE_ORBITS_MODE       "layers.future_orbits_mode"
-#define LAYERS_FUTURE_ORBITS_FOCUSED        0
-#define LAYERS_FUTURE_ORBITS_MULTI          1
-#define LAYERS_FUTURE_ORBITS_FAV            2
-
 /* sunlit-highlight scope for orbit drawing: 0 = Sel (active satellite only), 1 = All (every active satellite), 2 = fav (favorites) */
 #define LAYERS_KEY_ORBITS_SUNLIT_SCOPE      "layers.orbits_sunlit_scope"
 #define LAYERS_ORBITS_SUNLIT_SELECTED       0

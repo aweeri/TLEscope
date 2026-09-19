@@ -56,6 +56,5 @@ typedef struct
 
 /* the single registry table (defined in tools_registry.cpp) */
 extern const PanelDef g_panel_defs[PANEL_COUNT];
-extern const int g_panel_count;
 
 #endif /* TOOLS_REGISTRY_H */

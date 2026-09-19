@@ -313,29 +313,9 @@ void RotatorLoadSettings(const AppConfig *cfg)
     rot.steer_mode = R->steer_mode;
 }
 
-char *RotatorGetHostBuffer(void) { return rot.host; }
-int RotatorGetHostBufferSize(void) { return (int)sizeof(rot.host); }
-char *RotatorGetPortBuffer(void) { return rot.port; }
-int RotatorGetPortBufferSize(void) { return (int)sizeof(rot.port); }
-char *RotatorGetGetFmtBuffer(void) { return rot.get_fmt; }
-int RotatorGetGetFmtBufferSize(void) { return (int)sizeof(rot.get_fmt); }
-char *RotatorGetSetFmtBuffer(void) { return rot.set_fmt; }
-int RotatorGetSetFmtBufferSize(void) { return (int)sizeof(rot.set_fmt); }
-char *RotatorGetCustomCmdBuffer(void) { return rot.custom_cmd; }
-int RotatorGetCustomCmdBufferSize(void) { return (int)sizeof(rot.custom_cmd); }
-char *RotatorGetParkAzBuffer(void) { return rot.park_az; }
-int RotatorGetParkAzBufferSize(void) { return (int)sizeof(rot.park_az); }
-char *RotatorGetParkElBuffer(void) { return rot.park_el; }
-int RotatorGetParkElBufferSize(void) { return (int)sizeof(rot.park_el); }
-const char *RotatorGetStatus(void) { return rot.status; }
 bool RotatorGetAutoSteer(void) { return rot.auto_steer; }
 void RotatorSetAutoSteer(bool enabled) { rot.auto_steer = enabled; }
-int RotatorGetSteerMode(void) { return rot.steer_mode; }
-void RotatorSetSteerMode(int mode) { rot.steer_mode = mode; }
 int RotatorGetLeadTimeSec(void) { return (int)atol(rot.lead_time); }
-void RotatorSetLeadTimeSec(int sec) { snprintf(rot.lead_time, sizeof(rot.lead_time), "%d", sec); }
-char *RotatorGetLeadTimeBuffer(void) { return rot.lead_time; }
-int RotatorGetLeadTimeBufferSize(void) { return (int)sizeof(rot.lead_time); }
 void RotatorConnect(void) { ConnectTcp(rot.host, rot.port); }
 void RotatorDisconnect(void)
 {
@@ -350,8 +330,6 @@ void RotatorSendCustomNow(void)
     if (rot.custom_cmd[0] != '\0')
         SendRaw(rot.custom_cmd, NULL, 0);
 }
-void RotatorSetParkNow(float az, float el) { SetPosition(az, el); }
-
 void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_polar_dialog, bool polar_lunar_mode, int selected_pass_idx)
 {
     if (rot.connected)
@@ -403,6 +381,5 @@ void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_pola
 }
 
 bool RotatorIsConnected(void) { return rot.connected; }
-bool RotatorHasPosition(void) { return rot.has_position; }
 float RotatorGetAz(void) { return rot.cur_az; }
 float RotatorGetEl(void) { return rot.cur_el; }

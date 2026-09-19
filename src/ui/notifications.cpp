@@ -15,6 +15,7 @@
 #include "ui_layout.h"
 #include "core/theme.h"
 #include "tools/tools_settings.h"
+#include "tools/tools_common.h"
 
 #include <imgui.h>
 #include <raylib.h>
@@ -135,11 +136,6 @@ void NotifyUpdate(float dt)
 }
 
 /* -- rendering ------------------------------------------------------------- */
-
-static ImVec4 ThemeColor(const Color &c)
-{
-    return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
-}
 
 /** resolve the accent color for a level from the theme */
 static ImVec4 LevelColor(NotifyLevel level)
