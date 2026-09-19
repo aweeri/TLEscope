@@ -625,16 +625,21 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     ImGui::GetWindowDrawList()->AddRectFilled(p0, p1, bg, 4.0f);
 
     /* icons: chevron + panel icon + title */
-    const char *chev = *open ? ICON_FA_CHEVRON_DOWN : ICON_FA_CHEVRON_RIGHT;
+    const char *chev_down = ICON_FA_CHEVRON_DOWN;
+    const char *chev_right = ICON_FA_CHEVRON_RIGHT;
+    float chev_slot_w = std::max(ImGui::CalcTextSize(chev_down).x,
+                                 ImGui::CalcTextSize(chev_right).x);
+    const char *chev = *open ? chev_down : chev_right;
     ImVec2 chev_sz = ImGui::CalcTextSize(chev);
     ImVec2 icon_sz = ImGui::CalcTextSize(def->icon);
     float y = p0.y + (frame_h - chev_sz.y) * 0.5f;
     ImU32 text_col = IM_COL32(g_theme.ui.text.r, g_theme.ui.text.g, g_theme.ui.text.b, 255);
     ImU32 accent_col = IM_COL32(g_theme.ui.accent.r, g_theme.ui.accent.g, g_theme.ui.accent.b, 255);
 
-    ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f, y), text_col, chev);
-    ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f + chev_sz.x + 6.0f, y), accent_col, def->icon);
-    ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f + chev_sz.x + 6.0f + icon_sz.x + 8.0f, y), text_col, def->title);
+    float chev_x = p0.x + 6.0f + (chev_slot_w - chev_sz.x) * 0.5f;
+    ImGui::GetWindowDrawList()->AddText(ImVec2(chev_x, y), text_col, chev);
+    ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f + chev_slot_w + 6.0f, y), accent_col, def->icon);
+    ImGui::GetWindowDrawList()->AddText(ImVec2(p0.x + 6.0f + chev_slot_w + 6.0f + icon_sz.x + 8.0f, y), text_col, def->title);
 
     if (clicked) *open = !*open;
 

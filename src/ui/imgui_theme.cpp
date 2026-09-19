@@ -205,11 +205,19 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     io.Fonts->AddFontFromFileTTF(font_path, font_px, &font_cfg, NULL);
 
     /* merge FontAwesome icons */
+
     ImFontConfig icons_cfg;
     icons_cfg.MergeMode = true;
     icons_cfg.FontDataOwnedByAtlas = true;
     icons_cfg.PixelSnapH = true;
     icons_cfg.RasterizerDensity = density;
+    /* ~2px down at the 14px default icon size, clamped to stay 1-4px */
+    float icon_y_off = icon_px * 0.14f + 0.04f;
+    if (icon_y_off < 1.0f) icon_y_off = 1.0f;
+    if (icon_y_off > 4.0f) icon_y_off = 4.0f;
+    icons_cfg.GlyphOffset.y = icon_y_off;
+    icons_cfg.GlyphMinAdvanceX = icon_px; /* uniform 1em icon cell is stable horizontal centring */
+    icons_cfg.GlyphMaxAdvanceX = icon_px;
     static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
     io.Fonts->AddFontFromMemoryCompressedTTF(
         fa_solid_900_compressed_data,
