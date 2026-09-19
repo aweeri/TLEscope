@@ -27,6 +27,9 @@
 /** mix ratio applied to derive an active/pressed state from a base color */
 #define THEME_STATE_ACTIVE 0.18f
 
+/** number of colors available for multi-satellite ground tracks */
+#define GROUND_TRACK_PALETTE_SIZE 8
+
 /** compact semantic UI palette (11 colors) */
 typedef struct
 {
@@ -119,6 +122,11 @@ typedef struct
         Color footprint_fill;   /* coverage footprint fill (alpha allowed) */
         Color footprint_border; /* coverage footprint outline */
     } world;
+
+    struct
+    {
+        Color palette[GROUND_TRACK_PALETTE_SIZE]; /* Multi track colors */
+    } ground_tracks;
 
     ThemeUIColors ui;
     ThemeStyle style;

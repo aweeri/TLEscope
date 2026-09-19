@@ -21,6 +21,12 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 /* master switch for the 2D "Future Orbits" track (bool, default true) */
 #define LAYERS_KEY_FUTURE_ORBITS "layers.future_orbits"
 
+/* Future Orbits scope: focused track only, or a bounded multi-track set. */
+#define LAYERS_KEY_FUTURE_ORBITS_MODE       "layers.future_orbits_mode"
+#define LAYERS_FUTURE_ORBITS_FOCUSED        0
+#define LAYERS_FUTURE_ORBITS_MULTI          1
+#define LAYERS_FUTURE_ORBITS_MAX_TRACKS     8
+
 /* universal master switch for the Earth surface texture (bool, default true).
  * When off, the Earth renders as a plain black body in both the 2D map and the
  * 3D globe (see main.cpp). */
