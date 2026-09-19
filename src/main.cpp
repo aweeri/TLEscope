@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <algorithm>
+#include <vector>
 #include <math.h>
 #include <raylib.h>
 #include <raymath.h>
@@ -27,6 +28,7 @@
 #include "ui/imgui_theme.h"
 #include "io/rotator.h"
 #include "data/async_fetch.h"
+#include "data/storage.h"
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
 #include "render/shaders.h"
@@ -238,6 +240,30 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
     }
 }
 
+/** draw a favorite satellite's orbit in 3d using a palette color (lit-up look). */
+static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color color, float alpha, int step)
+{
+    Color orbitColor = ApplyAlpha(color, alpha);
+    if (!sat->orbit_cached)
+        return;
+
+    Vector3 prev_pos = sat->orbit_cache[0];
+    int cache_size = sat->orbit_cache_resolution;
+
+    for (int i = step; i < cache_size; i += step)
+    {
+        Vector3 pos = sat->orbit_cache[i];
+        DrawLine3D(prev_pos, pos, orbitColor);
+        prev_pos = pos;
+    }
+
+    /* draw final segment if needed */
+    if ((cache_size - 1) % step != 0)
+    {
+        DrawLine3D(prev_pos, sat->orbit_cache[cache_size - 1], orbitColor);
+    }
+}
+
 /** simple progress bar during init */
 static void DrawLoadingScreen(float progress, const char *message, Texture2D logoTex)
 {
@@ -433,6 +459,8 @@ int main(void)
     LOG_INFO("Loaded %d manual entries", cfg.manual_entry_count);
     LoadSatSelection(&cfg); // restore active satellites
     LOG_INFO("Satellite selection restored");
+    LoadFavorites("favorites.json"); // restore favorite satellites
+    LOG_INFO("Favorites loaded");
     LoadDataSelections(); // restore data-source shopping-cart selections
     LOG_INFO("Data source selections restored");
 
@@ -1672,8 +1700,12 @@ int main(void)
                             EndShaderMode();
                         };
 
-                        if (gc_mode == LAYERS_GC_MODE_ALL)
+                        if (gc_mode == LAYERS_GC_MODE_ALL || gc_mode == LAYERS_GC_MODE_FAV)
                         {
+                            uint32_t fav_ids[MAX_SATELLITES];
+                            int fav_count = (gc_mode == LAYERS_GC_MODE_FAV)
+                                ? GetFavoriteIds(fav_ids, MAX_SATELLITES) : 0;
+
                             BeginShaderMode(g_coverage_shaders.shader2D);
                             rlBegin(RL_TRIANGLES);
                             for (int i = gc_first; i < gc_last; i++)
@@ -1681,6 +1713,20 @@ int main(void)
                                 const Satellite *sat = &satellites[i];
                                 if (sat == selected_sat || sat == hovered_sat)
                                     continue; /* highlighted in a batch below */
+                                if (gc_mode == LAYERS_GC_MODE_FAV)
+                                {
+                                    bool is_fav = false;
+                                    for (int k = 0; k < fav_count; k++)
+                                    {
+                                        if (sat->norad_id_num == fav_ids[k])
+                                        {
+                                            is_fav = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!is_fav && sat != selected_sat)
+                                        continue;
+                                }
                                 draw_coverage_2d(sat);
                             }
                             rlEnd();
@@ -1703,9 +1749,10 @@ int main(void)
                     }
                 }
 
-                /* Future ground tracks share a fixed propagation budget in Multi mode.
-                 * The focused satellite keeps the original resolution; the remaining
-                 * budget is split across a maximum of eight active tracks in total. */
+                /* Future ground tracks share a fixed propagation budget in Multi/Fav mode.
+                 * The focused satellite keeps the original resolution; the remaining budget
+                 * is split across however many other satellites are in scope (no fixed cap).
+                 * Fav mode draws a track for each favorite satellite in scope. */
                 const bool future_orbits_enabled =
                     ToolSettingGetBool(&cfg, LAYERS_KEY_FUTURE_ORBITS, true);
                 const int future_orbits_mode =
@@ -1713,6 +1760,12 @@ int main(void)
                                       LAYERS_FUTURE_ORBITS_FOCUSED);
                 const bool future_orbits_multi =
                     future_orbits_mode == LAYERS_FUTURE_ORBITS_MULTI;
+                const bool future_orbits_fav =
+                    future_orbits_mode == LAYERS_FUTURE_ORBITS_FAV;
+                /* the focused highlight track is drawn in Sel and Multi scopes only */
+                const bool draw_focused_scope =
+                    future_orbits_mode == LAYERS_FUTURE_ORBITS_FOCUSED ||
+                    future_orbits_multi;
                 const bool focused_track_valid =
                     active_sat && active_sat->is_active && active_sat->mean_motion > 0.0 &&
                     !(is_pov_mode && active_sat == selected_sat);
@@ -1721,25 +1774,29 @@ int main(void)
                 const int requested_future_segments =
                     (int)fminf(4000.0f, fmaxf(50.0f, 400.0f * future_orbit_span));
                 const int future_segment_budget = 6000;
-                int extra_track_limit = future_orbits_multi
-                    ? LAYERS_FUTURE_ORBITS_MAX_TRACKS - (focused_track_valid ? 1 : 0)
-                    : 0;
-                if (extra_track_limit < 0)
-                    extra_track_limit = 0;
 
-                int extra_track_count = 0;
-                if (future_orbits_enabled && future_orbits_multi)
+                /* dynamic set of extra (non-focused) satellites to draw future tracks for.
+                 * Multi = every active satellite in scope, Fav = every favorite, with no
+                 * hard 8-satellite cap on the layer. */
+                std::vector<const Satellite*> extra_track_sats;
+                if (future_orbits_enabled && (future_orbits_multi || future_orbits_fav))
                 {
-                    for (int i = 0; i < sat_count && extra_track_count < extra_track_limit; i++)
+                    extra_track_sats.reserve(sat_count);
+                    for (int i = 0; i < sat_count; i++)
                     {
                         const Satellite *sat = &satellites[i];
-                        if (!sat->is_active || sat->mean_motion <= 0.0 || sat == active_sat)
+                        if (!sat->is_active || sat->mean_motion <= 0.0)
+                            continue;
+                        if (future_orbits_multi && sat == active_sat)
                             continue;
                         if (is_pov_mode && sat == selected_sat)
                             continue;
-                        extra_track_count++;
+                        if (future_orbits_fav && !IsFavorite(sat->norad_id_num) && sat != selected_sat)
+                            continue;
+                        extra_track_sats.push_back(sat);
                     }
                 }
+                const int extra_track_count = (int)extra_track_sats.size();
 
                 int extra_future_segments = requested_future_segments;
                 if (extra_track_count > 0)
@@ -1757,8 +1814,6 @@ int main(void)
                 if (future_orbits_enabled && cfg.highlight_sunlit)
                     future_sun_dir = Vector3Normalize(calculate_sun_position(current_epoch));
 
-                int extra_tracks_drawn = 0;
-
                 /* render all satellites on 2d map */
                 for (int i = 0; i < sat_count; i++)
                 {
@@ -1773,17 +1828,19 @@ int main(void)
                     Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_hover : g_theme.world.sat;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
+                    /* focused highlight track draws in Sel and Multi scopes */
                     bool draw_future_track = false;
                     if (future_orbits_enabled && satellites[i].mean_motion > 0.0 &&
                         !(is_pov_mode && &satellites[i] == selected_sat))
                     {
-                        if (is_hl)
+                        if (is_hl && draw_focused_scope)
                         {
                             draw_future_track = true;
                         }
-                        else if (future_orbits_multi && extra_tracks_drawn < extra_track_count)
+                        else if ((future_orbits_multi || future_orbits_fav) &&
+                                 std::find(extra_track_sats.begin(), extra_track_sats.end(),
+                                           &satellites[i]) != extra_track_sats.end())
                         {
-                            extra_tracks_drawn++;
                             draw_future_track = true;
                         }
                     }
@@ -1865,7 +1922,7 @@ int main(void)
                 Location *home = GetHomeLocation();
                 float hx = home ? (home->lon / 360.0f) * map_w : 0.0f;
                 float hy = home ? -(home->lat / 180.0f) * map_h : 0.0f;
-                if (home)
+                if (home && cfg.show_markers)
                 {
                     for (int offset_i = -1; offset_i <= 1; offset_i++)
                     {
@@ -2065,6 +2122,31 @@ int main(void)
                         }
                     }
                 }
+                else if (gc_mode == LAYERS_GC_MODE_FAV)
+                {
+                    uint32_t fav_ids[MAX_SATELLITES];
+                    int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
+                    for (int i = 0; i < sat_count; i++)
+                    {
+                        if (!satellites[i].is_active)
+                            continue;
+                        bool is_fav = false;
+                        for (int k = 0; k < fav_count; k++)
+                        {
+                            if (satellites[i].norad_id_num == fav_ids[k])
+                            {
+                                is_fav = true;
+                                break;
+                            }
+                        }
+                        if (!is_fav && &satellites[i] != selected_sat)
+                            continue;
+                        if (IsCoverageVisible(&satellites[i], Camera3DParams))
+                        {
+                            visible_sats[visible_count++] = &satellites[i];
+                        }
+                    }
+                }
                 else
                 {
                     /* Sel mode: selected sat, plus hovered as extra highlight */
@@ -2155,6 +2237,36 @@ int main(void)
                 }
                 
                 rlEnableDepthMask();
+            }
+
+            /* lit-up colored orbit paths for favorite satellites (3D only) */
+            if (ToolSettingGetBool(&cfg, LAYERS_KEY_FAV_ORBITS_3D, false))
+            {
+                uint32_t fav_ids[MAX_SATELLITES];
+                int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
+
+                for (int i = 0; i < sat_count; i++)
+                {
+                    if (!satellites[i].is_active)
+                        continue;
+                    if (is_pov_mode && &satellites[i] == selected_sat)
+                        continue;
+                    int fav_index = 0;
+                    bool is_fav = false;
+                    for (int k = 0; k < fav_count; k++)
+                    {
+                        if (satellites[i].norad_id_num == fav_ids[k])
+                        {
+                            is_fav = true;
+                            fav_index = k;
+                            break;
+                        }
+                    }
+                    if (!is_fav && &satellites[i] != selected_sat)
+                        continue;
+                    Color fav_color = MultiGroundTrackColor(fav_index);
+                    draw_orbit_3d_colored(&satellites[i], current_epoch, fav_color, 0.9f, global_orbit_step);
+                }
             }
 
             for (int i = 0; i < sat_count; i++)
@@ -2333,7 +2445,8 @@ int main(void)
             Vector3 h_viewDir = Vector3Normalize(Vector3Subtract(Camera3DParams.position, h_pos));
             Vector3 h_toTarget = Vector3Subtract(h_pos, Camera3DParams.position);
 
-            if (Vector3DotProduct(h_normal, h_viewDir) > 0.0f && Vector3DotProduct(h_toTarget, camForward) > 0.0f)
+            if (cfg.show_markers &&
+                Vector3DotProduct(h_normal, h_viewDir) > 0.0f && Vector3DotProduct(h_toTarget, camForward) > 0.0f)
             {
                 Vector2 sp = GetWorldToScreen(h_pos, Camera3DParams);
                 DrawTexturePro(
@@ -2551,6 +2664,7 @@ int main(void)
     SaveAppConfig("settings.json", &cfg);
 
     SaveDataSelections();
+    SaveFavorites("favorites.json"); /* persist favorite satellites */
     AsyncFetchShutdown();
     RotatorShutdown();
     LogShutdown();

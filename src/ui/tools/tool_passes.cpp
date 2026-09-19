@@ -42,9 +42,9 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
     }
 
     /* ---- 2.1: compact mode selector (single line) ---- */
-    const char *mode_items[] = { "Selected Satellite", "All Active" };
+    const char *mode_items[] = { "Selected Satellite", "All Active", "Favorites" };
     ImGui::SetNextItemWidth(avail_w);
-    if (ImGui::Combo("##pass_mode", &s_mode, mode_items, 2))
+    if (ImGui::Combo("##pass_mode", &s_mode, mode_items, 3))
         ToolSettingSetInt(cfg, "passes.mode", s_mode);
 
     ImGui::SetNextItemWidth(avail_w);
@@ -77,8 +77,10 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
     {
         if (s_mode == 0 && *ctx->selected_sat)
             CalculatePasses(*ctx->selected_sat, now);
+        else if (s_mode == 1)
+            CalculatePasses(NULL, now); /* all active satellites */
         else
-            CalculatePasses(NULL, now);
+            CalculatePassesFavorites(*ctx->selected_sat, now); /* favorites + selection */
         s_last_calc_epoch = now;
     }
 

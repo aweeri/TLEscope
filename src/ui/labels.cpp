@@ -20,6 +20,7 @@
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/location.h"
+#include "data/storage.h"
 #include "ui/tools/tools_settings.h"
 
 #include <raylib.h>
@@ -70,9 +71,10 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     if (!enabled) return;
 
     int mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
-    /* normalize: only Sel (0) and All (1) are valid now; treat legacy values
-     * (e.g. the old "None" = 2) as the default Sel scope */
-    if (mode != LABELS_MODE_ALL) mode = LABELS_MODE_SELECTED_ONLY;
+    /* normalize: only Sel (0), All (1), and Fav (2) are valid now; treat other
+     * legacy values (e.g. the old "None" = 2) as the default Sel scope */
+    if (mode != LABELS_MODE_ALL && mode != LABELS_MODE_FAV)
+        mode = LABELS_MODE_SELECTED_ONLY;
     bool show_alt = ToolSettingGetBool(cfg, LABELS_KEY_ALTITUDE, false);
     float size_mult = ToolSettingGetFloat(cfg, LABELS_KEY_SIZE, 1.0f);
     if (size_mult < 0.25f) size_mult = 0.25f;
@@ -149,8 +151,11 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         bool is_hovered = (hovered == &s);
         bool is_active = (active == &s);
 
-        /* Sel mode: only the selected satellite gets a label */
-        if (mode == LABELS_MODE_SELECTED_ONLY && !is_selected) continue;
+        /* Sel mode: only the selected satellite gets a label (hovered always shows) */
+        if (mode == LABELS_MODE_SELECTED_ONLY && !is_selected && !is_hovered) continue;
+
+        /* Fav mode: favorite satellites get a label, plus the selected one (hovered always shows) */
+        if (mode == LABELS_MODE_FAV && !IsFavorite(s.norad_id_num) && !is_selected && !is_hovered) continue;
 
         /* respect hide-unselected isolation */
         if (hide_unselected && selected != NULL && !is_selected) continue;

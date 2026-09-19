@@ -90,6 +90,7 @@ static const LayerDef s_layers[] = {
     { "Clouds",            ICON_FA_CLOUD,       "Show cloud layer (C)", LAYER_3D, (int)offsetof(AppConfig, show_clouds), NULL, false, NULL, false },
     { "Scattering",        ICON_FA_SUN,         "Atmospheric scattering effect", LAYER_3D, (int)offsetof(AppConfig, show_scattering), NULL, false, NULL, false },
     { "Skybox",            ICON_FA_STAR,        "Show starfield skybox", LAYER_3D, (int)offsetof(AppConfig, show_skybox), NULL, false, NULL, false },
+    { "Favorite Orbits",   ICON_FA_STAR,        "Show lit-up colored orbit paths for favorite satellites", LAYER_3D, -1, LAYERS_KEY_FAV_ORBITS_3D, false, NULL, false },
 };
 
 #define LAYER_COUNT (sizeof(s_layers) / sizeof(s_layers[0]))
@@ -154,18 +155,18 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         if (val != prev)
             SetLayerValue(def, val);
 
-        /* optional right-aligned Sel/All scope combo, mirroring the Labels row */
+        /* optional right-aligned Sel/All/Fav scope combo, mirroring the Labels row */
         if (def->mode_key)
         {
-            const float combo_w = 60.0f;
+            const float combo_w = 74.0f;
             ImGui::SameLine(row_avail - combo_w);
             ImGui::SetNextItemWidth(combo_w);
             int mode = ToolSettingGetInt(cfg, def->mode_key, LAYERS_GC_MODE_SELECTED);
-            const char *modes[] = { "Sel", "All" };
-            if (ImGui::Combo("##layer_mode", &mode, modes, 2))
+            const char *modes[] = { "Sel", "All", "Fav" };
+            if (ImGui::Combo("##layer_mode", &mode, modes, 3))
                 ToolSettingSetInt(cfg, def->mode_key, mode);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Sel: only the active satellite's footprint; All: footprints for all active satellites");
+                ImGui::SetTooltip("Sel: only the active satellite's footprint; All: footprints for all active satellites; Fav: footprints for favorite satellites");
         }
     };
 
@@ -175,7 +176,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         if (s_layers[i].scope == LAYER_UNIVERSAL)
             DrawLayerDef(&s_layers[i]);
 
-    /* Labels layer: master toggle + Sel/All scope dropdown (see labels.h / labels.cpp) */
+    /* Labels layer: master toggle + Sel/All/Fav scope dropdown (see labels.h / labels.cpp) */
     bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
     bool labels_prev = labels_enabled;
     float labels_row_avail = ImGui::GetContentRegionAvail().x; /* full row width, for right-aligning the combo */
@@ -183,15 +184,16 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     if (labels_enabled != labels_prev)
         ToolSettingSetBool(cfg, LABELS_KEY_ENABLED, labels_enabled);
 
-    const float combo_w = 60.0f;
-    ImGui::SameLine(labels_row_avail - combo_w);
-    ImGui::SetNextItemWidth(combo_w);
+    ImGui::SameLine(labels_row_avail - 74.0f);
+    ImGui::SetNextItemWidth(74.0f);
     int label_mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
-    const char *modes[] = { "Sel", "All" };
-    if (ImGui::Combo("##label_mode", &label_mode, modes, 2))
+    const char *modes[] = { "Sel", "All", "Fav" };
+    if (ImGui::Combo("##label_mode", &label_mode, modes, 3))
         ToolSettingSetInt(cfg, LABELS_KEY_MODE, label_mode);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Sel: only the selected satellite's label; All: labels for all active satellites");
+        ImGui::SetTooltip("Sel: only the selected satellite's label; All: labels for all active satellites; Fav: labels for favorite satellites");
+
+    const float combo_w = 60.0f; /* width for the grid-spacing combo below */
 
     /* -- current view's exclusive layers ------------------------------------ */
     const LayerScope active_scope = is_2d ? LAYER_2D : LAYER_3D;
@@ -218,7 +220,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
     if (is_2d)
     {
-        /* Future Orbits: master toggle + focused/multi scope + orbit span. */
+        /* Future Orbits: master toggle + focused/multi/fav scope + orbit span. */
         bool future_orbits_enabled = ToolSettingGetBool(cfg, LAYERS_KEY_FUTURE_ORBITS, true);
         bool future_orbits_prev = future_orbits_enabled;
         float future_row_avail = ImGui::GetContentRegionAvail().x;
@@ -240,18 +242,18 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
         ImGui::BeginDisabled(!future_orbits_enabled);
 
-        ImGui::SameLine(future_row_avail - combo_w);
-        ImGui::SetNextItemWidth(combo_w);
+        ImGui::SameLine(future_row_avail - 74.0f);
+        ImGui::SetNextItemWidth(74.0f);
         int future_mode = ToolSettingGetInt(
             cfg, LAYERS_KEY_FUTURE_ORBITS_MODE, LAYERS_FUTURE_ORBITS_FOCUSED);
-        const char *future_modes[] = { "Sel", "Multi" };
-        if (ImGui::Combo("##future_orbits_mode", &future_mode, future_modes, 2))
+        const char *future_modes[] = { "Sel", "Multi", "Fav" };
+        if (ImGui::Combo("##future_orbits_mode", &future_mode, future_modes, 3))
             ToolSettingSetInt(cfg, LAYERS_KEY_FUTURE_ORBITS_MODE, future_mode);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(
                 "Sel: hovered satellite, otherwise selected satellite; "
-                "Multi: up to %d active satellite tracks total",
-                LAYERS_FUTURE_ORBITS_MAX_TRACKS);
+                "Multi: all active satellite tracks; "
+                "Fav: favorite satellite tracks");
 
         ImGui::Indent(icon_w);
         int orbit_quarters = (int)roundf(cfg->orbits_to_draw * 4.0f);

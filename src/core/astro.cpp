@@ -653,6 +653,160 @@ int compare_passes(const void *a, const void *b)
     return 0;
 }
 
+/** predict passes for a single satellite; appends results to the global list */
+static void CalculatePassesForSat(Satellite *current_sat, double start_epoch, double coarse_step)
+{
+    Location *home = GetHomeLocation();
+    if (!home || !current_sat || !current_sat->is_active)
+        return;
+
+    /* prediction window from the configurable time span (ROADMAP 12.3) */
+    double span_days = (double)pass_time_span_hours / 24.0;
+    if (span_days < 0.1) span_days = 0.1;
+    int max_days = (int)ceil(span_days);
+
+    double t = start_epoch;
+    double t_unix = get_unix_from_epoch(t);
+    double gmst = epoch_to_gmst(t);
+    double az, el;
+
+    get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
+
+    /* back up if we're already in a pass to catch the true start */
+    if (el >= pass_min_elev)
+    {
+        for (int i = 0; i < 30 && el >= pass_min_elev; i++)
+        {
+            t -= (1.0 / 1440.0);
+            t_unix = get_unix_from_epoch(t);
+            gmst = epoch_to_gmst(t);
+            get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
+        }
+    }
+
+    bool in_pass = false;
+    SatPass current_pass = {0};
+    current_pass.sat = current_sat;
+
+    int steps = (max_days * 1440) / (coarse_step * 1440.0);
+    for (int i = 0; i < steps && num_passes < MAX_PASSES; i++)
+    {
+        t_unix = get_unix_from_epoch(t);
+        gmst = epoch_to_gmst(t);
+        get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
+
+        if (el >= pass_min_elev)
+        {
+            if (!in_pass)
+            {
+                in_pass = true;
+                /* binary search to find exact AOS, 1min stepping is too coarse for radio */
+                double t_low = t - coarse_step;
+                double t_high = t;
+                for (int b = 0; b < 10; b++)
+                {
+                    double t_mid = (t_low + t_high) / 2.0;
+                    double mid_unix = get_unix_from_epoch(t_mid);
+                    double mid_gmst = epoch_to_gmst(t_mid);
+                    double mid_az, mid_el;
+                    get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
+                    if (mid_el >= pass_min_elev)
+                        t_high = t_mid;
+                    else
+                        t_low = t_mid;
+                }
+
+                current_pass.aos_epoch = t_high;
+                current_pass.max_el = el;
+                current_pass.max_el_epoch = t;
+            }
+            if (el > current_pass.max_el)
+            {
+                current_pass.max_el = el;
+                current_pass.max_el_epoch = t;
+            }
+        }
+        else
+        {
+            if (in_pass)
+            {
+                in_pass = false;
+                /* binary search to find exact LOS crossing */
+                double t_low = t - coarse_step;
+                double t_high = t;
+                for (int b = 0; b < 10; b++)
+                {
+                    double t_mid = (t_low + t_high) / 2.0;
+                    double mid_unix = get_unix_from_epoch(t_mid);
+                    double mid_gmst = epoch_to_gmst(t_mid);
+                    double mid_az, mid_el;
+                    get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
+                    if (mid_el < pass_min_elev)
+                        t_high = t_mid;
+                    else
+                        t_low = t_mid;
+                }
+
+                current_pass.los_epoch = t_low;
+
+                current_pass.num_pts = 0;
+                double step = (current_pass.los_epoch - current_pass.aos_epoch) / 399.0;
+                if (step > 0)
+                {
+                    current_pass.max_el = -90.0f; /* reset to find true max during high-res pass */
+                    for (int k = 0; k < 400; k++)
+                    {
+                        double pt = current_pass.aos_epoch + k * step;
+                        double pt_unix = get_unix_from_epoch(pt);
+                        double p_gmst = epoch_to_gmst(pt);
+                        double p_az, p_el;
+                        get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
+                        current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
+                        
+                        /* make sure we pinpoint the max elevation */
+                        if (p_el > current_pass.max_el)
+                        {
+                            current_pass.max_el = (float)p_el;
+                            current_pass.max_el_epoch = pt;
+                        }
+                    }
+                }
+                passes[num_passes++] = current_pass;
+                current_pass = (SatPass){0};
+                current_pass.sat = current_sat;
+            }
+        }
+        t += coarse_step;
+    }
+
+    if (in_pass && num_passes < MAX_PASSES)
+    {
+        current_pass.los_epoch = t;
+        current_pass.num_pts = 0;
+        double step = (current_pass.los_epoch - current_pass.aos_epoch) / 399.0;
+        if (step > 0)
+        {
+            current_pass.max_el = -90.0f;
+            for (int k = 0; k < 400; k++)
+            {
+                double pt = current_pass.aos_epoch + k * step;
+                double pt_unix = get_unix_from_epoch(pt);
+                double p_gmst = epoch_to_gmst(pt);
+                double p_az, p_el;
+                get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
+                current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
+                
+                if (p_el > current_pass.max_el)
+                {
+                    current_pass.max_el = (float)p_el;
+                    current_pass.max_el_epoch = pt;
+                }
+            }
+        }
+        passes[num_passes++] = current_pass;
+    }
+}
+
 /** heavy lifting for pass prediction; brute force search with binary search refinement */
 void CalculatePasses(Satellite *sat, double start_epoch)
 {
@@ -662,161 +816,55 @@ void CalculatePasses(Satellite *sat, double start_epoch)
              sat ? sat->name : "ALL satellites", start_epoch);
 
     int target_count = sat ? 1 : sat_count;
-    /* prediction window from the configurable time span (ROADMAP 12.3) */
-    double span_days = (double)pass_time_span_hours / 24.0;
-    if (span_days < 0.1) span_days = 0.1;
-    int max_days = (int)ceil(span_days);
     double coarse_step = sat ? (1.0 / 1440.0) : (4.0 / 1440.0);
-
-    Location *home = GetHomeLocation();
-    if (!home)
-        return;
 
     for (int s = 0; s < target_count; s++)
     {
         Satellite *current_sat = sat ? sat : &satellites[s];
-        if (!current_sat || !current_sat->is_active)
-            continue;
+        CalculatePassesForSat(current_sat, start_epoch, coarse_step);
+    }
 
-        double t = start_epoch;
-        double t_unix = get_unix_from_epoch(t);
-        double gmst = epoch_to_gmst(t);
-        double az, el;
+    /* sort passes chronologically so the list actually makes sense */
+    qsort(passes, num_passes, sizeof(SatPass), compare_passes);
+    LOG_INFO("Pass calculation complete: %d passes found", num_passes);
+}
 
-        get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
+/** predict passes for every favorite satellite (plus the selected one) and append them to the list */
+void CalculatePassesFavorites(Satellite *selected, double start_epoch)
+{
+    num_passes = 0;
+    last_pass_calc_sat = NULL;
+    LOG_INFO("Calculating passes for all favorites + selection starting at epoch %.2f", start_epoch);
 
-        /* back up if we're already in a pass to catch the true start */
-        if (el >= pass_min_elev)
+    uint32_t fav_ids[MAX_SATELLITES];
+    const int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
+    const double coarse_step = 4.0 / 1440.0;
+
+    /* the currently selected satellite is included even if it is not a favorite */
+    if (selected && selected->is_active)
+    {
+        bool is_fav = false;
+        for (int f = 0; f < fav_count; f++)
         {
-            for (int i = 0; i < 30 && el >= pass_min_elev; i++)
+            if (selected->norad_id_num == fav_ids[f])
             {
-                t -= (1.0 / 1440.0);
-                t_unix = get_unix_from_epoch(t);
-                gmst = epoch_to_gmst(t);
-                get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
+                is_fav = true;
+                break;
             }
         }
+        if (!is_fav)
+            CalculatePassesForSat(selected, start_epoch, coarse_step);
+    }
 
-        bool in_pass = false;
-        SatPass current_pass = {0};
-        current_pass.sat = current_sat;
-
-        int steps = (max_days * 1440) / (coarse_step * 1440.0);
-        for (int i = 0; i < steps && num_passes < MAX_PASSES; i++)
+    for (int f = 0; f < fav_count; f++)
+    {
+        for (int s = 0; s < sat_count; s++)
         {
-            t_unix = get_unix_from_epoch(t);
-            gmst = epoch_to_gmst(t);
-            get_az_el(calculate_position(current_sat, t_unix), gmst, home->lat, home->lon, home->alt, &az, &el);
-
-            if (el >= pass_min_elev)
+            if (satellites[s].norad_id_num == fav_ids[f] && satellites[s].is_active)
             {
-                if (!in_pass)
-                {
-                    in_pass = true;
-                    /* binary search to find exact AOS, 1min stepping is too coarse for radio */
-                    double t_low = t - coarse_step;
-                    double t_high = t;
-                    for (int b = 0; b < 10; b++)
-                    {
-                        double t_mid = (t_low + t_high) / 2.0;
-                        double mid_unix = get_unix_from_epoch(t_mid);
-                        double mid_gmst = epoch_to_gmst(t_mid);
-                        double mid_az, mid_el;
-                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
-                        if (mid_el >= pass_min_elev)
-                            t_high = t_mid;
-                        else
-                            t_low = t_mid;
-                    }
-
-                    current_pass.aos_epoch = t_high;
-                    current_pass.max_el = el;
-                    current_pass.max_el_epoch = t;
-                }
-                if (el > current_pass.max_el)
-                {
-                    current_pass.max_el = el;
-                    current_pass.max_el_epoch = t;
-                }
+                CalculatePassesForSat(&satellites[s], start_epoch, coarse_step);
+                break;
             }
-            else
-            {
-                if (in_pass)
-                {
-                    in_pass = false;
-                    /* binary search to find exact LOS crossing */
-                    double t_low = t - coarse_step;
-                    double t_high = t;
-                    for (int b = 0; b < 10; b++)
-                    {
-                        double t_mid = (t_low + t_high) / 2.0;
-                        double mid_unix = get_unix_from_epoch(t_mid);
-                        double mid_gmst = epoch_to_gmst(t_mid);
-                        double mid_az, mid_el;
-                        get_az_el(calculate_position(current_sat, mid_unix), mid_gmst, home->lat, home->lon, home->alt, &mid_az, &mid_el);
-                        if (mid_el < pass_min_elev)
-                            t_high = t_mid;
-                        else
-                            t_low = t_mid;
-                    }
-
-                    current_pass.los_epoch = t_low;
-
-                    current_pass.num_pts = 0;
-                    double step = (current_pass.los_epoch - current_pass.aos_epoch) / 399.0;
-                    if (step > 0)
-                    {
-                        current_pass.max_el = -90.0f; /* reset to find true max during high-res pass */
-                        for (int k = 0; k < 400; k++)
-                        {
-                            double pt = current_pass.aos_epoch + k * step;
-                            double pt_unix = get_unix_from_epoch(pt);
-                            double p_gmst = epoch_to_gmst(pt);
-                            double p_az, p_el;
-                            get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
-                            current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
-                            
-                            /* make sure we pinpoint the max elevation */
-                            if (p_el > current_pass.max_el)
-                            {
-                                current_pass.max_el = (float)p_el;
-                                current_pass.max_el_epoch = pt;
-                            }
-                        }
-                    }
-                    passes[num_passes++] = current_pass;
-                    current_pass = (SatPass){0};
-                    current_pass.sat = current_sat;
-                }
-            }
-            t += coarse_step;
-        }
-
-        if (in_pass && num_passes < MAX_PASSES)
-        {
-            current_pass.los_epoch = t;
-            current_pass.num_pts = 0;
-            double step = (current_pass.los_epoch - current_pass.aos_epoch) / 399.0;
-            if (step > 0)
-            {
-                current_pass.max_el = -90.0f;
-                for (int k = 0; k < 400; k++)
-                {
-                    double pt = current_pass.aos_epoch + k * step;
-                    double pt_unix = get_unix_from_epoch(pt);
-                    double p_gmst = epoch_to_gmst(pt);
-                    double p_az, p_el;
-                    get_az_el(calculate_position(current_sat, pt_unix), p_gmst, home->lat, home->lon, home->alt, &p_az, &p_el);
-                    current_pass.path_pts[current_pass.num_pts++] = (Vector2){(float)p_az, (float)p_el};
-                    
-                    if (p_el > current_pass.max_el)
-                    {
-                        current_pass.max_el = (float)p_el;
-                        current_pass.max_el_epoch = pt;
-                    }
-                }
-            }
-            passes[num_passes++] = current_pass;
         }
     }
 

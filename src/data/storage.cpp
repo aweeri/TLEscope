@@ -285,3 +285,117 @@ bool LoadSourceState(const char *filename, DataSourceState *sources, int *count,
     *count = loaded;
     return loaded > 0;
 }
+
+// -- Favorites Persistence ---------------------------------------------------
+// In-memory set of favorite NORAD catalog numbers, loaded/saved as a JSON
+// array of numeric ids (mirrors SaveSourceState/LoadSourceState style).
+
+static uint32_t s_fav_ids[MAX_SATELLITES];
+static int s_fav_count = 0;
+
+int LoadFavorites(const char *filename)
+{
+    s_fav_count = 0;
+    if (!FileExists(filename))
+        return 0;
+
+    char *text = LoadFileText(filename);
+    if (!text)
+        return 0;
+
+    nlohmann::json root;
+    try
+    {
+        root = nlohmann::json::parse(text);
+    }
+    catch (const std::exception &)
+    {
+        UnloadFileText(text);
+        return 0;
+    }
+    UnloadFileText(text);
+
+    if (!root.is_object())
+        return 0;
+    auto favs = root.find("favorites");
+    if (favs == root.end() || !favs->is_array())
+        return 0;
+
+    for (size_t i = 0; i < favs->size() && s_fav_count < MAX_SATELLITES; i++)
+    {
+        if (favs->at(i).is_number_unsigned())
+            s_fav_ids[s_fav_count++] = (uint32_t)favs->at(i).get<uint64_t>();
+        else if (favs->at(i).is_number_integer())
+            s_fav_ids[s_fav_count++] = (uint32_t)favs->at(i).get<int64_t>();
+    }
+
+    LOG_INFO("Loaded %d favorites from %s", s_fav_count, filename);
+    return s_fav_count;
+}
+
+bool SaveFavorites(const char *filename)
+{
+    nlohmann::json root = nlohmann::json::object();
+    root["version"] = 1;
+    nlohmann::json arr = nlohmann::json::array();
+    for (int i = 0; i < s_fav_count; i++)
+        arr.push_back(s_fav_ids[i]);
+    root["favorites"] = arr;
+
+    FILE *f = fopen(filename, "w");
+    if (!f)
+    {
+        LOG_ERROR("Failed to save favorites to %s", filename);
+        return false;
+    }
+    LOG_INFO("Saving %d favorites to %s", s_fav_count, filename);
+
+    std::string out = root.dump(2);
+    fwrite(out.c_str(), 1, out.size(), f);
+    fwrite("\n", 1, 1, f);
+    fclose(f);
+    return true;
+}
+
+bool IsFavorite(uint32_t norad_id)
+{
+    for (int i = 0; i < s_fav_count; i++)
+    {
+        if (s_fav_ids[i] == norad_id)
+            return true;
+    }
+    return false;
+}
+
+void SetFavorite(uint32_t norad_id, bool fav)
+{
+    for (int i = 0; i < s_fav_count; i++)
+    {
+        if (s_fav_ids[i] == norad_id)
+        {
+            if (!fav)
+            {
+                /* remove by shifting the tail into the gap */
+                for (int j = i; j < s_fav_count - 1; j++)
+                    s_fav_ids[j] = s_fav_ids[j + 1];
+                s_fav_count--;
+            }
+            return;
+        }
+    }
+    if (fav && s_fav_count < MAX_SATELLITES)
+        s_fav_ids[s_fav_count++] = norad_id;
+}
+
+int FavoriteCount(void)
+{
+    return s_fav_count;
+}
+
+int GetFavoriteIds(uint32_t *out, int max)
+{
+    int n = (s_fav_count < max) ? s_fav_count : max;
+    for (int i = 0; i < n; i++)
+        out[i] = s_fav_ids[i];
+    return n;
+}

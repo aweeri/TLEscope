@@ -9,16 +9,46 @@
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
+#include "data/storage.h"
 
 #include <cstdio>
 #include <cstring>
 #include <cctype>
 #include <cmath>
+#include <vector>
 
 #include <raylib.h>
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
+
+/* -- Favorites star rendering ---------------------------------------------- */
+
+static constexpr float kPi = 3.14159265358979323846f;
+
+static void DrawStarHollow(ImDrawList *dl, ImVec2 c, float R, ImU32 col)
+{
+    float r = R * 0.382f;
+    for (int k = 0; k < 10; k++)
+    {
+        float ang = -kPi / 2.0f + (float)k * kPi / 5.0f;
+        float rad = (k % 2 == 0) ? R : r;
+        dl->PathLineTo(ImVec2(c.x + cosf(ang) * rad, c.y + sinf(ang) * rad));
+    }
+    dl->PathStroke(col, ImDrawFlags_Closed, 1.5f);
+}
+
+static void DrawStarFilled(ImDrawList *dl, ImVec2 c, float R, ImU32 col)
+{
+    float r = R * 0.382f;
+    for (int k = 0; k < 10; k++)
+    {
+        float ang = -kPi / 2.0f + (float)k * kPi / 5.0f;
+        float rad = (k % 2 == 0) ? R : r;
+        dl->PathLineTo(ImVec2(c.x + cosf(ang) * rad, c.y + sinf(ang) * rad));
+    }
+    dl->PathFillConcave(col);
+}
 
 void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 {
@@ -116,21 +146,63 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     float list_h = fminf(fminf(content_h, max_list_h), avail_h);
     ImGui::BeginChild("##SatList", ImVec2(0.0f, list_h));
 
-    for (int i = 0; i < sat_count; i++)
+    /* build the display order: favorites first, preserving insertion order
+     * within each group, so starred sats always sit at the top of the list */
+    std::vector<int> order;
+    order.reserve(sat_count);
+    for (int pass = 0; pass < 2; pass++)
     {
-        /* skip empty/invalid entries (name must be non-empty and have a valid NORAD ID) */
-        if (satellites[i].name[0] == '\0' || satellites[i].norad_id[0] == '\0')
-            continue;
+        for (int i = 0; i < sat_count; i++)
+        {
+            if (satellites[i].name[0] == '\0' || satellites[i].norad_id[0] == '\0')
+                continue;
+            if (active_only && !satellites[i].is_active)
+                continue;
+            if (search_active && !str_contains_ic(satellites[i].name, search_buf))
+                continue;
+            bool fav = IsFavorite(satellites[i].norad_id_num);
+            if ((pass == 0 && fav) || (pass == 1 && !fav))
+                order.push_back(i);
+        }
+    }
 
-        if (active_only && !satellites[i].is_active)
-            continue;
+    const ImU32 dim = ImGui::GetColorU32(ThemeColor(g_theme.ui.text_dim));
+    const ImU32 fav_yellow = ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.1f, 1.0f));
 
-        /* case-insensitive search matching */
-        if (search_active && !str_contains_ic(satellites[i].name, search_buf))
-            continue;
-
+    for (size_t oi = 0; oi < order.size(); oi++)
+    {
+        int i = order[oi];
         bool active = satellites[i].is_active;
+        bool fav = IsFavorite(satellites[i].norad_id_num);
+
         ImGui::PushID(i);
+
+        /* favorite star toggle: hollow grey while hovered, filled yellow once set */
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImVec2 frame = ImVec2(20.0f, 20.0f);
+        ImVec2 star_center = ImVec2(p.x + frame.x * 0.5f, p.y + frame.y * 0.5f);
+        bool hovered = ImGui::IsMouseHoveringRect(p, ImVec2(p.x + frame.x, p.y + frame.y));
+
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        if (fav)
+        {
+            DrawStarFilled(dl, star_center, 7.0f, fav_yellow);
+        }
+        else if (hovered)
+        {
+            DrawStarHollow(dl, star_center, 7.0f, dim);
+        }
+
+        ImGui::InvisibleButton("##fav", frame);
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        {
+            bool now_fav = !fav;
+            SetFavorite(satellites[i].norad_id_num, now_fav);
+            SaveFavorites("favorites.json");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(fav ? "Remove from favorites" : "Add to favorites");
+        ImGui::SameLine();
 
         /* checkbox for active state */
         if (ImGui::Checkbox("##active", &satellites[i].is_active))
