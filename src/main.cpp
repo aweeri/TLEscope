@@ -7,9 +7,7 @@
 #include <rlgl.h>
 
 // edited with nano
-/* Raw GL entry point(s) for the night-mode backbuffer copy
- * (glGenTextures/glTexImage2D/glCopyTexSubImage2D). rlgl.h only pulls in the
- * GLAD loader inside its implementation unit, so expose it here as well. */
+
 #include <external/glad.h>
 #include <stdio.h>
 #include <stdlib.h>
