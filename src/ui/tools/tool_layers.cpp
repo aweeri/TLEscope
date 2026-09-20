@@ -110,7 +110,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             if (ImGui::Checkbox("##orbits_dimmed", &dimmed_on))
                 ToolSettingSetBool(cfg, LAYERS_KEY_ORBITS_DIMMED, dimmed_on);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Draw unselected (dimmed) orbit lines");
+                ImGui::SetTooltip("Draw unselected satellite orbit lines faded (dimmed) behind the focused satellite (applies to both 2D and 3D)");
             ImGui::SameLine();
 
             bool fav_on = ToolSettingGetBool(cfg, LAYERS_KEY_FAV_ORBITS_3D, false);

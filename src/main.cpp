@@ -1791,10 +1791,8 @@ int main(void)
                 const int sunlit_scope =
                     ToolSettingGetInt(&cfg, LAYERS_KEY_ORBITS_SUNLIT_SCOPE,
                                       LAYERS_ORBITS_SUNLIT_SELECTED);
-                /* the focused highlight track always draws; the rest follow the same
-                 * on/off scope as the 3D view (fav-color or dimmed both enable extras) */
-                const bool extra_orbits_enabled =
-                    orbits_dimmed || orbits_fav_colored;
+
+                const bool extra_orbits_enabled = orbits_dimmed || orbits_fav_colored;
                 const bool focused_track_valid =
                     active_sat && active_sat->is_active && active_sat->mean_motion > 0.0 &&
                     !(is_pov_mode && active_sat == selected_sat);
@@ -1807,13 +1805,17 @@ int main(void)
                     (int)fminf(4000.0f, fmaxf(50.0f, 400.0f * future_orbit_span));
                 const int future_segment_budget = 6000;
 
-                /* dynamic set of extra (non-focused) satellites to draw future tracks for.
-                 * Multi = every active satellite in scope, Fav = every favorite, with no
-                 * hard 8-satellite cap on the layer. */
+                /* dynamic set of extra (non-focused) satellites to draw future tracks
+                 * for: favourites are coloured with their palette colour when the
+                 * fav-color toggle is on; every other in-scope satellite gets a dimmed
+                 * orbit when the dimmed toggle is on. extra_track_is_fav is kept in
+                 * lockstep so the draw pass can tell the two tiers apart. */
                 std::vector<const Satellite*> extra_track_sats;
+                std::vector<bool> extra_track_is_fav;
                 if (future_orbits_enabled && extra_orbits_enabled)
                 {
                     extra_track_sats.reserve(sat_count);
+                    extra_track_is_fav.reserve(sat_count);
                     for (int i = 0; i < sat_count; i++)
                     {
                         const Satellite *sat = &satellites[i];
@@ -1824,16 +1826,21 @@ int main(void)
                         if (is_pov_mode && sat == selected_sat)
                             continue;
                         const bool is_fav = IsFavorite(sat->norad_id_num);
-                        const bool is_unselected = (selected_sat != NULL && sat != selected_sat);
-                        /* fav-colored orbits draw when fav-color is on; dimmed
-                         * unselected orbits draw when the dimmed toggle is on */
+                        /* fav-colored extras: only when the fav-color toggle is on */
                         if (orbits_fav_colored && is_fav)
                         {
                             extra_track_sats.push_back(sat);
-                            continue;
+                            extra_track_is_fav.push_back(true);
+                            continue; /* fav wins over dimmed; skip dimmed for this sat */
                         }
-                        if (orbits_dimmed && is_unselected)
+                        /* dimmed unselected orbits: driven directly by the dimmed toggle,
+                         * so the toggle always works and dimmed orbits appear regardless
+                         * of any selection. */
+                        if (orbits_dimmed)
+                        {
                             extra_track_sats.push_back(sat);
+                            extra_track_is_fav.push_back(false);
+                        }
                     }
                 }
                 const int extra_track_count = (int)extra_track_sats.size();
@@ -1865,7 +1872,6 @@ int main(void)
                         continue;
 
                     bool is_hl = (active_sat == &satellites[i]);
-                    bool is_fav_track = IsFavorite(satellites[i].norad_id_num);
                     Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_hover : g_theme.world.sat;
                     sCol = ApplyAlpha(sCol, sat_alpha);
 
@@ -1887,7 +1893,7 @@ int main(void)
                         else if (std::find(extra_track_sats.begin(), extra_track_sats.end(),
                                            &satellites[i]) != extra_track_sats.end())
                         {
-                            draw_future_track = true; /* fav-colored / dimmed extra track */
+                            draw_future_track = true; /* extra (fav-colored/dimmed) track */
                         }
                     }
 
@@ -1897,8 +1903,20 @@ int main(void)
                         Vector2 track_pts[4001];
                         bool is_sunlit_arr[4001];
 
+                        /* look up whether this extra track is fav-colored vs dimmed
+                         * (the index is guaranteed valid because the satellite is in
+                         * extra_track_sats, and extra_track_is_fav is kept in lockstep). */
+                        const auto extra_it = std::find(extra_track_sats.begin(),
+                                                        extra_track_sats.end(), &satellites[i]);
+                        const bool extra_is_fav_color =
+                            extra_it != extra_track_sats.end() &&
+                            extra_track_is_fav[(size_t)(extra_it - extra_track_sats.begin())];
+                        /* fav-colored extras use their palette color; dimmed extras use
+                         * the orbit color; the focused highlight uses the active color. */
                         const Color track_color = ApplyAlpha(
-                            is_hl ? g_theme.world.orbit_active : MultiGroundTrackColor(i),
+                            is_hl ? g_theme.world.orbit_active
+                                  : (extra_is_fav_color ? MultiGroundTrackColor(i)
+                                                        : g_theme.world.orbit),
                             sat_alpha);
 
                         double period_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
@@ -1927,7 +1945,8 @@ int main(void)
                                     Color drawCol = track_color;
                                     if (cfg.highlight_sunlit && apply_sunlit && is_sunlit_arr[j])
                                         drawCol = ApplyAlpha(g_theme.world.sat_hover, sat_alpha);
-                                    float track_w = (is_fav_track ? 4.0f : 2.0f) / Camera2DParams.zoom;
+                                    float track_w = is_hl ? 2.0f : (extra_is_fav_color ? 1.5f : 1.0f);
+                                    track_w /= Camera2DParams.zoom;
                                     DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, track_w, drawCol);
                                 }
                             }
