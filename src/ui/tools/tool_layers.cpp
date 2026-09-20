@@ -26,11 +26,8 @@
 
 /* -- Layer registry -------------------------------------------------------- */
 
-/* persisted map overlay keys (ToolSettings store, see tools_settings.h) */
-#define GRID_KEY_ENABLED "layers.latlon_grid"
+/* persisted grid spacing key (ToolSettings store, see tools_settings.h) */
 #define GRID_KEY_SPACING "layers.latlon_grid_spacing"
-#define COAST_KEY_ENABLED "layers.coast_lines"
-#define BORDER_KEY_ENABLED "layers.country_borders"
 
 static const int GRID_SPACINGS[] = { 10, 15, 30, 45, 60 };
 static const char *GRID_SPACING_LABELS[] = { "10°", "15°", "30°", "45°", "60°" };
@@ -190,34 +187,34 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 
         /* Coast Lines */
         {
-            bool val = ToolSettingGetBool(cfg, COAST_KEY_ENABLED, true);
+            bool val = cfg->show_coast_lines;
             bool prev = val;
             DrawLayerCheckbox("Coast Lines", &val, ICON_FA_WATER,
                               "Show coastline outlines on the map and globe (2D and 3D)");
             if (val != prev)
-                ToolSettingSetBool(cfg, COAST_KEY_ENABLED, val);
+                cfg->show_coast_lines = val;
         }
 
         /* Country Borders */
         {
-            bool val = ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false);
+            bool val = cfg->show_country_borders;
             bool prev = val;
             DrawLayerCheckbox("Country Borders", &val, ICON_FA_DRAW_POLYGON,
                               "Show country borders on the map and globe (2D and 3D)");
             if (val != prev)
-                ToolSettingSetBool(cfg, BORDER_KEY_ENABLED, val);
+                cfg->show_country_borders = val;
         }
 
         /* Grid (2D and 3D) + spacing combo */
         {
             const float combo_w = 60.0f;
             float row_avail = ImGui::GetContentRegionAvail().x;
-            bool val = ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false);
+            bool val = cfg->show_latlon_grid;
             bool prev = val;
             DrawLayerCheckbox("Grid", &val, ICON_FA_GRIP_LINES,
                               "Show a latitude/longitude grid on the map and globe.\n2D and 3D.");
             if (val != prev)
-                ToolSettingSetBool(cfg, GRID_KEY_ENABLED, val);
+                cfg->show_latlon_grid = val;
 
             ImGui::BeginDisabled(!val);
             ImGui::SameLine(row_avail - combo_w);
@@ -249,7 +246,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
         ImGui::Indent();
 
         /* Earth Texture (master), off = plain black body */
-        bool earth_texture_on = ToolSettingGetBool(cfg, LAYERS_KEY_EARTH_TEXTURE, true);
+        bool earth_texture_on = cfg->show_earth_texture;
         {
             bool val = earth_texture_on;
             bool prev = val;
@@ -258,7 +255,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             if (val != prev)
             {
                 earth_texture_on = val;
-                ToolSettingSetBool(cfg, LAYERS_KEY_EARTH_TEXTURE, val);
+                cfg->show_earth_texture = val;
             }
         }
 
@@ -421,8 +418,8 @@ static void DrawDetailLines3D(const std::vector<Vector3> &verts,
  */
 static void DrawMapDetailLines3D(const SceneContext *sctx, AppConfig *cfg)
 {
-    const bool show_coast = ToolSettingGetBool(cfg, COAST_KEY_ENABLED, true);
-    const bool show_border = ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false);
+    const bool show_coast = cfg->show_coast_lines;
+    const bool show_border = cfg->show_country_borders;
     if (!show_coast && !show_border)
         return;
 
@@ -525,20 +522,20 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
     {
         const float zoom = fmaxf(sctx->camera2d->zoom, 0.10f);
 
-        if (ToolSettingGetBool(cfg, COAST_KEY_ENABLED, true))
+        if (cfg->show_coast_lines)
             DrawMapDetailLines(sctx, MAP_COAST_POINTS, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, 1.0f / zoom, 0.5f);
 
-        if (ToolSettingGetBool(cfg, BORDER_KEY_ENABLED, false))
+        if (cfg->show_country_borders)
             DrawMapDetailLines(sctx, MAP_BORDER_POINTS, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, 0.8f / zoom, 0.20f);
     }
     else if (!sctx->is_2d_view)
     {
         DrawMapDetailLines3D(sctx, cfg);
-        if (ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
+        if (cfg->show_latlon_grid)
             DrawMapGrid3D(sctx, cfg);
     }
 
-    if (sctx->is_2d_view && sctx->camera2d && ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
+    if (sctx->is_2d_view && sctx->camera2d && cfg->show_latlon_grid)
     {
         float zoom = sctx->camera2d->zoom;
         if (zoom < 0.10f)
@@ -625,7 +622,7 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
         return;
     if (!ctx->is_2d_view || !*ctx->is_2d_view)
         return;
-    if (!ToolSettingGetBool(cfg, GRID_KEY_ENABLED, false))
+    if (!cfg->show_latlon_grid)
         return;
 
     ImDrawList *dl = ImGui::GetBackgroundDrawList();

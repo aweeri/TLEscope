@@ -1484,7 +1484,7 @@ int main(void)
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
 
         /* universal Earth texture toggle (Layers panel); off = plain black body */
-        const bool show_earth = ToolSettingGetBool(&cfg, LAYERS_KEY_EARTH_TEXTURE, true);
+        const bool show_earth = cfg.show_earth_texture;
 
         /* 2d projection rendering */
         if (is_2d_view)

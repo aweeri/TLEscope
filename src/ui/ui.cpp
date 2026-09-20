@@ -20,6 +20,7 @@
 #include "data/storage.h"
 #include "util/log.h"
 #include "tools/tools_common.h"
+#include "tools/tools_settings.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -777,11 +778,19 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::Button("Performance", ImVec2(btn_w, btn_h)))
         {
+            /* disable the expensive graphics effects for a lighter draw */
             cfg->show_clouds = false;
             cfg->show_night_lights = false;
             cfg->show_scattering = false;
             cfg->show_skybox = false;
             cfg->night_mode = false;
+
+            /* plain Earth body but expose the map overlays (grid, borders, coast) */
+            cfg->show_earth_texture = false;
+            cfg->show_latlon_grid = true;
+            cfg->show_country_borders = true;
+            cfg->show_coast_lines = true;
+
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);
@@ -795,6 +804,12 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->show_scattering = true;
             cfg->show_skybox = true;
             cfg->night_mode = false;
+
+            cfg->show_earth_texture = true;
+            cfg->show_latlon_grid = false;
+            cfg->show_country_borders = false;
+            cfg->show_coast_lines = true;
+
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);

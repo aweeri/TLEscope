@@ -31,6 +31,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_skybox = true;       // default
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
+    config->show_earth_texture = true;  // default
+    config->show_latlon_grid = false;   // default
+    config->show_country_borders = false; // default
+    config->show_coast_lines = true;   // default
     config->show_first_run_dialog = false; // default
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
@@ -173,6 +177,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_skybox = get_bool("show_skybox", config->show_skybox);
                     config->show_ground_coverage = get_bool("show_ground_coverage", config->show_ground_coverage);
                     config->show_apsides = get_bool("show_apsides", config->show_apsides);
+                    config->show_earth_texture = get_bool("show_earth_texture", config->show_earth_texture);
+                    config->show_latlon_grid = get_bool("show_latlon_grid", config->show_latlon_grid);
+                    config->show_country_borders = get_bool("show_country_borders", config->show_country_borders);
+                    config->show_coast_lines = get_bool("show_coast_lines", config->show_coast_lines);
                     config->show_scattering = get_bool("show_scattering", config->show_scattering);
                     config->hint_vsync = get_bool("hint_vsync", config->hint_vsync);
                     config->show_first_run_dialog = get_bool("show_first_run_dialog", config->show_first_run_dialog);
@@ -557,6 +565,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_skybox = true;
         config->show_ground_coverage = true;
         config->show_apsides = true;
+        config->show_earth_texture = true;
+        config->show_latlon_grid = false;
+        config->show_country_borders = false;
+        config->show_coast_lines = true;
         config->hint_vsync = true;
         config->night_mode = false;
         // first run: a single default home location, no forced example marker
@@ -601,6 +613,10 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_skybox"] = config->show_skybox;
     root["show_ground_coverage"] = config->show_ground_coverage;
     root["show_apsides"] = config->show_apsides;
+    root["show_earth_texture"] = config->show_earth_texture;
+    root["show_latlon_grid"] = config->show_latlon_grid;
+    root["show_country_borders"] = config->show_country_borders;
+    root["show_coast_lines"] = config->show_coast_lines;
     root["hint_vsync"] = config->hint_vsync;
     root["show_first_run_dialog"] = config->show_first_run_dialog;
     root["use_local_time"] = config->use_local_time;

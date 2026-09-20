@@ -1,5 +1,6 @@
 /*
  * tool_doppler.cpp - Doppler Analysis panel
+ */
 
 #include "tools.h"
 #include "tools_common.h"
