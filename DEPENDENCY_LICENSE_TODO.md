@@ -1,6 +1,6 @@
 # Dependency and License Audit
 
-- Basis: `aweeri/TLEscope:extremelywip` @ `0edc53cd28291482ecc027a9d0dab542bf4b52da`.
+- Basis: `aweeri/TLEscope:extremelywip` @ `a5cf0d753868ce5b2dffca204470613d76cc6ba8`.
 
 ## P1
 - Add a concise `THIRD_PARTY_NOTICES.md` covering csgp4, Dear ImGui, raylib, rlImGui, nlohmann/json, Font Awesome, Natural Earth and bundled theme/font/texture assets.
