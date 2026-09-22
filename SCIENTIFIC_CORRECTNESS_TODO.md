@@ -1,9 +1,6 @@
 # Scientific Correctness Audit
 
-- Basis: `aweeri/TLEscope:extremelywip` @ `0edc53cd28291482ecc027a9d0dab542bf4b52da`.
-
-## P0
-- `src/ui/ui.cpp::unix_to_epoch()` still casts a `double *` to `time_t *` for `gmtime()`. Convert the value to a real `time_t` first.
+- Basis: `aweeri/TLEscope:extremelywip` @ `a5cf0d753868ce5b2dffca204470613d76cc6ba8`.
 
 ## P1
 - Pass span is rounded up with `ceil(span_days)`; a 6-hour request can scan 24 hours. Stop at the exact requested end epoch.
