@@ -140,17 +140,18 @@ win-installer: windows
 # yes makefile this data copied juuuuuuuust fine and is safe and sound don't worry about it :3
 # microsoft, and I mean this sincerely, please keep bloating windows so that people stop using it and annoying me about it thanks bye.
 
-bin/TLEscope: $(OBJ) | bin
+# depends on the raylib archive so a parallel make cannot link before it exists
+bin/TLEscope: $(OBJ) $(RAYLIB_LIB) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
-	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $^ $(LDFLAGS_LIN)
+	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $(OBJ) $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-macos: raylib $(SRC) $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $(filter-out raylib,$^) $(LDFLAGS_MACOS)
 
-bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
+bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o $(RAYLIB_LIB) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
-	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $^ $(LDFLAGS_WIN)
+	$(CC_WIN) $(CXXFLAGS_WIN) -o $@ $(OBJ_WIN) build_win/versioninfo.o $(LDFLAGS_WIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
 bin/TLEscope-arm64.exe: $(OBJ_WIN) build_win/versioninfo.o | bin
