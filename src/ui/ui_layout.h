@@ -55,6 +55,9 @@ typedef struct
     /* tools modal */
     bool tools_open;
 
+    /* H key clean view: every chrome element hidden (sidebars, bottom bar, nav bar, edge notches) */
+    bool clean_view;
+
     /* bottom bar visibility (View menu) */
     bool show_bottom_bar;
 
@@ -123,6 +126,9 @@ void LayoutCloseTools(void);
 /* bottom bar visibility */
 bool LayoutBottomBarVisible(void);
 void LayoutSetBottomBarVisible(bool visible);
+
+/* H key clean view: hide all chrome, or restore what was visible before */
+void LayoutToggleCleanView(void);
 
 /* sidebar helpers used by other modules */
 bool LayoutSidebarVisible(SidebarSide side);
