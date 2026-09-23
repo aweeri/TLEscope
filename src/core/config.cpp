@@ -35,6 +35,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_latlon_grid = false;   // default
     config->show_country_borders = false; // default
     config->show_coast_lines = true;   // default
+    config->map_center_lon = 0.0f;     // default
     config->show_first_run_dialog = false; // default
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
@@ -161,6 +162,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->target_fps = get_int("target_fps", config->target_fps);
                     config->ui_scale = get_float("ui_scale", config->ui_scale);
                     config->earth_rotation_offset = get_float("earth_rotation_offset", config->earth_rotation_offset);
+                    config->map_center_lon = get_float("map_center_lon", config->map_center_lon);
                     config->orbits_to_draw = get_float("orbits_to_draw", config->orbits_to_draw);
                     config->data_stale_threshold_seconds = get_int("data_stale_threshold_seconds", config->data_stale_threshold_seconds);
                     config->network_timeout_seconds = get_int("network_timeout_seconds", config->network_timeout_seconds);
@@ -554,6 +556,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->target_fps = 120;
         config->ui_scale = 1.15;
         config->earth_rotation_offset = 0.00;
+        config->map_center_lon = 0.0f;
         config->orbits_to_draw = 3.00;
         config->show_clouds = true;
         config->show_night_lights = true;
@@ -602,6 +605,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["target_fps"] = config->target_fps;
     root["ui_scale"] = config->ui_scale;
     root["earth_rotation_offset"] = config->earth_rotation_offset;
+    root["map_center_lon"] = config->map_center_lon;
     root["orbits_to_draw"] = config->orbits_to_draw;
     root["show_clouds"] = config->show_clouds;
     root["show_night_lights"] = config->show_night_lights;

@@ -316,6 +316,7 @@ typedef struct
     int target_fps;
     float ui_scale;
     float earth_rotation_offset;
+    float map_center_lon;      // 2D map centre longitude in degrees (Home / Earth lock return here)
     float orbits_to_draw;
     float orbit_cache_drift_threshold_km;  // recalculate if satellite drifts more than this (default 50 km)
     bool show_clouds;

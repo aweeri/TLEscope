@@ -641,15 +641,17 @@ int main(void)
     Camera3DParams.fovy = 45.0f;
     Camera3DParams.projection = CAMERA_PERSPECTIVE;
 
+    float map_w = 2048.0f, map_h = 1024.0f;
+
     Camera2D Camera2DParams = {0};
-    Camera2DParams.zoom = 1.0f;
-    Camera2DParams.offset = (Vector2){GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
-    Camera2DParams.target = (Vector2){0.0f, 0.0f};
+    Camera2DParams.zoom = MapFillZoom(map_w, map_h);
+    Camera2DParams.offset = (Vector2){floorf(GetScreenWidth() / 2.0f), floorf(GetScreenHeight() / 2.0f)};
+    Camera2DParams.target = (Vector2){(cfg.map_center_lon / 360.0f) * map_w, 0.0f};
 
     float target_camera2d_zoom = Camera2DParams.zoom;
     Vector2 target_camera2d_target = Camera2DParams.target;
-
-    float map_w = 2048.0f, map_h = 1024.0f;
+    float fill_zoom = Camera2DParams.zoom; /* zoom that exactly fills the window; tracks resizes */
+    float prev_map_center_lon = cfg.map_center_lon;
     float camDistance = 10.0f, camAngleX = 0.785f, camAngleY = 0.5f;
 
     float target_camDistance = camDistance;
@@ -773,9 +775,26 @@ int main(void)
         bool is_typing = IsUITyping();
         bool over_ui = IsMouseOverUI(&cfg);
 
-        if (is_2d_view && !is_typing)
+        /* 2D map camera: a whole-pixel offset keeps the texture crisp, and the
+         * zoom is rescaled with the fill zoom so the map keeps covering the
+         * window after a resize */
+        const float center_x = (cfg.map_center_lon / 360.0f) * map_w;
+        Camera2DParams.offset = (Vector2){floorf(GetScreenWidth() / 2.0f), floorf(GetScreenHeight() / 2.0f)};
         {
-            Camera2DParams.offset = (Vector2){GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
+            const float new_fill = MapFillZoom(map_w, map_h);
+            if (new_fill != fill_zoom)
+            {
+                target_camera2d_zoom *= new_fill / fill_zoom;
+                Camera2DParams.zoom *= new_fill / fill_zoom;
+                fill_zoom = new_fill;
+            }
+        }
+        if (cfg.map_center_lon != prev_map_center_lon)
+        {
+            /* centre longitude changed in the Layers panel: pan there */
+            prev_map_center_lon = cfg.map_center_lon;
+            target_camera2d_target.x = center_x;
+            active_lock = LOCK_NONE;
         }
 
         /* input handling */
@@ -880,8 +899,8 @@ int main(void)
                 target_camDistance = 10.0f;
                 target_camAngleX = 0.785f;
                 target_camAngleY = 0.5f;
-                target_camera2d_zoom = 1.0f;
-                target_camera2d_target = (Vector2){0.0f, 0.0f};
+                target_camera2d_zoom = fill_zoom;
+                target_camera2d_target = (Vector2){center_x, 0.0f};
                 Camera3DParams.fovy = 45.0f;
             }
 
@@ -1096,8 +1115,6 @@ int main(void)
                 if (wheel != 0 && !is_typing)
                 {
                     target_camera2d_zoom += wheel * 0.1f * target_camera2d_zoom;
-                    if (target_camera2d_zoom < 0.1f)
-                        target_camera2d_zoom = 0.1f;
                     active_lock = LOCK_NONE;
                 }
             }
@@ -1128,6 +1145,7 @@ int main(void)
 
                     float mx, my;
                     get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &mx, &my);
+                    mx += map_w * roundf((Camera2DParams.target.x - mx) / map_w); /* the on-screen wrap copy */
 
                     Vector2 screenPos = GetWorldToScreen2D((Vector2){mx, my}, Camera2DParams);
                     float dist = Vector2Distance(mousePos, screenPos);
@@ -1353,7 +1371,7 @@ int main(void)
         if (active_lock == LOCK_EARTH)
         {
             if (is_2d_view)
-                target_camera2d_target = Vector2Zero();
+                target_camera2d_target = (Vector2){center_x, 0.0f};
             else
                 target_camera3d_target = Vector3Zero();
         }
@@ -1365,11 +1383,28 @@ int main(void)
                 target_camera3d_target = draw_moon_pos;
         }
 
+        /* 2D map bounds: never zoom out past filling the window, wrap the target
+         * longitude so panning is endless, and keep the top/bottom map edges
+         * from leaving the window */
+        if (target_camera2d_zoom < fill_zoom)
+            target_camera2d_zoom = fill_zoom;
+        {
+            const float shift = -map_w * floorf((target_camera2d_target.x + map_w * 0.5f) / map_w);
+            target_camera2d_target.x += shift;
+            Camera2DParams.target.x += shift; /* same shift so the lerp never crosses the seam */
+        }
+        auto clamp_map_y = [&](float zoom, float y) {
+            const float lim = fmaxf(map_h * 0.5f - GetScreenHeight() / (2.0f * zoom), 0.0f);
+            return Clamp(y, -lim, lim);
+        };
+        target_camera2d_target.y = clamp_map_y(target_camera2d_zoom, target_camera2d_target.y);
+
         float smooth_speed = 10.0f * GetFrameTime();
         if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
 
         Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
         Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
+        Camera2DParams.target.y = clamp_map_y(Camera2DParams.zoom, Camera2DParams.target.y);
 
         camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
         camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
@@ -1506,7 +1541,8 @@ int main(void)
                     SetShaderValue(shader2D, moonPosLoc2D, &moonEcef, SHADER_UNIFORM_VEC3);
                 }
 
-                DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){-map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
+                for (int k = -1; k <= 1; k++) /* three wrap copies so any centre longitude shows a full map */
+                    DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){k * map_w - map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
 
                 if (cfg.show_night_lights)
                     EndShaderMode();
@@ -1514,28 +1550,21 @@ int main(void)
             else
             {
                 /* earth texture disabled: plain black body underneath the overlays */
-                DrawRectangle((int)(-map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h, BLACK);
+                DrawRectangle((int)(-map_w * 1.5f), (int)(-map_h / 2.0f), (int)(map_w * 3.0f), (int)map_h, BLACK);
             }
 
-            /* scissor mode for map boundaries */
+            /* scissor to the map's vertical extent; it wraps horizontally, so the full width is used */
             Vector2 mapMin = GetWorldToScreen2D((Vector2){-map_w / 2.0f, -map_h / 2.0f}, Camera2DParams);
             Vector2 mapMax = GetWorldToScreen2D((Vector2){map_w / 2.0f, map_h / 2.0f}, Camera2DParams);
 
-            int sc_x = (int)mapMin.x, sc_y = (int)mapMin.y;
-            int sc_w = (int)(mapMax.x - mapMin.x), sc_h = (int)(mapMax.y - mapMin.y);
+            int sc_x = 0, sc_y = (int)mapMin.y;
+            int sc_w = GetScreenWidth(), sc_h = (int)(mapMax.y - mapMin.y);
 
-            if (sc_x < 0)
-            {
-                sc_w += sc_x;
-                sc_x = 0;
-            }
             if (sc_y < 0)
             {
                 sc_h += sc_y;
                 sc_y = 0;
             }
-            if (sc_x + sc_w > GetScreenWidth())
-                sc_w = GetScreenWidth() - sc_x;
             if (sc_y + sc_h > GetScreenHeight())
                 sc_h = GetScreenHeight() - sc_y;
 
@@ -1566,8 +1595,8 @@ int main(void)
                     /* visible map region (camera view ∩ map rect) for culling */
                     Vector2 vis_a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, Camera2DParams);
                     Vector2 vis_b = GetScreenToWorld2D((Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()}, Camera2DParams);
-                    float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
-                    float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
+                    float clip_min_x = fminf(vis_a.x, vis_b.x); /* x is not clamped: wrap copies may be on screen */
+                    float clip_max_x = fmaxf(vis_a.x, vis_b.x);
                     float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
                     float clip_max_y = fminf(fmaxf(vis_a.y, vis_b.y), map_h * 0.5f);
 
