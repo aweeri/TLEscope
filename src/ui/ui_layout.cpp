@@ -324,6 +324,30 @@ void LayoutSetSidebarVisible(SidebarSide side, bool visible)
 bool LayoutBottomBarVisible(void) { return g_layout.show_bottom_bar; }
 void LayoutSetBottomBarVisible(bool visible) { g_layout.show_bottom_bar = visible; }
 
+/* -- Clean view (H key) ----------------------------------------------------- */
+
+void LayoutToggleCleanView(void)
+{
+    static bool saved_left = true, saved_right = true, saved_bottom = true;
+
+    g_layout.clean_view = !g_layout.clean_view;
+    if (g_layout.clean_view)
+    {
+        saved_left = LayoutSidebarVisible(SIDEBAR_LEFT);
+        saved_right = LayoutSidebarVisible(SIDEBAR_RIGHT);
+        saved_bottom = LayoutBottomBarVisible();
+        LayoutSetSidebarVisible(SIDEBAR_LEFT, false);
+        LayoutSetSidebarVisible(SIDEBAR_RIGHT, false);
+        LayoutSetBottomBarVisible(false);
+    }
+    else
+    {
+        LayoutSetSidebarVisible(SIDEBAR_LEFT, saved_left);
+        LayoutSetSidebarVisible(SIDEBAR_RIGHT, saved_right);
+        LayoutSetBottomBarVisible(saved_bottom);
+    }
+}
+
 /* -- Settings modal helpers ------------------------------------------------- */
 
 bool LayoutSettingsOpen(void) { return g_layout.settings_open; }
@@ -960,6 +984,9 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
     (void)ctx;
     (void)cfg;
 
+    if (g_layout.clean_view)
+        return; /* H key clean view: no menu bar */
+
     if (ImGui::BeginMainMenuBar())
     {
         /* ---- File menu --------------------------------------------------- */
@@ -1468,8 +1495,11 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
     float nav_h2 = ImGui::GetFrameHeight();
     /* content area height (below the nav bar) - used to center the notches */
     float content_h = ImGui::GetIO().DisplaySize.y - nav_h2;
-    DrawNotch(true,  nav_h2, content_h, g_layout.left_visible  && !g_layout.left_hidden);
-    DrawNotch(false, nav_h2, content_h, g_layout.right_visible && !g_layout.right_hidden);
+    if (!g_layout.clean_view) /* H key clean view: no edge tabs either */
+    {
+        DrawNotch(true,  nav_h2, content_h, g_layout.left_visible  && !g_layout.left_hidden);
+        DrawNotch(false, nav_h2, content_h, g_layout.right_visible && !g_layout.right_hidden);
+    }
 
     /* reorder finalisation */
     FinishReorder(cfg);

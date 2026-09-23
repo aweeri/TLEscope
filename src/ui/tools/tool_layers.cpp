@@ -577,34 +577,13 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         }
     }
 
-    static bool clean_view = false;
-    static bool saved_left = true;
-    static bool saved_right = true;
-    static bool saved_bottom = true;
-
     if (!ImGui::GetCurrentContext())
         return;
 
     if (ImGui::GetIO().WantTextInput || !IsKeyPressed(KEY_H))
         return;
 
-    clean_view = !clean_view;
-    if (clean_view)
-    {
-        saved_left = LayoutSidebarVisible(SIDEBAR_LEFT);
-        saved_right = LayoutSidebarVisible(SIDEBAR_RIGHT);
-        saved_bottom = LayoutBottomBarVisible();
-
-        LayoutSetSidebarVisible(SIDEBAR_LEFT, false);
-        LayoutSetSidebarVisible(SIDEBAR_RIGHT, false);
-        LayoutSetBottomBarVisible(false);
-    }
-    else
-    {
-        LayoutSetSidebarVisible(SIDEBAR_LEFT, saved_left);
-        LayoutSetSidebarVisible(SIDEBAR_RIGHT, saved_right);
-        LayoutSetBottomBarVisible(saved_bottom);
-    }
+    LayoutToggleCleanView(); /* sidebars, bottom time bar, menu bar and edge tabs */
 }
 
 /**
