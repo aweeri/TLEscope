@@ -969,6 +969,13 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
         }
 
         ImGui::PopStyleVar(2);
+
+        if (ImGui::IsWindowHovered() &&
+            ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+            !ImGui::IsAnyItemActive())
+        {
+            ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetIO().MouseDelta.y);
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor(6);
@@ -1002,6 +1009,15 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
             ImGui::MenuItem("Left Sidebar", NULL, &g_layout.left_visible);
             ImGui::MenuItem("Right Sidebar", NULL, &g_layout.right_visible);
             ImGui::MenuItem("Bottom Time Bar", NULL, &g_layout.show_bottom_bar);
+            ImGui::Separator();
+            bool fs = IsWindowFullscreen();
+            if (ImGui::MenuItem("Fullscreen", "F11", &fs))
+            {
+                ToggleFullscreen();
+                cfg->fullscreen = fs;
+                SaveAppConfig("settings.json", cfg);
+                LOG_INFO("Fullscreen toggled");
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Layout"))
             {

@@ -182,6 +182,14 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
         ImGui::PopID();
     }
 
+    /* drag-to-scroll: dragging on empty list space scrolls the list */
+    if (ImGui::IsWindowHovered() &&
+        ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+        !ImGui::IsAnyItemActive())
+    {
+        ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetIO().MouseDelta.y);
+    }
+
     ImGui::EndChild();
 
     ImGui::PopTextWrapPos();

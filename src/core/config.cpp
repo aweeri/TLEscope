@@ -158,6 +158,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     get_str("theme", "default", config->theme, sizeof(config->theme));
                     config->window_width = get_int("window_width", config->window_width);
                     config->window_height = get_int("window_height", config->window_height);
+                    config->fullscreen = get_bool("fullscreen", config->fullscreen);
                     config->target_fps = get_int("target_fps", config->target_fps);
                     config->ui_scale = get_float("ui_scale", config->ui_scale);
                     config->earth_rotation_offset = get_float("earth_rotation_offset", config->earth_rotation_offset);
@@ -551,6 +552,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         strcpy(config->theme, "default");
         config->window_width = 1920;
         config->window_height = 1080;
+        config->fullscreen = false;
         config->target_fps = 120;
         config->ui_scale = 1.15;
         config->earth_rotation_offset = 0.00;
@@ -599,6 +601,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["theme"] = config->theme;
     root["window_width"] = config->window_width;
     root["window_height"] = config->window_height;
+    root["fullscreen"] = config->fullscreen;
     root["target_fps"] = config->target_fps;
     root["ui_scale"] = config->ui_scale;
     root["earth_rotation_offset"] = config->earth_rotation_offset;

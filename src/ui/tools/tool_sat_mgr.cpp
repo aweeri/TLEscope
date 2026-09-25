@@ -226,7 +226,8 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
         if (ImGui::Selectable(label, *ctx->selected_sat == &satellites[i],
                               ImGuiSelectableFlags_None, selectable_size))
         {
-            *ctx->selected_sat = &satellites[i];
+            /* clicking the already-selected row toggles the selection off */
+            *ctx->selected_sat = (*ctx->selected_sat == &satellites[i]) ? NULL : &satellites[i];
         }
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
@@ -239,6 +240,14 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
         }
 
         ImGui::PopID();
+    }
+
+    /* drag-to-scroll: dragging on empty list space scrolls the list */
+    if (ImGui::IsWindowHovered() &&
+        ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+        !ImGui::IsAnyItemActive())
+    {
+        ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetIO().MouseDelta.y);
     }
 
     ImGui::EndChild();

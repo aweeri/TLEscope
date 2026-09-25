@@ -22,6 +22,7 @@
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
 #include "ui/notifications.h"
+#include "ui/touch_gesture.h"
 #include "ui/tools/tools_common.h"
 #include "ui/tools/tools_scene.h"
 #include "ui/tools/tools_settings.h"
@@ -432,6 +433,10 @@ int main(void)
     InitWindow(cfg.window_width, cfg.window_height, window_title);
     LOG_INFO("Window created: %dx%d, theme=%s", cfg.window_width, cfg.window_height, cfg.theme);
 
+    /* install the Windows touch observer (no-op elsewhere) and restore fullscreen */
+    TouchGestureInit();
+    if (cfg.fullscreen) ToggleFullscreen();
+
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
     int max_h = GetMonitorHeight(monitor);
@@ -770,6 +775,11 @@ int main(void)
             SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
         }
 
+        /* 3-finger double-tap toggles clean view (identical to pressing H).
+         * Consumed unconditionally so it works even while a text field is focused. */
+        if (TouchGestureConsumeThreeFingerDoubleTap())
+            LayoutToggleCleanView();
+
         bool is_typing = IsUITyping();
         bool over_ui = IsMouseOverUI(&cfg);
 
@@ -932,6 +942,11 @@ int main(void)
                 picking_home = false;
                 pick_location_index = -1;
                 LOG_INFO("Home location picking cancelled");
+            }
+            /* Esc clears the satellite selection (skipped while cancelling home picking) */
+            else if (IsKeyPressed(KEY_ESCAPE))
+            {
+                selected_sat = NULL;
             }
         }
 
@@ -1302,12 +1317,12 @@ int main(void)
 
                     if (hovered_sat != NULL)
                     {
-                        // clicking a satellite selects it
-                        selected_sat = hovered_sat;
+                        /* re-tap the already-selected satellite toggles it off */
+                        selected_sat = (selected_sat == hovered_sat) ? NULL : hovered_sat;
                     }
-                    else if (is_double_click)
+                    else
                     {
-                        // double-clicking empty space deselects the satellite
+                        /* a single clean click/tap on empty space deselects */
                         selected_sat = NULL;
                     }
 

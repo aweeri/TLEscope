@@ -313,6 +313,7 @@ typedef struct
     char theme[64];
     int window_width;
     int window_height;
+    bool fullscreen;       // start in fullscreen mode (default false)
     int target_fps;
     float ui_scale;
     float earth_rotation_offset;
