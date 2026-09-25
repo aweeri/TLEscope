@@ -34,6 +34,7 @@ void epoch_to_datetime_str(double epoch, char *buffer);
 
 // orbital data loading (replaces TLE-specific loading)
 void load_orbital_data(const char *filename);
+void load_orbital_data_from_string(const char *json);
 void load_manual_entries(AppConfig *config);
 
 // SGP4 initialization from orbital elements

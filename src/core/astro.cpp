@@ -382,6 +382,29 @@ void load_orbital_data(const char *filename)
     sat_count = 0;
 }
 
+/** bulk loading of orbital data from an in-memory JSON string (no disk access) */
+void load_orbital_data_from_string(const char *json)
+{
+    if (LoadOrbitalDataFromString(json, satellites, &sat_count, MAX_SATELLITES))
+    {
+        LOG_INFO("Loaded %d satellites from in-memory orbital data", sat_count);
+
+        for (int i = 0; i < sat_count; i++)
+        {
+            Satellite *sat = &satellites[i];
+            if (!init_sgp4_from_satellite(sat))
+            {
+                LOG_WARN("SGP4 re-init failed for %s - deactivating", sat->name);
+                sat->is_active = false;
+            }
+        }
+        return;
+    }
+
+    LOG_WARN("Failed to load orbital data from in-memory string");
+    sat_count = 0;
+}
+
 /** parses manually entered orbital data (pipe-delimited TLE or OMM fields) */
 void load_manual_entries(AppConfig *config)
 {

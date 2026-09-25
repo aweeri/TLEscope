@@ -384,9 +384,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         }
                     }
 
-                    /* Enforce the documented invariant: when at least one
-                     * location exists, exactly one of them is the home location.
-                     * Older/malformed settings may contain none (or several). */
+                    /* exactly one location must be flagged home */
                     if (location_count == 0)
                     {
                         int idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);

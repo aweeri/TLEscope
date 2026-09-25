@@ -22,6 +22,9 @@ bool SaveOrbitalData(const char *filename, Satellite *sats, int count);
 /** load all satellite data from a structured JSON file */
 bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max);
 
+/** load all satellite data from an in-memory JSON string (no disk access) */
+bool LoadOrbitalDataFromString(const char *json, Satellite *sats, int *count, int max);
+
 // -- Source State Persistence ------------------------------------------------
 
 typedef struct {

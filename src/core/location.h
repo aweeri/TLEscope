@@ -4,15 +4,7 @@
 /** target index for the next pick-on-map action; -1 = home location */
 extern int pick_location_index;
 
-/**
- * @file location.h
- * @brief Unified, persisting locations system (markers + home)
- *
- * Markers and the home location are merged into a single named list of
- * locations. "Home" is just a flag on one entry; exactly one location is
- * home at a time. All consumers (passes, scope, polar plot, ground tracks,
- * rotator) read the home location from this unified list.
- */
+/* Unified locations list (markers + home); home is just a flag on one entry. */
 
 #include "types.h"
 
@@ -36,5 +28,8 @@ void UpdateLocation(int idx, const char *name, float lat, float lon, float alt);
 
 /** find a location by exact name, or -1 if not present */
 int FindLocationByName(const char *name);
+
+/** DEMO-ONLY: swap in a neutral aerospace marker set (restored on exit). */
+void LoadDemoAerospaceMarkers(void);
 
 #endif // LOCATION_H

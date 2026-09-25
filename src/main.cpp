@@ -36,6 +36,7 @@
 #include "render/coverage_shaders.h"
 #include "render/coverage_mesh.h"
 #include "render/map_view.h"
+#include "demo/demo_director.h"
 
 /* application state and resources */
 static AppConfig cfg = []() -> AppConfig {
@@ -692,6 +693,41 @@ int main(void)
     bool left_press_over_ui = false;
     bool left_drag_active = false;
 
+    /* Demo Mode director context: points at the live main-loop locals above */
+    DemoContext demo_ctx = {
+        .cfg = &cfg,
+        .is_2d_view = &is_2d_view,
+        .is_pov_mode = &is_pov_mode,
+        .is_ecliptic_frame = &is_ecliptic_frame,
+        .current_epoch = &current_epoch,
+        .time_multiplier = &time_multiplier,
+        .selected_sat = &selected_sat,
+        .hovered_sat = &hovered_sat,
+        .hide_unselected = &hide_unselected,
+        .unselected_fade = &unselected_fade,
+        .camera3d = &Camera3DParams,
+        .cam_distance = &camDistance,
+        .cam_angle_x = &camAngleX,
+        .cam_angle_y = &camAngleY,
+        .target_cam_distance = &target_camDistance,
+        .target_cam_angle_x = &target_camAngleX,
+        .target_cam_angle_y = &target_camAngleY,
+        .target_camera3d_target = &target_camera3d_target,
+        .camera2d = &Camera2DParams,
+        .target_camera2d_zoom = &target_camera2d_zoom,
+        .target_camera2d_target = &target_camera2d_target,
+        .show_scope = &show_scope,
+        .scope_az = &scope_az,
+        .scope_el = &scope_el,
+        .scope_beam = &scope_beam,
+        .selected_pass_idx = &g_ui.selected_pass_idx,
+        .active_lock = &active_lock,
+        .draw_earth_radius = draw_earth_radius,
+        .map_w = map_w,
+        .map_h = map_h,
+    };
+    DemoDirectorInit();
+
     /* apply vsync / fps limit at startup so the window state matches the config */
     if (cfg.hint_vsync)
     {
@@ -775,6 +811,11 @@ int main(void)
             SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
         }
 
+        /* Demo Mode: Esc exits the demo, before the normal Esc handler below */
+        if (IsKeyPressed(KEY_ESCAPE) && DemoDirectorActive())
+            DemoDirectorRequestStop();
+        DemoDirectorUpdate(&demo_ctx, GetFrameTime());
+
         /* 3-finger double-tap toggles clean view (identical to pressing H).
          * Consumed unconditionally so it works even while a text field is focused. */
         if (TouchGestureConsumeThreeFingerDoubleTap())
@@ -788,8 +829,8 @@ int main(void)
             Camera2DParams.offset = (Vector2){GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
         }
 
-        /* input handling */
-        if (!is_typing)
+        /* input handling (skipped while Demo Mode owns the scene) */
+        if (!is_typing && !DemoDirectorActive())
         {
             if (IsKeyPressed(KEY_SPACE))
             {
@@ -1097,8 +1138,8 @@ int main(void)
             }
         }
         
-        /* handle picking and camera in 2d mode */
-        if (is_2d_view)
+        /* 2D picking/camera (skipped while Demo Mode owns the scene) */
+        if (!DemoDirectorActive() && is_2d_view)
         {
             if (!over_ui)
             {
@@ -1155,7 +1196,7 @@ int main(void)
                 }
             }
         }
-        else
+        else if (!DemoDirectorActive())
         {
             /* handle picking and camera in 3d mode */
             if (!over_ui)
@@ -1272,9 +1313,8 @@ int main(void)
             }
         }
 
-        /* selection and double click for planet locking; fires on release so a
-         * camera drag that started on a satellite does not count as a click */
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
+        /* selection/double-click planet lock on release; skipped in Demo Mode */
+        if (!DemoDirectorActive() && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
         {
             if (!over_ui)
             {
@@ -1364,59 +1404,62 @@ int main(void)
             }
         }
 
-        /* update camera interpolation targets */
-        if (active_lock == LOCK_EARTH)
+        /* camera interpolation targets (skipped while Demo Mode owns the camera) */
+        if (!DemoDirectorActive())
         {
-            if (is_2d_view)
-                target_camera2d_target = Vector2Zero();
-            else
-                target_camera3d_target = Vector3Zero();
-        }
-        else if (active_lock == LOCK_MOON)
-        {
-            if (is_2d_view)
-                target_camera2d_target = (Vector2){moon_mx, moon_my};
-            else
-                target_camera3d_target = draw_moon_pos;
-        }
-
-        float smooth_speed = 10.0f * GetFrameTime();
-        if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
-
-        Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
-        Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
-
-        camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
-        camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
-        camDistance = Lerp(camDistance, target_camDistance, smooth_speed);
-        Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth_speed);
-
-        float target_ecliptic_angle = is_ecliptic_frame ? (23.439f * DEG2RAD) : 0.0f;
-        current_ecliptic_angle = Lerp(current_ecliptic_angle, target_ecliptic_angle, smooth_speed);
-
-        if (!is_2d_view)
-        {
-            Vector3 offset = {
-                camDistance * cosf(camAngleY) * sinf(camAngleX),
-                camDistance * sinf(camAngleY),
-                camDistance * cosf(camAngleY) * cosf(camAngleX)
-            };
-            Vector3 upVec = {0.0f, 1.0f, 0.0f};
-
-            if (current_ecliptic_angle > 0.0001f)
+            if (active_lock == LOCK_EARTH)
             {
-                Matrix rot = MatrixRotateX(current_ecliptic_angle);
-                offset = Vector3Transform(offset, rot);
-                upVec = Vector3Transform(upVec, rot);
+                if (is_2d_view)
+                    target_camera2d_target = Vector2Zero();
+                else
+                    target_camera3d_target = Vector3Zero();
+            }
+            else if (active_lock == LOCK_MOON)
+            {
+                if (is_2d_view)
+                    target_camera2d_target = (Vector2){moon_mx, moon_my};
+                else
+                    target_camera3d_target = draw_moon_pos;
             }
 
-            Camera3DParams.position = Vector3Add(Camera3DParams.target, offset);
-            Camera3DParams.up = upVec;
+            float smooth_speed = 10.0f * GetFrameTime();
+            if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
+
+            Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
+            Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
+
+            camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
+            camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
+            camDistance = Lerp(camDistance, target_camDistance, smooth_speed);
+            Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth_speed);
+
+            float target_ecliptic_angle = is_ecliptic_frame ? (23.439f * DEG2RAD) : 0.0f;
+            current_ecliptic_angle = Lerp(current_ecliptic_angle, target_ecliptic_angle, smooth_speed);
+
+            if (!is_2d_view)
+            {
+                Vector3 offset = {
+                    camDistance * cosf(camAngleY) * sinf(camAngleX),
+                    camDistance * sinf(camAngleY),
+                    camDistance * cosf(camAngleY) * cosf(camAngleX)
+                };
+                Vector3 upVec = {0.0f, 1.0f, 0.0f};
+
+                if (current_ecliptic_angle > 0.0001f)
+                {
+                    Matrix rot = MatrixRotateX(current_ecliptic_angle);
+                    offset = Vector3Transform(offset, rot);
+                    upVec = Vector3Transform(upVec, rot);
+                }
+
+                Camera3DParams.position = Vector3Add(Camera3DParams.target, offset);
+                Camera3DParams.up = upVec;
+            }
         }
 
         Satellite *active_sat = hovered_sat ? hovered_sat : selected_sat;
 
-        if (!is_2d_view && is_pov_mode && selected_sat && selected_sat->is_active)
+        if (!DemoDirectorActive() && !is_2d_view && is_pov_mode && selected_sat && selected_sat->is_active)
         {
             Vector3 sat_pos_3d = Vector3Scale(selected_sat->current_pos, 1.0f / DRAW_SCALE);
             Camera3DParams.position = sat_pos_3d;
@@ -2396,7 +2439,7 @@ int main(void)
 
             /* slant range overlay 3d line */
             Location *home = GetHomeLocation();
-            if (cfg.show_slant_range && active_sat && active_sat->is_active)
+            if (cfg.show_slant_range && home && active_sat && active_sat->is_active)
             {
                 float h_lat_rad = home->lat * DEG2RAD;
                 float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
@@ -2418,7 +2461,7 @@ int main(void)
                 rlEnableDepthMask();
             }
 
-            if (show_scope)
+            if (show_scope && home)
             {
                 float h_lat_rad = home->lat * DEG2RAD;
                 float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
@@ -2673,6 +2716,10 @@ int main(void)
             TextCopy(time_str, TextFormat("Time: %s", datetime_str));
             DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_dim);
         }
+
+        /* Demo Mode chrome (Esc hint, logo, letterbox, fade) */
+        if (DemoDirectorActive())
+            DemoDirectorDrawOverlay(logoTex, customFont, &cfg);
 
         /* Night mode: single screen-space post-process pass. Everything above
          * (3D/2D scene + raylib UI + ImGui) was drawn to the default MSAA

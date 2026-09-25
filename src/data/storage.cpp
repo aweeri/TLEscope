@@ -127,21 +127,9 @@ bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
     return true;
 }
 
-bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
+
+static bool parse_orbital_json(const char *text, Satellite *sats, int *count, int max)
 {
-    if (!FileExists(filename))
-    {
-        *count = 0;
-        return false;
-    }
-
-    char *text = LoadFileText(filename);
-    if (!text)
-    {
-        *count = 0;
-        return false;
-    }
-
     nlohmann::json root;
     try
     {
@@ -149,11 +137,9 @@ bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
     }
     catch (const std::exception &)
     {
-        UnloadFileText(text);
         *count = 0;
         return false;
     }
-    UnloadFileText(text);
 
     // Find the satellites array
     if (!root.is_object())
@@ -188,6 +174,36 @@ bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
 
     *count = loaded;
     return loaded > 0;
+}
+
+bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
+{
+    if (!FileExists(filename))
+    {
+        *count = 0;
+        return false;
+    }
+
+    char *text = LoadFileText(filename);
+    if (!text)
+    {
+        *count = 0;
+        return false;
+    }
+
+    bool ok = parse_orbital_json(text, sats, count, max);
+    UnloadFileText(text);
+    return ok;
+}
+
+bool LoadOrbitalDataFromString(const char *json, Satellite *sats, int *count, int max)
+{
+    if (!json)
+    {
+        *count = 0;
+        return false;
+    }
+    return parse_orbital_json(json, sats, count, max);
 }
 
 // -- Source State Persistence ------------------------------------------------

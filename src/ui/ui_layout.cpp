@@ -18,6 +18,7 @@
 #include "core/location.h"
 #include "data/curl_diagnostics.h"
 #include "util/log.h"
+#include "demo/demo_director.h"
 
 #include <raylib.h>
 #include <imgui.h>
@@ -1359,6 +1360,19 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             bool cat_err = NotifyCategoryEnabled(NOTIFY_ERROR);
             if (ImGui::Checkbox("Errors", &cat_err))
                 NotifySetCategoryEnabled(NOTIFY_ERROR, cat_err);
+        }
+
+        /* ---- Demo Mode section ------------------------------------------- */
+        if (ImGui::CollapsingHeader("Demo Mode"))
+        {
+            if (ImGui::Button(ICON_FA_PLAY " Start Demo Mode", ImVec2(200, 0)))
+            {
+                g_layout.settings_open = false;
+                ImGui::CloseCurrentPopup();
+                DemoDirectorRequestStart();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Self-running cinematic showcase. Press Esc to exit.");
         }
 
         /* ---- Buttons ----------------------------------------------------- */
