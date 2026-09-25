@@ -177,21 +177,16 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 
         ImGui::PushID(i);
 
-        /* favorite star toggle: hollow grey while hovered, filled yellow once set */
+        /* always show the favorite control so it is discoverable */
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImVec2 frame = ImVec2(20.0f, 20.0f);
         ImVec2 star_center = ImVec2(p.x + frame.x * 0.5f, p.y + frame.y * 0.5f);
-        bool hovered = ImGui::IsMouseHoveringRect(p, ImVec2(p.x + frame.x, p.y + frame.y));
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
         if (fav)
-        {
             DrawStarFilled(dl, star_center, 7.0f, fav_yellow);
-        }
-        else if (hovered)
-        {
+        else
             DrawStarHollow(dl, star_center, 7.0f, dim);
-        }
 
         ImGui::InvisibleButton("##fav", frame);
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
