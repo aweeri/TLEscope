@@ -1428,13 +1428,32 @@ void DemoDirectorDrawOverlay(Texture2D logo, Font font, AppConfig *cfg)
         DrawRectangle(0, sh - (int)bar, sw, (int)bar, Fade(BLACK, 0.85f * fade));
     }
 
-    /* top-left: exit hint with a 1px shadow */
-    const char *hint = "Press Esc to exit demo mode";
+
+    const char *hint = "Press Esc or click to exit demo mode";
     float hint_size = 16.0f * scale;
     float hint_x = 20.0f * scale;
     float hint_y = 20.0f * scale;
+    Vector2 hint_m = MeasureTextEx(font, hint, hint_size, 1.0f);
+    Rectangle hint_rect = {hint_x - 6.0f * scale, hint_y - 4.0f * scale, hint_m.x + 12.0f * scale,
+                           hint_m.y + 8.0f * scale};
+
+    bool hint_hovered = false;
+    if (!s_stopping && fade > 0.5f)
+    {
+        hint_hovered = CheckCollisionPointRec(GetMousePosition(), hint_rect);
+        if (hint_hovered && IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+            DemoDirectorRequestStop();
+    }
+
+    Color hint_col = hint_hovered ? g_theme.ui.text : g_theme.ui.text_dim;
     DrawUIText(font, hint, hint_x + 1.0f, hint_y + 1.0f, hint_size, Fade(BLACK, 0.6f * fade));
-    DrawUIText(font, hint, hint_x, hint_y, hint_size, Fade(g_theme.ui.text_dim, fade));
+    DrawUIText(font, hint, hint_x, hint_y, hint_size, Fade(hint_col, fade));
+    if (hint_hovered)
+    {
+        float uy = hint_y + hint_m.y + 1.0f;
+        DrawRectangle((int)hint_x, (int)uy, (int)(hint_m.x + 0.5f), (int)(1.0f * scale + 0.5f),
+                      Fade(hint_col, fade));
+    }
 
     /* top-center: branding banner above the cinematic crop bar */
     if (logo.id != 0)
