@@ -988,7 +988,6 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
 
 void DrawNavBar(UIContext *ctx, AppConfig *cfg)
 {
-    (void)ctx;
     (void)cfg;
 
     if (g_layout.clean_view)
@@ -1052,6 +1051,21 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
         if (ImGui::MenuItem("Settings"))
         {
             LayoutOpenSettings();
+        }
+
+        /* ---- 2D/3D view switch ------------------------------------------- */
+        if (ctx->is_2d_view)
+        {
+            bool is_2d = *ctx->is_2d_view;
+            const char *view_label = is_2d ? ICON_FA_MAP "  2D Map"
+                                           : ICON_FA_GLOBE "  3D Globe";
+            if (ImGui::MenuItem(view_label))
+            {
+                *ctx->is_2d_view = !is_2d;
+                LOG_INFO("View switched to %s", *ctx->is_2d_view ? "2D map" : "3D globe");
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Switch between the 2D map and the 3D globe (M)");
         }
 
         ImGui::EndMainMenuBar();
