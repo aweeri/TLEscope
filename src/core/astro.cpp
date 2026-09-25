@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "astro.h"
 #include "types.h"
 #include "location.h"

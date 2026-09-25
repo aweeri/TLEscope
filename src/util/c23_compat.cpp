@@ -1,7 +1,6 @@
 /* compatibility stubs for C23 libc symbols referenced by prebuilt raylib.
    glibc < 2.38 does not provide __isoc23_* variants.
 */
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
