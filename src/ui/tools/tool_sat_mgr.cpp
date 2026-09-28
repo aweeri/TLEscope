@@ -169,72 +169,77 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     const ImU32 dim = ImGui::GetColorU32(ThemeColor(g_theme.ui.text_dim));
     const ImU32 fav_yellow = ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.1f, 1.0f));
 
-    for (size_t oi = 0; oi < order.size(); oi++)
+    ImGuiListClipper clipper;
+    clipper.Begin((int)order.size(), row_h);
+    while (clipper.Step())
     {
-        int i = order[oi];
-        bool active = satellites[i].is_active;
-        bool fav = IsFavorite(satellites[i].norad_id_num);
-
-        ImGui::PushID(i);
-
-        /* always show the favorite control so it is discoverable */
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        ImVec2 frame = ImVec2(20.0f, 20.0f);
-        ImVec2 star_center = ImVec2(p.x + frame.x * 0.5f, p.y + frame.y * 0.5f);
-
-        ImDrawList *dl = ImGui::GetWindowDrawList();
-        if (fav)
-            DrawStarFilled(dl, star_center, 7.0f, fav_yellow);
-        else
-            DrawStarHollow(dl, star_center, 7.0f, dim);
-
-        ImGui::InvisibleButton("##fav", frame);
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        for (int oi = clipper.DisplayStart; oi < clipper.DisplayEnd; oi++)
         {
-            bool now_fav = !fav;
-            SetFavorite(satellites[i].norad_id_num, now_fav);
-            SaveFavorites("favorites.json");
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(fav ? "Remove from favorites" : "Add to favorites");
-        ImGui::SameLine();
+            int i = order[oi];
+            bool active = satellites[i].is_active;
+            bool fav = IsFavorite(satellites[i].norad_id_num);
 
-        /* checkbox for active state */
-        if (ImGui::Checkbox("##active", &satellites[i].is_active))
-        {
-            /* persist the selection immediately so it survives a crash/kill */
-            SaveSatSelection(cfg);
-            SaveAppConfig("settings.json", cfg);
-        }
-        ImGui::SameLine();
+            ImGui::PushID(i);
 
-        if (!active)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
-        }
+            /* always show the favorite control so it is discoverable */
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImVec2 frame = ImVec2(20.0f, 20.0f);
+            ImVec2 star_center = ImVec2(p.x + frame.x * 0.5f, p.y + frame.y * 0.5f);
 
-        char label[128];
-        snprintf(label, sizeof(label), "%s##%d", satellites[i].name, i);
+            ImDrawList *dl = ImGui::GetWindowDrawList();
+            if (fav)
+                DrawStarFilled(dl, star_center, 7.0f, fav_yellow);
+            else
+                DrawStarHollow(dl, star_center, 7.0f, dim);
 
-        float row_avail = ImGui::GetContentRegionAvail().x;
-        ImVec2 selectable_size = ImVec2(row_avail, 20);
-        if (ImGui::Selectable(label, *ctx->selected_sat == &satellites[i],
-                              ImGuiSelectableFlags_None, selectable_size))
-        {
-            /* clicking the already-selected row toggles the selection off */
-            *ctx->selected_sat = (*ctx->selected_sat == &satellites[i]) ? NULL : &satellites[i];
-        }
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-        {
-            LayoutOpenPanel(PANEL_SAT_INFO);
-        }
+            ImGui::InvisibleButton("##fav", frame);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+            {
+                bool now_fav = !fav;
+                SetFavorite(satellites[i].norad_id_num, now_fav);
+                SaveFavorites("favorites.json");
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(fav ? "Remove from favorites" : "Add to favorites");
+            ImGui::SameLine();
 
-        if (!active)
-        {
-            ImGui::PopStyleColor();
-        }
+            /* checkbox for active state */
+            if (ImGui::Checkbox("##active", &satellites[i].is_active))
+            {
+                /* persist the selection immediately so it survives a crash/kill */
+                SaveSatSelection(cfg);
+                SaveAppConfig("settings.json", cfg);
+            }
+            ImGui::SameLine();
 
-        ImGui::PopID();
+            if (!active)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ThemeColor(g_theme.ui.text_dim));
+            }
+
+            char label[128];
+            snprintf(label, sizeof(label), "%s##%d", satellites[i].name, i);
+
+            float row_avail = ImGui::GetContentRegionAvail().x;
+            ImVec2 selectable_size = ImVec2(row_avail, 20);
+            if (ImGui::Selectable(label, *ctx->selected_sat == &satellites[i],
+                                  ImGuiSelectableFlags_None, selectable_size))
+            {
+                /* clicking the already-selected row toggles the selection off */
+                *ctx->selected_sat = (*ctx->selected_sat == &satellites[i]) ? NULL : &satellites[i];
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                LayoutOpenPanel(PANEL_SAT_INFO);
+            }
+
+            if (!active)
+            {
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::PopID();
+        }
     }
 
     /* drag-to-scroll: dragging on empty list space scrolls the list */
