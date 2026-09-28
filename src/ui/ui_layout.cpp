@@ -1089,63 +1089,10 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
     bool *p_open = &g_layout.settings_open;
     if (ImGui::BeginPopupModal("Settings", p_open, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        /* ---- Display section --------------------------------------------- */
-        if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
+        /* ---- Appearance section ------------------------------------------ */
+        if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
-            ImGui::Checkbox("Night Mode (Red)", &cfg->night_mode);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Render the entire screen (scene + UI) in monochrome red for dark adaptation (F10)");
-            ImGui::Checkbox("VSync", &cfg->hint_vsync);
-            if (ImGui::Checkbox("Use Local Time", &cfg->use_local_time))
-            {
-                SetUseLocalTime(cfg->use_local_time);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Show dates/times in your system timezone instead of UTC");
-
-            /* first day of the week used by the time-controls date picker */
-            if (cfg->first_day_of_week < 0 || cfg->first_day_of_week > 1)
-                cfg->first_day_of_week = 1;
-            if (ImGui::Combo("Week Starts On", &cfg->first_day_of_week, "Sunday\0Monday\0"))
-                SaveAppConfig("settings.json", cfg);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("First day of the week shown in the date-picker calendar");
-
-            /* number of predicted (future) orbit steps drawn for each ground
-             * track in 2D mode. Float slider with a 0.25-orbit sub-step grid
-             * (snapped both on-screen and on write), default 2.0. */
-            ImGui::Separator();
-            float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
-                                                     LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);
-            orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f; /* snap to 0.25 grid */
-            if (ImGui::SliderFloat("2D Future Orbits", &orbits_steps, LAYERS_FUTURE_ORBITS_STEPS_MIN,
-                                   LAYERS_FUTURE_ORBITS_STEPS_MAX, "%.2f"))
-            {
-                orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f;
-                orbits_steps = fmaxf(LAYERS_FUTURE_ORBITS_STEPS_MIN, orbits_steps);
-                orbits_steps = fminf(LAYERS_FUTURE_ORBITS_STEPS_MAX, orbits_steps);
-                ToolSettingSetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS, orbits_steps);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("How many predicted orbits are drawn for each future ground track in 2D mode.\nRange: 0.25 - 5.0 orbits, in 0.25-orbit steps. Default: 2.0");
-        }
-
-        /* ---- Performance section ----------------------------------------- */
-        if (ImGui::CollapsingHeader("Performance"))
-        {
-            /* dragging the slider to max (240) enables unlimited FPS (0) */
-            int fps = (cfg->target_fps == 0) ? 240 : cfg->target_fps;
-            if (ImGui::SliderInt("Max FPS", &fps, 15, 240))
-                cfg->target_fps = (fps >= 240) ? 0 : fps;
-            if (cfg->target_fps == 0)
-                ImGui::TextDisabled("Unlimited FPS");
-            ImGui::SliderFloat("UI Scale", &cfg->ui_scale, 0.5f, 4.0f);
-        }
-
-        /* ---- Theme section ----------------------------------------------- */
-        if (ImGui::CollapsingHeader("Theme"))
-        {
+            /* theme dropdown */
             if (g_ui.theme_names[0] == '\0')
             {
                 ThemeList list;
@@ -1179,6 +1126,75 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 cfg->theme[63] = '\0';
                 cfg->reload_theme = true;
             }
+
+            /* UI scale: scales the whole interface (widgets + fonts) */
+            ImGui::SliderFloat("UI Scale", &cfg->ui_scale, 0.5f, 4.0f, "%.2fx");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Scales the entire interface (widgets and fonts). Range 0.5x-4.0x. Shortcuts: + / -");
+            if (ImGui::IsItemDeactivatedAfterEdit())
+                SaveAppConfig("settings.json", cfg);
+            ImGui::SameLine();
+            if (ImGui::Button("Reset"))
+                cfg->ui_scale = 1.0f;
+
+            ImGui::Checkbox("Night Mode (Red)", &cfg->night_mode);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Render the entire screen (scene + UI) in monochrome red for dark adaptation (F10)");
+        }
+
+        /* ---- Display section --------------------------------------------- */
+        if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
+            ImGui::Checkbox("VSync", &cfg->hint_vsync);
+
+            /* number of predicted (future) orbit steps drawn for each ground
+             * track in 2D mode. Float slider with a 0.25-orbit sub-step grid
+             * (snapped both on-screen and on write), default 2.0. */
+            ImGui::Separator();
+            float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
+                                                     LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);
+            orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f; /* snap to 0.25 grid */
+            if (ImGui::SliderFloat("2D Future Orbits", &orbits_steps, LAYERS_FUTURE_ORBITS_STEPS_MIN,
+                                   LAYERS_FUTURE_ORBITS_STEPS_MAX, "%.2f"))
+            {
+                orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f;
+                orbits_steps = fmaxf(LAYERS_FUTURE_ORBITS_STEPS_MIN, orbits_steps);
+                orbits_steps = fminf(LAYERS_FUTURE_ORBITS_STEPS_MAX, orbits_steps);
+                ToolSettingSetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS, orbits_steps);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("How many predicted orbits are drawn for each future ground track in 2D mode.\nRange: 0.25 - 5.0 orbits, in 0.25-orbit steps. Default: 2.0");
+        }
+
+        /* ---- Time & Locale section --------------------------------------- */
+        if (ImGui::CollapsingHeader("Time & Locale"))
+        {
+            if (ImGui::Checkbox("Use Local Time", &cfg->use_local_time))
+            {
+                SetUseLocalTime(cfg->use_local_time);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Show dates/times in your system timezone instead of UTC");
+
+            /* first day of the week used by the time-controls date picker */
+            if (cfg->first_day_of_week < 0 || cfg->first_day_of_week > 1)
+                cfg->first_day_of_week = 1;
+            if (ImGui::Combo("Week Starts On", &cfg->first_day_of_week, "Sunday\0Monday\0"))
+                SaveAppConfig("settings.json", cfg);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("First day of the week shown in the date-picker calendar");
+        }
+
+        /* ---- Performance section ----------------------------------------- */
+        if (ImGui::CollapsingHeader("Performance"))
+        {
+            /* dragging the slider to max (240) enables unlimited FPS (0) */
+            int fps = (cfg->target_fps == 0) ? 240 : cfg->target_fps;
+            if (ImGui::SliderInt("Max FPS", &fps, 15, 240))
+                cfg->target_fps = (fps >= 240) ? 0 : fps;
+            if (cfg->target_fps == 0)
+                ImGui::TextDisabled("Unlimited FPS");
         }
 
         /* ---- Locations section (single source of truth for markers + home) */

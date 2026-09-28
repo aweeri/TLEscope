@@ -50,7 +50,7 @@ endif
 
 # Link against the static raylib built from the submodule, plus per-OS system libs
 LDFLAGS_LIN = $(RAYLIB_LIB) -lcurl -lGL -lX11 -lm -lpthread -ldl -lrt
-LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows $(LDFLAGS_WIN_EXTRA)
+LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic -lwinpthread -Wl,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows $(LDFLAGS_WIN_EXTRA)
 DIST_LINUX = dist/TLEscope-Linux-Portable
 DIST_WIN   = dist/TLEscope-Win-Portable
 

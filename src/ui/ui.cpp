@@ -784,12 +784,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->show_scattering = false;
             cfg->show_skybox = false;
             cfg->night_mode = false;
-
-            /* plain Earth body but expose the map overlays (grid, borders, coast) */
             cfg->show_earth_texture = false;
-            cfg->show_latlon_grid = true;
-            cfg->show_country_borders = true;
-            cfg->show_coast_lines = true;
 
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
@@ -805,10 +800,10 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->show_skybox = true;
             cfg->night_mode = false;
 
+            /* textured Earth body. Map overlays (grid, borders, coast) are NOT
+             * touched here: they keep their configured defaults so the welcome
+             * modal never overrides them. */
             cfg->show_earth_texture = true;
-            cfg->show_latlon_grid = false;
-            cfg->show_country_borders = false;
-            cfg->show_coast_lines = true;
 
             cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
