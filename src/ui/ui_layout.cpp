@@ -997,14 +997,14 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
     if (ImGui::BeginMainMenuBar())
     {
         /* ---- File menu --------------------------------------------------- */
-        if (ImGui::BeginMenu("File"))
+        if (ImGui::BeginMenu(ICON_FA_FILE "  File"))
         {
             if (ImGui::MenuItem("Exit", "Alt+F4")) UIRequestExit();
             ImGui::EndMenu();
         }
 
         /* ---- View menu --------------------------------------------------- */
-        if (ImGui::BeginMenu("View"))
+        if (ImGui::BeginMenu(ICON_FA_EYE "  View"))
         {
             ImGui::MenuItem("Left Sidebar", NULL, &g_layout.left_visible);
             ImGui::MenuItem("Right Sidebar", NULL, &g_layout.right_visible);
@@ -1028,18 +1028,16 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
             ImGui::EndMenu();
         }
 
-        /* ---- Tools menu -------------------------------------------------- */
-        if (ImGui::BeginMenu("Tools"))
+        /* ---- Tools: opens the tools manager directly (no dropdown) ------- */
+        if (ImGui::MenuItem(ICON_FA_WRENCH "  Tools"))
         {
-            if (ImGui::MenuItem("Manage Tools..."))
-            {
-                LayoutOpenTools();
-            }
-            ImGui::EndMenu();
+            LayoutOpenTools();
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Manage tool panels");
 
         /* ---- Help menu --------------------------------------------------- */
-        if (ImGui::BeginMenu("Help"))
+        if (ImGui::BeginMenu(ICON_FA_CIRCLE_QUESTION "  Help"))
         {
             if (ImGui::MenuItem("Controls")) UIOpenHelp();
             if (ImGui::MenuItem("GitHub Repository"))
@@ -1049,7 +1047,7 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
         }
 
         /* ---- Settings menu item (after Help) ----------------------------- */
-        if (ImGui::MenuItem("Settings"))
+        if (ImGui::MenuItem(ICON_FA_GEAR "  Settings"))
         {
             LayoutOpenSettings();
         }
