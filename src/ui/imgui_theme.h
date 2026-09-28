@@ -28,4 +28,11 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale);
 
 float ThemeDevicePixelScale(void);
 
+
+// Single source of truth for UI scaling.
+
+float UIScale(void);
+float UIDeviceScale(void);
+float UIPx(float logical);
+
 #endif /* IMGUI_THEME_H */

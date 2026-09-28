@@ -631,7 +631,7 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
 
     const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
 
-    const float font_size = font->FontSize * 0.8f;
+    const float font_size = ImGui::GetFontSize() * 0.8f;
     Color label_col = g_theme.ui.text;
     label_col.a = (unsigned char)(label_col.a * 0.7f);
     const ImU32 col = IM_COL32(label_col.r, label_col.g, label_col.b, label_col.a);

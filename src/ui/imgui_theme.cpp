@@ -12,6 +12,11 @@
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
+static float s_ui_scale = 1.0f;
+
+float UIScale(void) { return s_ui_scale; }
+float UIDeviceScale(void) { return ThemeDevicePixelScale(); }
+float UIPx(float logical) { return logical * s_ui_scale; }
 
 /* ------------------------------------------------------------------ */
 /* apply colours + style                                               */
@@ -137,13 +142,11 @@ void ThemeApplyToImGui(const Theme *t, float ui_scale)
 
     /* ── scale ────────────────────────────────────────────────────── */
     style.ScaleAllSizes(ui_scale);
-    /* FontGlobalScale is kept at 1.0: the UI scale is baked into the font
-     * atlas size in ThemeRebuildImGuiFonts() instead. Scaling glyphs at
-     * render time (FontGlobalScale != 1.0) places them on non-pixel-aligned
-     * positions and makes text look blurry/antialiased. */
-    io.FontGlobalScale = 1.0f;
+    const float dpi = ThemeDevicePixelScale();
+    io.FontGlobalScale = (dpi > 0.0f) ? (1.0f / dpi) : 1.0f;
+    s_ui_scale = ui_scale;
 
-    LOG_DEBUG("ImGui theme applied (scale=%.2f)", (double)ui_scale);
+    LOG_DEBUG("ImGui theme applied (scale=%.2f, dpi=%.2f)", (double)ui_scale, (double)dpi);
 }
 
 /* ------------------------------------------------------------------ */
@@ -165,6 +168,9 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
 {
     ImGuiIO &io = ImGui::GetIO();
 
+    /* publish the scale for UIScale()/UIPx() consumers (layout metrics) */
+    s_ui_scale = ui_scale;
+
     /* unload the previous font texture if we have one */
     static Texture s_font_tex = {0};
     if (s_font_tex.id != 0)
@@ -176,32 +182,22 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     /* clear existing fonts */
     io.Fonts->Clear();
 
-    /* load the theme's font file (fallback to default via ThemeAssetPath).
-     * The UI scale is baked into the atlas size so glyphs are rasterized at
-     * the final pixel size (crisp text) rather than scaled at render time. */
+    /* load the theme's font file (fallback to default via ThemeAssetPath). */
     const char *font_path = ThemeAssetPath(t->font.file);
 
-    /* Round the logical font size to a whole pixel (Dear ImGui's DPI guidance)
-     * so glyph metrics line up with the integer-truncated style sizes that
-     * ImGuiStyle::ScaleAllSizes() produces. A fractional font size leaves text
-     * baselines between pixels and is a common source of misaligned rows on
-     * HiDPI displays. */
-    float font_px  = (float)(int)(t->font.size * ui_scale + 0.5f);
-    float icon_px  = (float)(int)(t->font.icon_size * ui_scale + 0.5f);
+    const float dpi = ThemeDevicePixelScale();
+    float font_px = (float)(int)(t->font.size * ui_scale * dpi + 0.5f);
+    float icon_px = (float)(int)(t->font.icon_size * ui_scale * dpi + 0.5f);
     if (font_px < 1.0f) font_px = 1.0f;
     if (icon_px < 1.0f) icon_px = 1.0f;
-
-    /* Single source of truth for the device scale: the exact ratio raylib uses
-     * for its DPI transform, so the atlas is never resampled. */
-    const float density = ThemeDevicePixelScale();
 
     ImFontConfig font_cfg;
     font_cfg.FontDataOwnedByAtlas = true;
     font_cfg.MergeMode = false;
     font_cfg.PixelSnapH = true;
-    /* Keep logical font metrics unchanged; rasterize for the framebuffer's
-     * pixel density. raylib/rlImGui handle window and input scaling. */
-    font_cfg.RasterizerDensity = density;
+    font_cfg.OversampleH = 2;
+    font_cfg.OversampleV = 1;
+    font_cfg.RasterizerDensity = 1.0f;
     io.Fonts->AddFontFromFileTTF(font_path, font_px, &font_cfg, NULL);
 
     /* merge FontAwesome icons */
@@ -210,12 +206,13 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     icons_cfg.MergeMode = true;
     icons_cfg.FontDataOwnedByAtlas = true;
     icons_cfg.PixelSnapH = true;
-    icons_cfg.RasterizerDensity = density;
-    /* ~2px down at the 14px default icon size, clamped to stay 1-4px */
-    float icon_y_off = icon_px * 0.14f + 0.04f;
+    icons_cfg.OversampleH = 2;
+    icons_cfg.OversampleV = 1;
+    icons_cfg.RasterizerDensity = 1.0f;
+    float icon_y_off = t->font.icon_size * ui_scale * 0.14f + 0.04f;
     if (icon_y_off < 1.0f) icon_y_off = 1.0f;
     if (icon_y_off > 4.0f) icon_y_off = 4.0f;
-    icons_cfg.GlyphOffset.y = icon_y_off;
+    icons_cfg.GlyphOffset.y = icon_y_off * dpi;
     icons_cfg.GlyphMinAdvanceX = icon_px; /* uniform 1em icon cell is stable horizontal centring */
     icons_cfg.GlyphMaxAdvanceX = icon_px;
     static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
@@ -236,8 +233,11 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     s_font_tex = LoadTextureFromImage(img);
     /* img pixels are owned by ImGui atlas — do NOT unload */
 
+    // bilinear filtering
+    SetTextureFilter(s_font_tex, TEXTURE_FILTER_BILINEAR);
+
     io.Fonts->SetTexID((ImTextureID)(intptr_t)s_font_tex.id);
 
-    LOG_INFO("ImGui fonts rebuilt: %s @ %.0fpx + FA @ %.0fpx (scale=%.2f)",
-             t->font.file, (double)t->font.size, (double)t->font.icon_size, (double)ui_scale);
+    LOG_INFO("ImGui fonts rebuilt: %s @ %.0fpx + FA @ %.0fpx (scale=%.2f, dpi=%.2f)",
+             t->font.file, (double)font_px, (double)icon_px, (double)ui_scale, (double)dpi);
 }

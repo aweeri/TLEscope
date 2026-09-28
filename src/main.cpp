@@ -961,6 +961,8 @@ int main(void)
             }
             if (IsKeyPressed(KEY_F11)) {
                 ToggleFullscreen();
+                cfg.fullscreen = IsWindowFullscreen();
+                SaveAppConfig("settings.json", &cfg);
                 LOG_INFO("Fullscreen toggled");
             }
 

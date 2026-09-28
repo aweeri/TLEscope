@@ -311,7 +311,7 @@ static const float kBadgePadX = 6.0f;
  * never shifts when the live state changes. */
 static float LiveBadgeWidth(void)
 {
-    return 2.0f * kBadgePadX + 2.0f * kBadgeDotR + kBadgeGap + ImGui::CalcTextSize("PAUSED").x;
+    return 2.0f * UIPx(kBadgePadX) + 2.0f * UIPx(kBadgeDotR) + UIPx(kBadgeGap) + ImGui::CalcTextSize("PAUSED").x;
 }
 
 /**
@@ -324,8 +324,8 @@ static void DrawLiveBadge(bool is_live, bool is_paused, float height)
 {
     const char *label = is_live ? "LIVE" : (is_paused ? "PAUSED" : "FIXED");
 
-    const float dot_r = kBadgeDotR;
-    const float gap   = kBadgeGap;
+    const float dot_r = UIPx(kBadgeDotR);
+    const float gap   = UIPx(kBadgeGap);
     float w = LiveBadgeWidth();
     float h = height;
 
@@ -363,7 +363,7 @@ static void DrawLiveBadge(bool is_live, bool is_paused, float height)
     float group_x = p.x + (w - group_w) * 0.5f;
     ImVec2 dot_c = ImVec2(group_x + dot_r, p.y + h * 0.5f);
     if (is_live)
-        dl->AddCircleFilled(dot_c, dot_r + 2.0f, ImGui::GetColorU32(ThemeColor(ThemeAlpha(dot, 0.25f))), 16);
+        dl->AddCircleFilled(dot_c, dot_r + UIPx(2.0f), ImGui::GetColorU32(ThemeColor(ThemeAlpha(dot, 0.25f))), 16);
     dl->AddCircleFilled(dot_c, dot_r, ImGui::GetColorU32(ThemeColor(dot)), 16);
 
     /* label */
@@ -752,7 +752,7 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
     ImGui::OpenPopup("Welcome to TLEscope");
     /* give the modal a minimum content width so the button pair has
      * symmetric breathing room instead of hugging the window edge */
-    ImGui::SetNextWindowContentSize(ImVec2(360, 0));
+    ImGui::SetNextWindowContentSize(ImVec2(UIPx(360.0f), 0));
     if (ImGui::BeginPopupModal("Welcome to TLEscope", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         /* centered heading */
@@ -769,8 +769,8 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
         ImGui::Spacing();
 
         /* two equally-sized, aligned buttons */
-        float btn_w = 150.0f;
-        float btn_h = 60.0f;
+        float btn_w = UIPx(150.0f);
+        float btn_h = UIPx(60.0f);
         float avail = ImGui::GetContentRegionAvail().x;
         float spacing = ImGui::GetStyle().ItemSpacing.x;
         float total = btn_w * 2.0f + spacing;
@@ -899,7 +899,19 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     static bool imgui_inited = false;
     static float last_ui_scale = 0.0f;
     static float last_dpi_scale = 0.0f;
+    static float last_display_w = 0.0f;
+    static float last_display_h = 0.0f;
+    /* pending ui_scale whose (expensive) font-atlas rebuild is debounced while
+     * the +/- keys are held; 0 = nothing pending */
+    static float pending_ui_scale = 0.0f;
+    static float ui_scale_idle = 0.0f;
+
     const float dpi_scale = ThemeDevicePixelScale();
+    /* logical display size (the same space io.DisplaySize is normalised to
+     * below); used to detect fullscreen / resize transitions */
+    const float display_w = (float)GetScreenWidth();
+    const float display_h = (float)GetScreenHeight();
+
     if (!imgui_inited) {
         rlImGuiBeginInitImGui();
         rlImGuiEndInitImGui();
@@ -910,15 +922,46 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
         imgui_inited = true;
         last_ui_scale = cfg->ui_scale;
         last_dpi_scale = dpi_scale;
+        last_display_w = display_w;
+        last_display_h = display_h;
     }
-    else if (cfg->ui_scale != last_ui_scale || dpi_scale != last_dpi_scale)
+    else
     {
-        last_ui_scale = cfg->ui_scale;
-        last_dpi_scale = dpi_scale;
-        /* the UI scale is baked into the font atlas, so a scale change
-         * requires rebuilding the fonts (not just re-applying the style) */
-        ThemeRebuildImGuiFonts(&g_theme, cfg->ui_scale);
-        ThemeApplyToImGui(&g_theme, cfg->ui_scale);
+        const bool scale_changed   = (cfg->ui_scale != last_ui_scale);
+        const bool dpi_changed     = (dpi_scale != last_dpi_scale);
+        const bool display_changed = (display_w != last_display_w || display_h != last_display_h);
+
+        if (scale_changed || dpi_changed || display_changed)
+        {
+            last_ui_scale = cfg->ui_scale;
+            last_dpi_scale = dpi_scale;
+            last_display_w = display_w;
+            last_display_h = display_h;
+
+            ThemeApplyToImGui(&g_theme, cfg->ui_scale);
+
+            if (dpi_changed)
+            {
+                ThemeRebuildImGuiFonts(&g_theme, cfg->ui_scale);
+                pending_ui_scale = 0.0f;
+            }
+            else if (scale_changed)
+            {
+                // debounce
+                pending_ui_scale = cfg->ui_scale;
+                ui_scale_idle = 0.0f;
+            }
+        }
+
+        if (pending_ui_scale > 0.0f)
+        {
+            ui_scale_idle += ImGui::GetIO().DeltaTime;
+            if (ui_scale_idle >= 0.15f)
+            {
+                ThemeRebuildImGuiFonts(&g_theme, pending_ui_scale);
+                pending_ui_scale = 0.0f;
+            }
+        }
     }
 
     /* apply persisted layout on first frame.
@@ -936,7 +979,10 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     /* begin rlImGui frame */
     rlImGuiBegin();
 
-    ImGui::GetIO().DisplayFramebufferScale = ImVec2(dpi_scale, dpi_scale);
+    ImGuiIO &io = ImGui::GetIO();
+    if (GetScreenWidth() > 0 && GetScreenHeight() > 0)
+        io.DisplaySize = ImVec2((float)GetScreenWidth(), (float)GetScreenHeight());
+    io.DisplayFramebufferScale = ImVec2(dpi_scale, dpi_scale);
 
     /* map grid value labels, drawn first so satellite/marker labels win */
     DrawMapGridLabels(ctx, cfg);
@@ -966,7 +1012,7 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     if (*ctx->picking_home)
     {
         ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f,
-                                       ImGui::GetFrameHeight() + 14.0f),
+                                       ImGui::GetFrameHeight() + UIPx(14.0f)),
                                 ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowBgAlpha(0.9f);
         if (ImGui::Begin("##pick_home_hint", NULL,

@@ -17,6 +17,7 @@
  */
 
 #include "labels.h"
+#include "imgui_theme.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/location.h"
@@ -86,13 +87,11 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     ImFont *font = ImGui::GetFont();
     if (!dl || !font) return;
 
-    /* render at the UI font's native size (crisp, no glyph scaling);
-     * the size setting is a multiplier around it */
-    float size = font->FontSize * size_mult;
+    float size = ImGui::GetFontSize() * size_mult;
 
     float ui_scale = cfg->ui_scale;
     float icon_half = 12.0f * ui_scale; /* half of the 24px sat/marker icon */
-    float pad = 4.0f;                   /* gap between icon and text */
+    float pad = UIPx(4.0f);             /* gap between icon and text */
 
     std::vector<LabelCandidate> cands;
     cands.reserve(256);
@@ -442,7 +441,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         if (placed >= max_count) break;
 
         ImVec2 tsz = font->CalcTextSizeA(c.size, FLT_MAX, 0.0f, c.text);
-        float bx = 6.0f, by = 3.0f; /* background padding */
+        float bx = UIPx(6.0f), by = UIPx(3.0f); /* background padding */
         ImVec2 text_pos = c.anchor;
         if (c.centered)
             text_pos = ImVec2(c.anchor.x - tsz.x * 0.5f, c.anchor.y - tsz.y * 0.5f);
@@ -469,13 +468,13 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         /* draw */
         if (use_bg)
         {
-            dl->AddRectFilled(rmin, rmax, bg_col, 4.0f);
-            dl->AddRect(rmin, rmax, border_col, 4.0f);
+            dl->AddRectFilled(rmin, rmax, bg_col, UIPx(4.0f));
+            dl->AddRect(rmin, rmax, border_col, UIPx(4.0f));
         }
         else
         {
             /* text shadow for contrast without a background box */
-            dl->AddText(font, c.size, ImVec2(text_pos.x + 1.0f, text_pos.y + 1.0f), shadow_col, c.text);
+            dl->AddText(font, c.size, ImVec2(text_pos.x + UIPx(1.0f), text_pos.y + UIPx(1.0f)), shadow_col, c.text);
         }
         dl->AddText(font, c.size, text_pos, c.color, c.text);
 
