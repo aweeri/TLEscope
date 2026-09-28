@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <algorithm>
 #include <vector>
 #include <math.h>
