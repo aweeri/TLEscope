@@ -34,8 +34,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
     config->show_earth_texture = true;  // default
-    config->show_latlon_grid = false;   // default
-    config->show_country_borders = false; // default
+    config->show_latlon_grid = true;    // default
+    config->show_country_borders = true;  // default
     config->show_coast_lines = true;   // default
     config->show_first_run_dialog = false; // default
     config->hint_vsync = true;       // default
@@ -590,8 +590,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_ground_coverage = true;
         config->show_apsides = true;
         config->show_earth_texture = true;
-        config->show_latlon_grid = false;
-        config->show_country_borders = false;
+        config->show_latlon_grid = true;
+        config->show_country_borders = true;
         config->show_coast_lines = true;
         config->hint_vsync = true;
         config->night_mode = false;
