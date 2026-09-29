@@ -9,7 +9,8 @@ typedef enum
 {
     LOCK_NONE,
     LOCK_EARTH,
-    LOCK_MOON
+    LOCK_MOON,
+    LOCK_SAT
 } TargetLock;
 
 /**

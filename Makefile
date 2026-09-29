@@ -79,7 +79,7 @@ $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp
 # object that includes it, so a struct change can't leave stale objects behind
 -include $(OBJ:.o=.d) $(OBJ_WIN:.o=.d)
 
-.PHONY: all raylib linux macos windows windows-arm64 win-installer clean build bin install uninstall test
+.PHONY: all raylib clean-libs linux macos windows windows-arm64 win-installer clean build bin install uninstall test
 
 all: linux
 
@@ -95,6 +95,13 @@ $(RAYLIB_LIB):
 	@printf "\033[1;35mBuilding raylib (static)...\033[0m\n"
 	$(MAKE) -C $(RAYLIB_SRC) $(RAYLIB_MAKE_ARGS)
 	@printf "\033[1;32mraylib built: $(RAYLIB_LIB)\033[0m\n"
+
+# Clean bundled library build artifacts (raylib). Use when switching
+# platforms/toolchains so a stale libraylib.a isn't reused.
+clean-libs:
+	rm -f $(RAYLIB_SRC)/*.o
+	rm -f $(RAYLIB_LIB) $(RAYLIB_SRC)/libraylib.web.a $(RAYLIB_SRC)/libraylib.so*
+	rm -f $(RAYLIB_SRC)/raygui.c $(RAYLIB_SRC)/*-protocol.h $(RAYLIB_SRC)/*-protocol-code.h $(RAYLIB_SRC)/*-protocol-code.c
 
 linux: raylib bin/TLEscope
 	@mkdir -p $(DIST_LINUX)

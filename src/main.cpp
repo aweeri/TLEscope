@@ -408,6 +408,62 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
     }
 }
 
+static Satellite *FindSatByNorad(uint32_t norad)
+{
+    if (norad == 0)
+        return NULL;
+    for (int i = 0; i < sat_count; i++)
+    {
+        if (satellites[i].norad_id_num == norad && satellites[i].is_active)
+            return &satellites[i];
+    }
+    return NULL;
+}
+
+static void StartTrackingSat(TargetLock *lock, Satellite **sat, uint32_t *norad, Satellite *target)
+{
+    *lock = LOCK_SAT;
+    *sat = target;
+    *norad = target->norad_id_num;
+    NotifyPush(NOTIFY_INFO, ICON_FA_SATELLITE, "Currently Tracking: %s", target->name);
+}
+
+static void StartTrackingBody(TargetLock *lock, Satellite **sat, uint32_t *norad, TargetLock kind)
+{
+    *lock = kind;
+    *sat = NULL;
+    *norad = 0;
+    if (kind == LOCK_MOON)
+        NotifyPush(NOTIFY_INFO, ICON_FA_MOON, "Currently Tracking: Moon");
+    else
+        NotifyPush(NOTIFY_INFO, ICON_FA_GLOBE, "Currently Tracking: Earth");
+}
+
+/** user-initiated stop (pan / empty-space double-click); toasts only if tracking */
+static void StopTrackingUser(TargetLock *lock, Satellite **sat, uint32_t *norad)
+{
+    if (*lock == LOCK_NONE)
+        return;
+    *lock = LOCK_NONE;
+    *sat = NULL;
+    *norad = 0;
+    NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Tracking stopped");
+}
+
+/** target lost (decay / NaN / data reload); toasts the lost name if known */
+static void StopTrackingLost(TargetLock *lock, Satellite **sat, uint32_t *norad, const char *name)
+{
+    if (*lock == LOCK_NONE)
+        return;
+    *lock = LOCK_NONE;
+    *sat = NULL;
+    *norad = 0;
+    if (name && name[0])
+        NotifyPush(NOTIFY_WARNING, ICON_FA_CROSSHAIRS, "Tracking stopped: %s lost", name);
+    else
+        NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Tracking stopped");
+}
+
 int main(void)
 {
     LogInit();
@@ -663,6 +719,13 @@ int main(void)
     float target_camAngleY = camAngleY;
     Vector3 target_camera3d_target = Camera3DParams.target;
 
+    /* accumulated Earth->body radial azimuth for co-rotating the orbit offset */
+    float track_follow_angle = 0.0f;
+    bool track_follow_valid = false;
+    float track_follow_last_phi = 0.0f;
+    TargetLock track_follow_lock = LOCK_NONE;
+    Satellite *track_follow_sat = NULL;
+
     double current_epoch = get_current_real_time_epoch();
     double time_multiplier = 1.0;
     double saved_multiplier = 1.0;
@@ -688,6 +751,8 @@ int main(void)
     Satellite *hovered_sat = NULL;
     Satellite *selected_sat = NULL;
     TargetLock active_lock = LOCK_EARTH;
+    Satellite *tracked_sat = NULL;
+    uint32_t tracked_norad = 0;
     double last_left_click_time = 0.0;
     Vector2 left_press_pos = {0};
     bool left_press_over_ui = false;
@@ -816,6 +881,14 @@ int main(void)
             DemoDirectorRequestStop();
         DemoDirectorUpdate(&demo_ctx, GetFrameTime());
 
+        /* demo mode owns the camera; tracking is not applicable and must not toast */
+        if (DemoDirectorActive())
+        {
+            active_lock = LOCK_NONE;
+            tracked_sat = NULL;
+            tracked_norad = 0;
+        }
+
         /* 3-finger double-tap toggles clean view (identical to pressing H).
          * Consumed unconditionally so it works even while a text field is focused. */
         if (TouchGestureConsumeThreeFingerDoubleTap())
@@ -942,7 +1015,7 @@ int main(void)
 
             if (IsKeyPressed(KEY_HOME))
             {
-                active_lock = LOCK_EARTH;
+                StartTrackingBody(&active_lock, &tracked_sat, &tracked_norad, LOCK_EARTH);
                 target_camDistance = 10.0f;
                 target_camAngleX = 0.785f;
                 target_camAngleY = 0.5f;
@@ -1054,6 +1127,8 @@ int main(void)
                 satellites[i].is_active = false;
                 if (selected_sat == &satellites[i])
                     selected_sat = NULL;
+                if (active_lock == LOCK_SAT && tracked_sat == &satellites[i])
+                    StopTrackingLost(&active_lock, &tracked_sat, &tracked_norad, satellites[i].name);
                 continue;
             }
 
@@ -1065,6 +1140,8 @@ int main(void)
                 satellites[i].is_active = false;
                 if (selected_sat == &satellites[i])
                     selected_sat = NULL;
+                if (active_lock == LOCK_SAT && tracked_sat == &satellites[i])
+                    StopTrackingLost(&active_lock, &tracked_sat, &tracked_norad, satellites[i].name);
                 continue;
             }
 
@@ -1157,13 +1234,12 @@ int main(void)
                 if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || left_dragging || (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && IsKeyDown(KEY_LEFT_SHIFT)))
                 {
                     target_camera2d_target = Vector2Add(target_camera2d_target, Vector2Scale(mouseDelta, -1.0f / target_camera2d_zoom));
-                    active_lock = LOCK_NONE;
+                    StopTrackingUser(&active_lock, &tracked_sat, &tracked_norad);
                 }
                 float wheel = GetMouseWheelMove();
                 if (wheel != 0 && !is_typing)
                 {
                     target_camera2d_zoom += wheel * 0.1f * target_camera2d_zoom;
-                    active_lock = LOCK_NONE;
                 }
             }
 
@@ -1175,7 +1251,7 @@ int main(void)
                 if (IsKeyDown(KEY_LEFT)) { target_camera2d_target.x -= pan_speed; moved = true; }
                 if (IsKeyDown(KEY_DOWN)) { target_camera2d_target.y += pan_speed; moved = true; }
                 if (IsKeyDown(KEY_UP)) { target_camera2d_target.y -= pan_speed; moved = true; }
-                if (moved) active_lock = LOCK_NONE;
+                if (moved) StopTrackingUser(&active_lock, &tracked_sat, &tracked_norad);
             }
 
             if (!over_ui)
@@ -1220,7 +1296,7 @@ int main(void)
                         float panSpeed = target_camDistance * 0.001f;
                         target_camera3d_target = Vector3Add(target_camera3d_target, Vector3Scale(right, -mouseDelta.x * panSpeed));
                         target_camera3d_target = Vector3Add(target_camera3d_target, Vector3Scale(upVector, mouseDelta.y * panSpeed));
-                        active_lock = LOCK_NONE;
+                        StopTrackingUser(&active_lock, &tracked_sat, &tracked_norad);
                     }
                     else
                     {
@@ -1275,7 +1351,6 @@ int main(void)
                 {
                     if (target_camAngleY > 1.57f) target_camAngleY = 1.57f;
                     if (target_camAngleY < -1.57f) target_camAngleY = -1.57f;
-                    active_lock = LOCK_NONE;
                 }
             }
 
@@ -1377,34 +1452,53 @@ int main(void)
 
                     if (is_double_click)
                     {
-                        // double-click lock logic (unchanged)
-                        if (is_2d_view)
+                        /* double-click a satellite to track it (independent of selection) */
+                        if (hovered_sat != NULL)
                         {
-                            Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), Camera2DParams);
-                            bool hit_moon = false;
-                            for (int offset_i = -1; offset_i <= 1; offset_i++)
-                            {
-                                float x_off = offset_i * map_w;
-                                if (Vector2Distance(mouseWorld, (Vector2){moon_mx + x_off, moon_my}) < (15.0f * cfg.ui_scale / Camera2DParams.zoom))
-                                {
-                                    hit_moon = true;
-                                    break;
-                                }
-                            }
-                            active_lock = hit_moon ? LOCK_MOON : LOCK_EARTH;
+                            if (!(active_lock == LOCK_SAT && tracked_sat == hovered_sat))
+                                StartTrackingSat(&active_lock, &tracked_sat, &tracked_norad, hovered_sat);
                         }
                         else
                         {
-                            Ray mouseRay = ScreenToWorldRayViewport3D(GetMousePosition(), Camera3DParams);
-                            RayCollision earthCol = GetRayCollisionSphere(mouseRay, Vector3Zero(), draw_earth_radius);
-                            RayCollision moonCol = GetRayCollisionSphere(mouseRay, draw_moon_pos, draw_moon_radius);
-                            if (moonCol.hit && (!earthCol.hit || moonCol.distance < earthCol.distance))
+                            TargetLock resolved = LOCK_NONE;
+                            if (is_2d_view)
                             {
-                                active_lock = LOCK_MOON;
+                                Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), Camera2DParams);
+                                bool hit_moon = false;
+                                for (int offset_i = -1; offset_i <= 1; offset_i++)
+                                {
+                                    float x_off = offset_i * map_w;
+                                    if (Vector2Distance(mouseWorld, (Vector2){moon_mx + x_off, moon_my}) < (15.0f * cfg.ui_scale / Camera2DParams.zoom))
+                                    {
+                                        hit_moon = true;
+                                        break;
+                                    }
+                                }
+                                bool on_map = mouseWorld.x >= -map_w * 0.5f && mouseWorld.x <= map_w * 0.5f &&
+                                              mouseWorld.y >= -map_h * 0.5f && mouseWorld.y <= map_h * 0.5f;
+                                resolved = hit_moon ? LOCK_MOON : (on_map ? LOCK_EARTH : LOCK_NONE);
                             }
-                            else if (earthCol.hit)
+                            else
                             {
-                                active_lock = LOCK_EARTH;
+                                Ray mouseRay = ScreenToWorldRayViewport3D(GetMousePosition(), Camera3DParams);
+                                RayCollision earthCol = GetRayCollisionSphere(mouseRay, Vector3Zero(), draw_earth_radius);
+                                RayCollision moonCol = GetRayCollisionSphere(mouseRay, draw_moon_pos, draw_moon_radius);
+                                if (moonCol.hit && (!earthCol.hit || moonCol.distance < earthCol.distance))
+                                    resolved = LOCK_MOON;
+                                else if (earthCol.hit)
+                                    resolved = LOCK_EARTH;
+                                else
+                                    resolved = LOCK_NONE;
+                            }
+
+                            if (resolved != active_lock)
+                            {
+                                if (resolved == LOCK_MOON)
+                                    StartTrackingBody(&active_lock, &tracked_sat, &tracked_norad, LOCK_MOON);
+                                else if (resolved == LOCK_EARTH)
+                                    StartTrackingBody(&active_lock, &tracked_sat, &tracked_norad, LOCK_EARTH);
+                                else
+                                    StopTrackingUser(&active_lock, &tracked_sat, &tracked_norad);
                             }
                         }
                     }
@@ -1430,6 +1524,32 @@ int main(void)
                 else
                     target_camera3d_target = draw_moon_pos;
             }
+            else if (active_lock == LOCK_SAT)
+            {
+                char lost_name[32];
+                lost_name[0] = '\0';
+                if (tracked_sat != NULL)
+                    snprintf(lost_name, sizeof(lost_name), "%s", tracked_sat->name);
+
+                /* a data reload can recycle the array; re-find the sat by NORAD */
+                if (tracked_sat == NULL || !tracked_sat->is_active)
+                    tracked_sat = FindSatByNorad(tracked_norad);
+
+                if (tracked_sat == NULL)
+                {
+                    StopTrackingLost(&active_lock, &tracked_sat, &tracked_norad, lost_name);
+                }
+                else if (is_2d_view)
+                {
+                    float sat_mx, sat_my;
+                    get_map_coordinates(tracked_sat->current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &sat_mx, &sat_my);
+                    target_camera2d_target = (Vector2){sat_mx, sat_my};
+                }
+                else
+                {
+                    target_camera3d_target = Vector3Scale(tracked_sat->current_pos, 1.0f / DRAW_SCALE);
+                }
+            }
 
             /* Keep the map covering the viewport and prevent vertical panning
              * beyond the north/south edges. */
@@ -1445,16 +1565,64 @@ int main(void)
             if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
 
             Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
-            Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
-            Camera2DParams.target.y = clamp_map_y(Camera2DParams.zoom, Camera2DParams.target.y);
 
             camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
             camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
             camDistance = Lerp(camDistance, target_camDistance, smooth_speed);
-            Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth_speed);
+
+            /* follow tracked targets rigidly: lerp lag grows with the time multiplier */
+            if (active_lock != LOCK_NONE)
+            {
+                Camera2DParams.target = target_camera2d_target;
+                Camera3DParams.target = target_camera3d_target;
+            }
+            else
+            {
+                Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
+                Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth_speed);
+            }
+            Camera2DParams.target.y = clamp_map_y(Camera2DParams.zoom, Camera2DParams.target.y);
 
             float target_ecliptic_angle = is_ecliptic_frame ? (23.439f * DEG2RAD) : 0.0f;
             current_ecliptic_angle = Lerp(current_ecliptic_angle, target_ecliptic_angle, smooth_speed);
+
+            /* keep Earth framed by co-rotating the orbit offset with the target's azimuth */
+            bool follow_active = !is_2d_view && !is_pov_mode &&
+                                 (active_lock == LOCK_MOON || active_lock == LOCK_SAT);
+            if (follow_active)
+            {
+                if (active_lock != track_follow_lock || tracked_sat != track_follow_sat)
+                {
+                    track_follow_valid = false; /* target changed: re-baseline next frame, no jump */
+                }
+                /* radial from Earth (origin) to the tracked body */
+                Vector3 r = Vector3Normalize(target_camera3d_target);
+                float horiz = sqrtf(r.x * r.x + r.z * r.z);
+                if (horiz > 0.001f) /* azimuth is undefined near the pole: hold */
+                {
+                    float phi = atan2f(r.x, r.z);
+                    if (track_follow_valid)
+                    {
+                        float d = phi - track_follow_last_phi;
+                        while (d > PI) d -= 2.0f * PI;   /* unwrap into (-PI, PI] */
+                        while (d < -PI) d += 2.0f * PI;
+                        track_follow_angle += d;
+                    }
+                    else
+                    {
+                        track_follow_angle = 0.0f;
+                        track_follow_valid = true;
+                    }
+                    track_follow_last_phi = phi;
+                }
+            }
+            else
+            {
+                track_follow_valid = false;
+                track_follow_angle = 0.0f;
+            }
+            track_follow_lock = active_lock;
+            track_follow_sat = tracked_sat;
 
             if (!is_2d_view)
             {
@@ -1463,6 +1631,8 @@ int main(void)
                     camDistance * sinf(camAngleY),
                     camDistance * cosf(camAngleY) * cosf(camAngleX)
                 };
+                if (follow_active && track_follow_valid)
+                    offset = Vector3Transform(offset, MatrixRotateY(track_follow_angle)); /* co-rotate with the body */
                 Vector3 upVec = {0.0f, 1.0f, 0.0f};
 
                 if (current_ecliptic_angle > 0.0001f)
@@ -1473,7 +1643,20 @@ int main(void)
                 }
 
                 Camera3DParams.position = Vector3Add(Camera3DParams.target, offset);
-                Camera3DParams.up = upVec;
+
+                /* world vertical up avoids roll with the target; POV overrides below */
+                if ((active_lock == LOCK_MOON || active_lock == LOCK_SAT) && !is_pov_mode)
+                {
+                    Vector3 world_up = {0.0f, 1.0f, 0.0f};
+                    Vector3 forward = Vector3Normalize(Vector3Subtract(Camera3DParams.target, Camera3DParams.position));
+                    if (fabsf(Vector3DotProduct(forward, world_up)) > 0.9999f)
+                        world_up = (Vector3){0.0f, 0.0f, 1.0f}; /* view parallel to up: stable fallback */
+                    Camera3DParams.up = world_up;
+                }
+                else
+                {
+                    Camera3DParams.up = upVec;
+                }
             }
         }
 
@@ -2721,8 +2904,7 @@ int main(void)
             float pad = 8.0f * cfg.ui_scale;
 
             float nav_h = ImGui::GetFrameHeight();
-            float left_edge = g_layout.left_visible ? g_layout.left_width : 0.0f;
-            float x = left_edge + pad;
+            float x = vp_x + pad;
             float y = nav_h + pad;
 
             char fps_str[64];

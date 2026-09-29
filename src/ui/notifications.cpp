@@ -154,16 +154,12 @@ void DrawNotifications(void)
 {
     if (!g_enabled || g_notif_count == 0) return;
 
-    ImGuiIO &io = ImGui::GetIO();
-    float screen_w = io.DisplaySize.x;
-
-    /* position toasts in the corner of the raylib viewport, respecting the
-     * top nav bar and the right sidebar (ROADMAP 8.1) */
+    /* anchor toasts to the top-right of the viewport, clear of the sidebars (ROADMAP 8.1) */
     float margin = 12.0f;
     float top = ImGui::GetFrameHeight() + margin;   /* below the nav bar */
-    float right_edge = screen_w - margin;
-    if (g_layout.right_visible && !g_layout.right_hidden)
-        right_edge -= g_layout.right_width;          /* left of the right sidebar */
+    float vp_x, vp_y, vp_w, vp_h;
+    LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
+    float right_edge = vp_x + vp_w - margin;
     float y = top;
 
     /* stack newest at the bottom so the newest toast is most visible */
