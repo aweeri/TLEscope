@@ -110,13 +110,18 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     /* screen-space clip rect for the 2D map (labels must stay on the map) */
     ImVec2 clipMin(0.0f, 0.0f);
     ImVec2 clipMax(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+    int first_copy = 0, last_copy = 0;
     if (is_2d && ctx->camera2d)
     {
         Vector2 m0 = GetWorldToScreen2D((Vector2){-ctx->map_w / 2.0f, -ctx->map_h / 2.0f}, *ctx->camera2d);
         Vector2 m1 = GetWorldToScreen2D((Vector2){ ctx->map_w / 2.0f,  ctx->map_h / 2.0f}, *ctx->camera2d);
-        clipMin = ImVec2(fmaxf(m0.x, 0.0f), fmaxf(m0.y, 0.0f));
-        clipMax = ImVec2(fminf(m1.x, ImGui::GetIO().DisplaySize.x),
-                         fminf(m1.y, ImGui::GetIO().DisplaySize.y));
+        const float vx0 = g_view3d_w > 0.0f ? g_view3d_x : 0.0f;
+        const float vy0 = g_view3d_h > 0.0f ? g_view3d_y : 0.0f;
+        const float vx1 = g_view3d_w > 0.0f ? g_view3d_x + g_view3d_w : ImGui::GetIO().DisplaySize.x;
+        const float vy1 = g_view3d_h > 0.0f ? g_view3d_y + g_view3d_h : ImGui::GetIO().DisplaySize.y;
+        clipMin = ImVec2(vx0, fmaxf(m0.y, vy0));
+        clipMax = ImVec2(vx1, fminf(m1.y, vy1));
+        MapVisibleCopyRange(*ctx->camera2d, ctx->map_w, &first_copy, &last_copy);
     }
 
     /* the 2D map wraps horizontally; pick the on-screen copy of a map point */
@@ -125,7 +130,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         float screen_cx = (clipMin.x + clipMax.x) * 0.5f;
         bool found = false;
         float best_dist = 0.0f;
-        for (int off = -1; off <= 1; off++)
+        for (int off = first_copy; off <= last_copy; off++)
         {
             Vector2 sp = GetWorldToScreen2D((Vector2){mx + off * ctx->map_w, my}, *ctx->camera2d);
             if (sp.x >= clipMin.x && sp.x <= clipMax.x)

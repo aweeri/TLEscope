@@ -1269,6 +1269,7 @@ int main(void)
 
                     float mx, my;
                     get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &mx, &my);
+                    mx += map_w * roundf((Camera2DParams.target.x - mx) / map_w);
 
                     Vector2 screenPos = GetWorldToScreen2D((Vector2){mx, my}, Camera2DParams);
                     float dist = Vector2Distance(mousePos, screenPos);
@@ -1464,18 +1465,10 @@ int main(void)
                             if (is_2d_view)
                             {
                                 Vector2 mouseWorld = GetScreenToWorld2D(GetMousePosition(), Camera2DParams);
-                                bool hit_moon = false;
-                                for (int offset_i = -1; offset_i <= 1; offset_i++)
-                                {
-                                    float x_off = offset_i * map_w;
-                                    if (Vector2Distance(mouseWorld, (Vector2){moon_mx + x_off, moon_my}) < (15.0f * cfg.ui_scale / Camera2DParams.zoom))
-                                    {
-                                        hit_moon = true;
-                                        break;
-                                    }
-                                }
-                                bool on_map = mouseWorld.x >= -map_w * 0.5f && mouseWorld.x <= map_w * 0.5f &&
-                                              mouseWorld.y >= -map_h * 0.5f && mouseWorld.y <= map_h * 0.5f;
+                                const float moon_x = moon_mx + map_w * roundf((mouseWorld.x - moon_mx) / map_w);
+                                bool hit_moon = Vector2Distance(mouseWorld, (Vector2){moon_x, moon_my}) <
+                                                (15.0f * cfg.ui_scale / Camera2DParams.zoom);
+                                bool on_map = mouseWorld.y >= -map_h * 0.5f && mouseWorld.y <= map_h * 0.5f;
                                 resolved = hit_moon ? LOCK_MOON : (on_map ? LOCK_EARTH : LOCK_NONE);
                             }
                             else
@@ -1549,6 +1542,14 @@ int main(void)
                 {
                     target_camera3d_target = Vector3Scale(tracked_sat->current_pos, 1.0f / DRAW_SCALE);
                 }
+            }
+
+            /* Keep the horizontal target on the nearest map copy so panning can
+             * cross the antimeridian without the interpolation jumping a seam. */
+            {
+                const float shift = -map_w * floorf((target_camera2d_target.x + map_w * 0.5f) / map_w);
+                target_camera2d_target.x += shift;
+                Camera2DParams.target.x += shift;
             }
 
             /* Keep the map covering the viewport and prevent vertical panning
@@ -1751,6 +1752,9 @@ int main(void)
         /* 2d projection rendering */
         if (is_2d_view)
         {
+            int first_copy = 0, last_copy = 0;
+            MapVisibleCopyRange(Camera2DParams, map_w, &first_copy, &last_copy);
+
             BeginMapMode2D(Camera2DParams);
             if (show_earth)
             {
@@ -1768,7 +1772,8 @@ int main(void)
                     SetShaderValue(shader2D, moonPosLoc2D, &moonEcef, SHADER_UNIFORM_VEC3);
                 }
 
-                DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){-map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
+                for (int k = first_copy; k <= last_copy; k++)
+                    DrawTexturePro(earthTexture, (Rectangle){0, 0, earthTexture.width, earthTexture.height}, (Rectangle){k * map_w - map_w / 2, -map_h / 2, map_w, map_h}, (Vector2){0, 0}, 0.0f, WHITE);
 
                 if (cfg.show_night_lights)
                     EndShaderMode();
@@ -1776,31 +1781,25 @@ int main(void)
             else
             {
                 /* earth texture disabled: plain black body underneath the overlays */
-                DrawRectangle((int)(-map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h, BLACK);
+                for (int k = first_copy; k <= last_copy; k++)
+                    DrawRectangle((int)(k * map_w - map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h, BLACK);
             }
 
-            /* scissor mode for map boundaries */
+            /* Horizontal wrapping fills the scene viewport; vertically the map
+             * still ends at the poles. */
             Vector2 mapMin = GetWorldToScreen2D((Vector2){-map_w / 2.0f, -map_h / 2.0f}, Camera2DParams);
             Vector2 mapMax = GetWorldToScreen2D((Vector2){map_w / 2.0f, map_h / 2.0f}, Camera2DParams);
 
-            int sc_x = (int)mapMin.x, sc_y = (int)mapMin.y;
-            int sc_w = (int)(mapMax.x - mapMin.x), sc_h = (int)(mapMax.y - mapMin.y);
-
             int vp_ix = (int)vp_x, vp_iy = (int)vp_y;
             int vp_ix1 = (int)(vp_x + vp_w), vp_iy1 = (int)(vp_y + vp_h);
+            int sc_x = vp_ix, sc_w = vp_ix1 - vp_ix;
+            int sc_y = (int)mapMin.y, sc_h = (int)(mapMax.y - mapMin.y);
 
-            if (sc_x < vp_ix)
-            {
-                sc_w += sc_x - vp_ix;
-                sc_x = vp_ix;
-            }
             if (sc_y < vp_iy)
             {
                 sc_h += sc_y - vp_iy;
                 sc_y = vp_iy;
             }
-            if (sc_x + sc_w > vp_ix1)
-                sc_w = vp_ix1 - sc_x;
             if (sc_y + sc_h > vp_iy1)
                 sc_h = vp_iy1 - sc_y;
 
@@ -1831,8 +1830,8 @@ int main(void)
                     /* visible map region (viewport ∩ map rect) for culling */
                     Vector2 vis_a = GetScreenToWorld2D((Vector2){vp_x, vp_y}, Camera2DParams);
                     Vector2 vis_b = GetScreenToWorld2D((Vector2){vp_x + vp_w, vp_y + vp_h}, Camera2DParams);
-                    float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
-                    float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
+                    float clip_min_x = fminf(vis_a.x, vis_b.x);
+                    float clip_max_x = fmaxf(vis_a.x, vis_b.x);
                     float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
                     float clip_max_y = fminf(fmaxf(vis_a.y, vis_b.y), map_h * 0.5f);
 
@@ -1865,17 +1864,15 @@ int main(void)
                             float rx = (dlon_max / (2.0f * PI)) * map_w + 1.0f;
                             float ry = (theta / PI) * map_h + 1.0f;
 
-                            /* which of the three map-wrap copies are on screen? */
-                            bool copy_visible[3] = {false, false, false};
                             bool any_visible = false;
-                            for (int oi = -1; oi <= 1; oi++)
+                            for (int oi = first_copy; oi <= last_copy; oi++)
                             {
                                 float x_off = oi * map_w;
                                 if (cx + x_off - rx < clip_max_x && cx + x_off + rx > clip_min_x &&
                                     cy - ry < clip_max_y && cy + ry > clip_min_y)
                                 {
-                                    copy_visible[oi + 1] = true;
                                     any_visible = true;
+                                    break;
                                 }
                             }
                             if (!any_visible)
@@ -1944,12 +1941,9 @@ int main(void)
                                     float qmin_y = fminf(fminf(y1, y2), fminf(y3, y4));
                                     float qmax_y = fmaxf(fmaxf(y1, y2), fmaxf(y3, y4));
 
-                                    for (int oi = 0; oi < 3; oi++)
+                                    for (int oi = first_copy; oi <= last_copy; oi++)
                                     {
-
-                                        if (!copy_visible[oi])
-                                            continue;
-                                        float x_off = (oi - 1) * map_w;
+                                        float x_off = oi * map_w;
                                         if (qmin_x + x_off >= clip_max_x || qmax_x + x_off <= clip_min_x ||
                                             qmin_y >= clip_max_y || qmax_y <= clip_min_y)
                                             continue;
@@ -2200,7 +2194,7 @@ int main(void)
                             }
                         }
 
-                        for (int offset_i = -1; offset_i <= 1; offset_i++)
+                        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                         {
                             float x_off = offset_i * map_w;
                             for (int j = 1; j <= segments; j++)
@@ -2239,7 +2233,7 @@ int main(void)
                     get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &sat_mx, &sat_my);
                     if (!(is_pov_mode && &satellites[i] == selected_sat))
                     {
-                        for (int offset_i = -1; offset_i <= 1; offset_i++)
+                        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                         {
                             DrawTexturePro(
                                 satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
@@ -2255,7 +2249,7 @@ int main(void)
                 float hy = home ? -(home->lat / 180.0f) * map_h : 0.0f;
                 if (home && cfg.show_markers)
                 {
-                    for (int offset_i = -1; offset_i <= 1; offset_i++)
+                    for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                     {
                         float x_off = offset_i * map_w;
                         DrawTexturePro(
@@ -2275,7 +2269,7 @@ int main(void)
                     else if (hx - sx > map_w / 2.0f)
                         sx += map_w;
 
-                    for (int offset_i = -1; offset_i <= 1; offset_i++)
+                    for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                     {
                         float x_off = offset_i * map_w;
                         Vector2 p1 = {hx + x_off, hy};
@@ -2292,7 +2286,7 @@ int main(void)
                             continue; /* home is drawn separately above */
                         float mx = (locations[i].lon / 360.0f) * map_w;
                         float my = -(locations[i].lat / 180.0f) * map_h;
-                        for (int offset_i = -1; offset_i <= 1; offset_i++)
+                        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                         {
                             float x_off = offset_i * map_w;
                             DrawTexturePro(
@@ -2313,7 +2307,7 @@ int main(void)
                 {
                     float mx = (lon / 360.0f) * map_w;
                     float my = -(lat / 180.0f) * map_h;
-                    for (int offset_i = -1; offset_i <= 1; offset_i++)
+                    for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                     {
                         float x_off = offset_i * map_w;
                         DrawTexturePro(
