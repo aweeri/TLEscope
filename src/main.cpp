@@ -2451,8 +2451,7 @@ int main(void)
                         continue;
                     }
 
-                    /* priority 4: dimmed unselected standard orbit, gated by orbits_dimmed */
-                    if (is_unselected && !orbits_dimmed)
+                    if (&satellites[i] != selected_sat && !orbits_dimmed)
                         continue;
                     draw_orbit_3d(&satellites[i], current_epoch, false, sat_alpha, global_orbit_step, apply_sunlit);
                 }
