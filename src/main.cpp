@@ -383,7 +383,7 @@ static bool GetMouseEarthIntersection(Vector2 mouse, bool is_2d, Camera2D cam2d,
     }
     else
     {
-        Ray ray = GetScreenToWorldRay(mouse, cam3d);
+        Ray ray = ScreenToWorldRayViewport3D(mouse, cam3d);
         float earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
         RayCollision col = GetRayCollisionSphere(ray, (Vector3){0, 0, 0}, earthRadius);
         if (col.hit)
@@ -824,13 +824,18 @@ int main(void)
         bool is_typing = IsUITyping();
         bool over_ui = IsMouseOverUI(&cfg);
 
+        float vp_x, vp_y, vp_w, vp_h;
+        LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
+
+        Viewport3DSetRect(vp_x, vp_y, vp_w, vp_h);
+
         /* Keep the 2D map centered on whole pixels and preserve the user's
          * relative zoom when the window size changes. Demo Mode owns the
          * camera while active, so defer viewport adjustment until it exits. */
         if (!DemoDirectorActive())
         {
-            Camera2DParams.offset = (Vector2){floorf(GetScreenWidth() / 2.0f), floorf(GetScreenHeight() / 2.0f)};
-            const float new_fill = MapFillZoom(map_w, map_h);
+            Camera2DParams.offset = (Vector2){floorf(vp_x + vp_w * 0.5f), floorf(vp_y + vp_h * 0.5f)};
+            const float new_fill = MapFillZoomFor(map_w, map_h, vp_w, vp_h);
             if (new_fill != fill_zoom)
             {
                 target_camera2d_zoom *= new_fill / fill_zoom;
@@ -1282,7 +1287,7 @@ int main(void)
 
             if (!over_ui)
             {
-                Ray mouseRay = GetScreenToWorldRay(GetMousePosition(), Camera3DParams);
+                Ray mouseRay = ScreenToWorldRayViewport3D(GetMousePosition(), Camera3DParams);
                 float closest_dist = 9999.0f;
 
                 for (int i = 0; i < sat_count; i++)
@@ -1396,7 +1401,7 @@ int main(void)
                         }
                         else
                         {
-                            Ray mouseRay = GetScreenToWorldRay(GetMousePosition(), Camera3DParams);
+                            Ray mouseRay = ScreenToWorldRayViewport3D(GetMousePosition(), Camera3DParams);
                             RayCollision earthCol = GetRayCollisionSphere(mouseRay, Vector3Zero(), draw_earth_radius);
                             RayCollision moonCol = GetRayCollisionSphere(mouseRay, draw_moon_pos, draw_moon_radius);
                             if (moonCol.hit && (!earthCol.hit || moonCol.distance < earthCol.distance))
@@ -1434,10 +1439,10 @@ int main(void)
 
             /* Keep the map covering the viewport and prevent vertical panning
              * beyond the north/south edges. */
-            if (target_camera2d_zoom < fill_zoom)
+            if (cfg.limit_map_zoomout && target_camera2d_zoom < fill_zoom)
                 target_camera2d_zoom = fill_zoom;
             auto clamp_map_y = [&](float zoom, float y) {
-                const float lim = fmaxf(map_h * 0.5f - GetScreenHeight() / (2.0f * zoom), 0.0f);
+                const float lim = fmaxf(map_h * 0.5f - vp_h / (2.0f * zoom), 0.0f);
                 return Clamp(y, -lim, lim);
             };
             target_camera2d_target.y = clamp_map_y(target_camera2d_zoom, target_camera2d_target.y);
@@ -1528,6 +1533,7 @@ int main(void)
             Camera3DParams.up = upVec;
         }
 
+
 /* maximum cached coverage cap tessellation (matches COVERAGE_LOD_HIGH) */
 #define FP2D_MAX_RINGS 12
 #define FP2D_MAX_SEGS 60
@@ -1603,20 +1609,23 @@ int main(void)
             int sc_x = (int)mapMin.x, sc_y = (int)mapMin.y;
             int sc_w = (int)(mapMax.x - mapMin.x), sc_h = (int)(mapMax.y - mapMin.y);
 
-            if (sc_x < 0)
+            int vp_ix = (int)vp_x, vp_iy = (int)vp_y;
+            int vp_ix1 = (int)(vp_x + vp_w), vp_iy1 = (int)(vp_y + vp_h);
+
+            if (sc_x < vp_ix)
             {
-                sc_w += sc_x;
-                sc_x = 0;
+                sc_w += sc_x - vp_ix;
+                sc_x = vp_ix;
             }
-            if (sc_y < 0)
+            if (sc_y < vp_iy)
             {
-                sc_h += sc_y;
-                sc_y = 0;
+                sc_h += sc_y - vp_iy;
+                sc_y = vp_iy;
             }
-            if (sc_x + sc_w > GetScreenWidth())
-                sc_w = GetScreenWidth() - sc_x;
-            if (sc_y + sc_h > GetScreenHeight())
-                sc_h = GetScreenHeight() - sc_y;
+            if (sc_x + sc_w > vp_ix1)
+                sc_w = vp_ix1 - sc_x;
+            if (sc_y + sc_h > vp_iy1)
+                sc_h = vp_iy1 - sc_y;
 
             if (sc_w > 0 && sc_h > 0)
             {
@@ -1642,9 +1651,9 @@ int main(void)
                     SetShaderValue(g_coverage_shaders.shader2D, g_coverage_shaders.borderColorLoc2D,
                                    &gc_border_2d, SHADER_UNIFORM_VEC4);
 
-                    /* visible map region (camera view ∩ map rect) for culling */
-                    Vector2 vis_a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, Camera2DParams);
-                    Vector2 vis_b = GetScreenToWorld2D((Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()}, Camera2DParams);
+                    /* visible map region (viewport ∩ map rect) for culling */
+                    Vector2 vis_a = GetScreenToWorld2D((Vector2){vp_x, vp_y}, Camera2DParams);
+                    Vector2 vis_b = GetScreenToWorld2D((Vector2){vp_x + vp_w, vp_y + vp_h}, Camera2DParams);
                     float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
                     float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
                     float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
@@ -2146,7 +2155,9 @@ int main(void)
         else
         {
             /* 3d globe rendering */
+        Viewport3DApplyGL();
         BeginMode3D(Camera3DParams);
+        Viewport3DFixProjection(Camera3DParams);
         
         if (cfg.show_skybox)
         {
@@ -2541,6 +2552,9 @@ int main(void)
 
             EndMode3D();
 
+
+            Viewport3DResetGL();
+
             /* screen-space icons/text for 3d objects */
             float m_size_3d = 24.0f * cfg.ui_scale;
             float mark_size_3d = 32.0f * cfg.ui_scale;
@@ -2561,7 +2575,7 @@ int main(void)
 
                 if (!IsOccludedByEarth(Camera3DParams.position, draw_p, draw_earth_radius))
                 {
-                    Vector2 sp = GetWorldToScreen(draw_p, Camera3DParams);
+                    Vector2 sp = WorldToScreenViewport3D(draw_p, Camera3DParams);
                     DrawTexturePro(
                         periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.periapsis, sat_alpha)
@@ -2569,7 +2583,7 @@ int main(void)
                 }
                 if (!IsOccludedByEarth(Camera3DParams.position, draw_a, draw_earth_radius))
                 {
-                    Vector2 sp = GetWorldToScreen(draw_a, Camera3DParams);
+                    Vector2 sp = WorldToScreenViewport3D(draw_a, Camera3DParams);
                     DrawTexturePro(
                         apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){sp.x, sp.y, mark_size_3d, mark_size_3d}, (Vector2){mark_size_3d / 2.f, mark_size_3d / 2.f}, 0.0f,
                         ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
@@ -2595,10 +2609,10 @@ int main(void)
                     {
                         Color sCol = (selected_sat == &satellites[i]) ? g_theme.world.sat_selected : (hovered_sat == &satellites[i]) ? g_theme.world.sat_hover : g_theme.world.sat;
                         sCol = ApplyAlpha(sCol, sat_alpha);
-                        Vector2 sp = GetWorldToScreen(draw_pos, Camera3DParams);
+                        Vector2 sp = WorldToScreenViewport3D(draw_pos, Camera3DParams);
                         /* rotate the icon so its bottom-right corner points toward the earth
                          * (origin) in the current viewport (raylib rotation is in degrees) */
-                        Vector2 earthScreen = GetWorldToScreen(Vector3Zero(), Camera3DParams);
+                        Vector2 earthScreen = WorldToScreenViewport3D(Vector3Zero(), Camera3DParams);
                         float sat_angle = (atan2f(earthScreen.y - sp.y, earthScreen.x - sp.x) * RAD2DEG) - 45.0f;
                         DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, sat_angle, sCol);
                     }
@@ -2614,7 +2628,7 @@ int main(void)
             if (cfg.show_markers &&
                 Vector3DotProduct(h_normal, h_viewDir) > 0.0f && Vector3DotProduct(h_toTarget, camForward) > 0.0f)
             {
-                Vector2 sp = GetWorldToScreen(h_pos, Camera3DParams);
+                Vector2 sp = WorldToScreenViewport3D(h_pos, Camera3DParams);
                 DrawTexturePro(
                     markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, WHITE
                 );
@@ -2634,7 +2648,7 @@ int main(void)
 
                     if (Vector3DotProduct(normal, viewDir) > 0.0f && Vector3DotProduct(toTarget, camForward) > 0.0f)
                     {
-                        Vector2 sp = GetWorldToScreen(m_pos, Camera3DParams);
+                        Vector2 sp = WorldToScreenViewport3D(m_pos, Camera3DParams);
                         DrawTexturePro(
                             markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f, WHITE
                         );
@@ -2650,7 +2664,7 @@ int main(void)
                     float lon_rad = (lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
                     float lat_rad = lat * DEG2RAD;
                     Vector3 pos = {cosf(lat_rad) * cosf(lon_rad) * draw_earth_radius, sinf(lat_rad) * draw_earth_radius, -cosf(lat_rad) * sinf(lon_rad) * draw_earth_radius};
-                    Vector2 sp = GetWorldToScreen(pos, Camera3DParams);
+                    Vector2 sp = WorldToScreenViewport3D(pos, Camera3DParams);
                     DrawTexturePro(
                         markerIcon, (Rectangle){0, 0, markerIcon.width, markerIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, 0.0f,
                         (Color){0, 255, 255, 255}

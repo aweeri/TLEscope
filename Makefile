@@ -11,8 +11,8 @@ RAYLIB_CFLAGS = -I$(RAYLIB_SRC)
 # Extra args passed to raylib's own Makefile (for example CC=... PLATFORM_OS=WINDOWS for cross-compiles)
 RAYLIB_MAKE_ARGS ?=
 
-CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS)
-CXXFLAGS_WIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -DCURL_STATICLIB -static-libgcc -fno-stack-protector
+CXXFLAGS_LIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -MMD -MP
+CXXFLAGS_WIN = $(CXXFLAGS) $(RAYLIB_CFLAGS) -MMD -MP -DCURL_STATICLIB -static-libgcc -fno-stack-protector
 
 LDFLAGS_WIN_EXTRA =
 
@@ -74,6 +74,10 @@ TOTAL_OBJ := $(words $(OBJ))
 $(shell echo "$(TOTAL_OBJ)" > /tmp/tlescope_build_total; echo "0" > /tmp/tlescope_build_counter)
 TOTAL_WIN_OBJ := $(words $(OBJ_WIN))
 $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp/tlescope_build_counter_win)
+
+# auto-generated header dependencies (-MMD): editing a header rebuilds every
+# object that includes it, so a struct change can't leave stale objects behind
+-include $(OBJ:.o=.d) $(OBJ_WIN:.o=.d)
 
 .PHONY: all raylib linux macos windows windows-arm64 win-installer clean build bin install uninstall test
 

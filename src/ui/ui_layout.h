@@ -134,4 +134,7 @@ void LayoutToggleCleanView(void);
 bool LayoutSidebarVisible(SidebarSide side);
 void LayoutSetSidebarVisible(SidebarSide side, bool visible);
 
+/* central canvas rect (logical screen coords); any out pointer may be NULL */
+void LayoutGetViewportRect(float *x, float *y, float *w, float *h);
+
 #endif /* UI_LAYOUT_H */

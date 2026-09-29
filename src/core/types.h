@@ -323,6 +323,7 @@ typedef struct
     bool show_night_lights;
     bool show_markers;
     bool show_statistics;
+    bool limit_map_zoomout;  // cap 2D map zoom-out at the viewport fill level (default true)
     bool highlight_sunlit;
     bool show_slant_range;
     bool show_scattering;

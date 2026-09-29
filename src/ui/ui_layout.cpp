@@ -321,6 +321,29 @@ void LayoutSetSidebarVisible(SidebarSide side, bool visible)
     if (side == SIDEBAR_RIGHT) { g_layout.right_visible = visible; if (visible) g_layout.right_hidden = false; }
 }
 
+/* -- Viewport rectangle ----------------------------------------------------- */
+
+/** central canvas rect (logical screen coords) left between the visible sidebars */
+void LayoutGetViewportRect(float *x, float *y, float *w, float *h)
+{
+    float screen_w = (float)GetScreenWidth();
+    float screen_h = (float)GetScreenHeight();
+
+    float left = 0.0f;
+    float right = screen_w;
+    if (LayoutSidebarVisible(SIDEBAR_LEFT))
+        left = UIPx(g_layout.left_width);
+    if (LayoutSidebarVisible(SIDEBAR_RIGHT))
+        right = screen_w - UIPx(g_layout.right_width);
+
+    if (right < left) right = left;
+
+    if (x) *x = left;
+    if (y) *y = 0.0f;
+    if (w) *w = right - left;
+    if (h) *h = screen_h;
+}
+
 /* -- Bottom bar helpers ----------------------------------------------------- */
 
 bool LayoutBottomBarVisible(void) { return g_layout.show_bottom_bar; }
@@ -1146,6 +1169,9 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
+            ImGui::Checkbox("Limit Map Zoom-Out", &cfg->limit_map_zoomout);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Keep the 2D map filling the viewport by capping how far it can zoom out");
             ImGui::Checkbox("VSync", &cfg->hint_vsync);
 
             /* number of predicted (future) orbit steps drawn for each ground
