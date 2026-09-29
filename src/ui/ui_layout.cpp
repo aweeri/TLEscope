@@ -44,19 +44,10 @@ static const float HANDLE_W       = 22.0f;  /* panel drag handle width     */
 
 /* -- Height helpers -------------------------------------------------------- */
 
-/** compute the available vertical space between the nav bar and the bottom of
- * the screen for a sidebar occupying [x0, x1).
- *
- * The bottom bar is a centered notch, not a full-width bar, so a sidebar only
- * needs to stop at the notch's top edge when it horizontally overlaps the
- * notch (narrow windows / very wide sidebars). Otherwise it extends all the
- * way to the bottom of the screen. Uses the notch's ACTUAL rendered rect
- * (captured by DrawBottomBar() each frame) rather than a hardcoded height. */
-static float GetContentHeight(float x0, float x1)
+/* bottom edge (DisplaySize y) a sidebar occupying [x0, x1) may extend to */
+static float GetContentBottom(float x0, float x1)
 {
-    float nav_h = ImGui::GetFrameHeight();
-    float display_h = ImGui::GetIO().DisplaySize.y;
-    float bottom = display_h;
+    float bottom = ImGui::GetIO().DisplaySize.y;
 
     if (g_layout.show_bottom_bar && g_layout.bottom_bar_top > 0.0f)
     {
@@ -67,8 +58,7 @@ static float GetContentHeight(float x0, float x1)
             bottom = g_layout.bottom_bar_top;
     }
 
-    float h = bottom - nav_h;
-    return (h < UIPx(50.0f)) ? UIPx(50.0f) : h;
+    return bottom;
 }
 
 /* -- Globals --------------------------------------------------------------- */
@@ -430,13 +420,27 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
     static float s_notch_anim[2] = {0.0f, 0.0f};
     int side = is_left ? 0 : 1;
 
-    /* while engaged the tab stretches away from its attached edge */
-    float grow  = UIPx(4.0f) * s_notch_anim[side];
-    float tab_w = notch_w + grow;
-    float win_x = is_left ? notch_x : (notch_x - grow);
+    /* max distance the tab travels away from its attached edge while engaged */
+    const float max_grow = UIPx(4.0f);
+
+    /* the window rect depends ONLY on the screen edge, never on the per-frame
+     * animation, so it is identical every frame and can never be moved by
+     * ImGui's position clamping; the detached edge stays exactly on the edge */
+    float win_x, win_w;
+    if (is_left)
+    {
+        win_x = floorf(notch_x);
+        win_w = ceilf(notch_x + notch_w + max_grow) - win_x;
+    }
+    else
+    {
+        float win_right = ceilf(notch_x + notch_w);
+        win_x = floorf(notch_x - max_grow);
+        win_w = win_right - win_x;
+    }
 
     ImGui::SetNextWindowPos(ImVec2(win_x, notch_y), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(tab_w, notch_h), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(win_w, notch_h), ImGuiCond_Always);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -449,11 +453,15 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground))
     {
-        /* absolute origin of the tab within the window (WindowPadding is 0) */
+        /* absolute origin of the window (WindowPadding is 0); the animation
+         * only moves the drawn tab inside this frame-invariant window */
         const ImVec2 o = ImGui::GetCursorScreenPos();
+        float grow = max_grow * s_notch_anim[side];
+        float tab_left  = is_left ? o.x : (o.x + max_grow - grow);
+        float tab_right = is_left ? (o.x + notch_w + grow) : (o.x + win_w);
 
         bool hovered = ImGui::IsWindowHovered();
-        bool clicked = ImGui::InvisibleButton("##notch_btn", ImVec2(tab_w, notch_h));
+        bool clicked = ImGui::InvisibleButton("##notch_btn", ImVec2(win_w, notch_h));
         bool active  = ImGui::IsItemActive();
 
         /* ~0.1s animation toward the hover/press target */
@@ -487,8 +495,8 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         const float       rounding = UIPx(6.0f);
         const ImDrawFlags corners  = is_left ? ImDrawFlags_RoundCornersRight
                                              : ImDrawFlags_RoundCornersLeft;
-        ImVec2 p0 = o;
-        ImVec2 p1 = ImVec2(o.x + tab_w, o.y + notch_h);
+        ImVec2 p0 = ImVec2(tab_left, o.y);
+        ImVec2 p1 = ImVec2(tab_right, o.y + notch_h);
 
         if (sidebar_visible)
         {
@@ -517,7 +525,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         ImVec4 icon_col = lerp4(ThemeColor(g_theme.ui.text_dim),
                                 ImVec4(1.0f, 1.0f, 1.0f, 1.0f), 0.6f * t);
         icon_col.w = 0.80f + 0.20f * t;
-        dl->AddText(ImVec2(o.x + (tab_w - icon_sz.x) * 0.5f,
+        dl->AddText(ImVec2(tab_left + (tab_right - tab_left - icon_sz.x) * 0.5f,
                            o.y + (notch_h - icon_sz.y) * 0.5f),
                     ImGui::GetColorU32(icon_col), icon);
 
@@ -933,10 +941,14 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     if (!is_left && !g_layout.right_visible) return;
 
     float width = is_left ? UIPx(g_layout.left_width) : UIPx(g_layout.right_width);
-    float x = is_left ? 0.0f : display_w - width;
-    float y = nav_h;
+    /* anchor the outer edge exactly on the screen edge (right: x + width == DisplaySize.x) */
+    float x = is_left ? 0.0f : floorf(display_w - width);
+    if (!is_left) width = display_w - x;
+    /* integer top and matching height so the bottom lands exactly on the content bottom */
+    float y = floorf(nav_h);
     float x0 = x, x1 = x + width;
-    float h = GetContentHeight(x0, x1);
+    float h = GetContentBottom(x0, x1) - y;
+    if (h < UIPx(50.0f)) h = UIPx(50.0f);
 
     ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(width, h), ImGuiCond_Always);
@@ -1562,14 +1574,17 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
     DrawSidebar(false, ctx, cfg);
 
     /* resize strips (drawn after sidebars so they sit on top) */
-    float nav_h = ImGui::GetFrameHeight();
+    float nav_y = floorf(ImGui::GetFrameHeight());
     float display_w = ImGui::GetIO().DisplaySize.x;
 
     if (g_layout.left_visible && !g_layout.left_hidden)
-        DrawResizeStrip(true, nav_h, GetContentHeight(0.0f, UIPx(g_layout.left_width)));
+        DrawResizeStrip(true, nav_y,
+                        GetContentBottom(0.0f, UIPx(g_layout.left_width)) - nav_y);
     if (g_layout.right_visible && !g_layout.right_hidden)
-        DrawResizeStrip(false, nav_h,
-                        GetContentHeight(display_w - UIPx(g_layout.right_width), display_w));
+    {
+        float rx = floorf(display_w - UIPx(g_layout.right_width));
+        DrawResizeStrip(false, nav_y, GetContentBottom(rx, display_w) - nav_y);
+    }
 
     /* show/hide notches — drawn last so they sit on top of everything.
      * A notch appears on the visible sidebar edge (to hide it) and at the

@@ -632,7 +632,6 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::BulletText("Right click: Orbit camera");
         ImGui::Separator();
         ImGui::Text("Keyboard Shortcuts:");
-        ImGui::BulletText("R: Rotator Control");
         ImGui::BulletText("M: Toggle 2D/3D");
         ImGui::BulletText("H: Toggle clean view (hide/show panels)");
         ImGui::Separator();

@@ -982,17 +982,11 @@ int main(void)
                 LOG_INFO("Fullscreen toggled");
             }
 
-            /* panel toggle shortcuts */
-            if (IsKeyPressed(KEY_ONE))   LayoutTogglePanel(PANEL_SAT_MGR);
-            if (IsKeyPressed(KEY_TWO))   LayoutTogglePanel(PANEL_DATA_SOURCES);
-            if (IsKeyPressed(KEY_FOUR))  LayoutTogglePanel(PANEL_SCOPE);
-            if (IsKeyPressed(KEY_FIVE))  LayoutTogglePanel(PANEL_PASSES);
-            if (IsKeyPressed(KEY_SIX))   LayoutTogglePanel(PANEL_POLAR_PLOT);
-            if (IsKeyPressed(KEY_SEVEN)) LayoutTogglePanel(PANEL_DOPPLER);
-            if (IsKeyPressed(KEY_EIGHT)) LayoutTogglePanel(PANEL_ROTATOR);
-            if (IsKeyPressed(KEY_NINE))  LayoutTogglePanel(PANEL_LOG);
-            if (IsKeyPressed(KEY_ZERO))  LayoutTogglePanel(PANEL_SAT_INFO);
-            if (IsKeyPressed(KEY_R))     LayoutTogglePanel(PANEL_ROTATOR);
+            /* sidebar show/hide shortcuts */
+            if (IsKeyPressed(KEY_ONE))
+                LayoutSetSidebarVisible(SIDEBAR_LEFT, !LayoutSidebarVisible(SIDEBAR_LEFT));
+            if (IsKeyPressed(KEY_TWO))
+                LayoutSetSidebarVisible(SIDEBAR_RIGHT, !LayoutSidebarVisible(SIDEBAR_RIGHT));
 
             /* cancel home-location picking without changing the location */
             if (IsKeyPressed(KEY_ESCAPE) && picking_home)
