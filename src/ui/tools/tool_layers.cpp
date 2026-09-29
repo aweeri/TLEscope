@@ -629,10 +629,11 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
     LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
     const float left_edge = vp_x;
     const float right_edge = vp_x + vp_w;
-    const float nav_h = vp_y;
+    const float nav_h = g_layout.clean_view ? 0.0f : ImGui::GetFrameHeight();
+    const float top_edge = fmaxf(vp_y, nav_h);
     const float screen_h = vp_y + vp_h;
 
-    Vector2 vis_a = GetScreenToWorld2D((Vector2){vp_x, vp_y}, *ctx->camera2d);
+    Vector2 vis_a = GetScreenToWorld2D((Vector2){vp_x, top_edge}, *ctx->camera2d);
     Vector2 vis_b = GetScreenToWorld2D((Vector2){vp_x + vp_w, vp_y + vp_h}, *ctx->camera2d);
     const float clip_min_x = fminf(vis_a.x, vis_b.x);
     const float clip_max_x = fmaxf(vis_a.x, vis_b.x);
@@ -671,7 +672,8 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
         ImVec2 tsz = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, buf);
         /* pin to the free left edge so the label can't slide under a sidebar */
         ImVec2 pos(fmaxf(sp.x + pad, left_edge + pad), sp.y - tsz.y * 0.5f);
-        if (pos.y + tsz.y < nav_h || pos.y > screen_h)
+        /* cull when the label would poke into the nav bar band */
+        if (pos.y < nav_h || pos.y > screen_h)
             continue;
 
         dl->AddText(font, font_size, ImVec2(pos.x + 1.0f, pos.y + 1.0f), shadow_col, buf);
