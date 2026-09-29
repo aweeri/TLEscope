@@ -94,7 +94,7 @@ $(RAYLIB_LIB):
 
 linux: raylib bin/TLEscope
 	@mkdir -p $(DIST_LINUX)
-	cp bin/TLEscope $(DIST_LINUX)/
+	cp bin/TLEscope $(DIST_LINUX)/TLEscope.tmp && mv -f $(DIST_LINUX)/TLEscope.tmp $(DIST_LINUX)/TLEscope
 	cp -r themes $(DIST_LINUX)/
 	cp settings.json $(DIST_LINUX)/ 2>/dev/null || true
 	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
