@@ -10,6 +10,7 @@
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
 #include "map_detail_data.h"
+#include "render/map_view.h"
 
 #include <raylib.h>
 #include <raymath.h> /* DEG2RAD for the 3D sphere mapping */
@@ -346,15 +347,21 @@ static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *p
     Color color = g_theme.ui.text;
     color.a = (unsigned char)(color.a * alpha);
 
-    for (int i = 0; i < line_count; i++)
+    int first_copy = 0, last_copy = 0;
+    MapVisibleCopyRange(*sctx->camera2d, sctx->map_w, &first_copy, &last_copy);
+    for (int k = first_copy; k <= last_copy; k++)
     {
-        const int end = lines[i].start + lines[i].count;
-        for (int p = lines[i].start; p + 1 < end; p++)
+        const float x_off = k * sctx->map_w;
+        for (int i = 0; i < line_count; i++)
         {
-            Vector2 a = MapDetailToWorld(points[p], sctx->map_w, sctx->map_h);
-            Vector2 b = MapDetailToWorld(points[p + 1], sctx->map_w, sctx->map_h);
-            if (fabsf(a.x - b.x) <= sctx->map_w * 0.45f)
-                DrawLineEx(a, b, line_width, color);
+            const int end = lines[i].start + lines[i].count;
+            for (int p = lines[i].start; p + 1 < end; p++)
+            {
+                Vector2 a = MapDetailToWorld(points[p], sctx->map_w, sctx->map_h);
+                Vector2 b = MapDetailToWorld(points[p + 1], sctx->map_w, sctx->map_h);
+                if (fabsf(a.x - b.x) <= sctx->map_w * 0.45f)
+                    DrawLineEx({a.x + x_off, a.y}, {b.x + x_off, b.y}, line_width, color);
+            }
         }
     }
 }
@@ -551,27 +558,33 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 
         const int spacing = GRID_SPACINGS[GridSpacingIndex(cfg)];
 
-        /* lines fall on multiples of the spacing from the prime meridian/equator, never on the map edges */
-        const int lon_max = (179 / spacing) * spacing;
-        for (int lon = -lon_max; lon <= lon_max; lon += spacing)
+        int first_copy = 0, last_copy = 0;
+        MapVisibleCopyRange(*sctx->camera2d, sctx->map_w, &first_copy, &last_copy);
+
+        for (int k = first_copy; k <= last_copy; k++)
         {
-            const float x = ((float)lon / 360.0f) * sctx->map_w;
-            const bool prime_meridian = lon == 0;
-            DrawLineEx(
-                {x, -sctx->map_h * 0.5f},
-                {x, sctx->map_h * 0.5f},
-                prime_meridian ? strong_width : thin_width,
-                prime_meridian ? strong_color : thin_color);
+            for (int lon = -180 + spacing; lon <= 180; lon += spacing)
+            {
+                const float x = ((float)lon / 360.0f) * sctx->map_w + k * sctx->map_w;
+                const bool prime_meridian = lon == 0;
+                DrawLineEx(
+                    {x, -sctx->map_h * 0.5f},
+                    {x, sctx->map_h * 0.5f},
+                    prime_meridian ? strong_width : thin_width,
+                    prime_meridian ? strong_color : thin_color);
+            }
         }
 
+        const float grid_min_x = (first_copy - 0.5f) * sctx->map_w;
+        const float grid_max_x = (last_copy + 0.5f) * sctx->map_w;
         const int lat_max = (89 / spacing) * spacing;
         for (int lat = -lat_max; lat <= lat_max; lat += spacing)
         {
             const float y = -((float)lat / 180.0f) * sctx->map_h;
             const bool equator = lat == 0;
             DrawLineEx(
-                {-sctx->map_w * 0.5f, y},
-                {sctx->map_w * 0.5f, y},
+                {grid_min_x, y},
+                {grid_max_x, y},
                 equator ? strong_width : thin_width,
                 equator ? strong_color : thin_color);
         }
@@ -611,19 +624,18 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
 
     const float map_w = ctx->map_w;
     const float map_h = ctx->map_h;
-    const float screen_w = (float)GetScreenWidth();
-    const float screen_h = (float)GetScreenHeight();
 
-    
-    const float nav_h = ImGui::GetFrameHeight();
-    const float left_edge = LayoutSidebarVisible(SIDEBAR_LEFT) ? g_layout.left_width : 0.0f;
-    const float right_edge = LayoutSidebarVisible(SIDEBAR_RIGHT) ? (screen_w - g_layout.right_width) : screen_w;
+    float vp_x, vp_y, vp_w, vp_h;
+    LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
+    const float left_edge = vp_x;
+    const float right_edge = vp_x + vp_w;
+    const float nav_h = vp_y;
+    const float screen_h = vp_y + vp_h;
 
-    
-    Vector2 vis_a = GetScreenToWorld2D((Vector2){left_edge, nav_h}, *ctx->camera2d);
-    Vector2 vis_b = GetScreenToWorld2D((Vector2){right_edge, screen_h}, *ctx->camera2d);
-    const float clip_min_x = fmaxf(fminf(vis_a.x, vis_b.x), -map_w * 0.5f);
-    const float clip_max_x = fminf(fmaxf(vis_a.x, vis_b.x), map_w * 0.5f);
+    Vector2 vis_a = GetScreenToWorld2D((Vector2){vp_x, vp_y}, *ctx->camera2d);
+    Vector2 vis_b = GetScreenToWorld2D((Vector2){vp_x + vp_w, vp_y + vp_h}, *ctx->camera2d);
+    const float clip_min_x = fminf(vis_a.x, vis_b.x);
+    const float clip_max_x = fmaxf(vis_a.x, vis_b.x);
     const float clip_min_y = fmaxf(fminf(vis_a.y, vis_b.y), -map_h * 0.5f);
     const float clip_max_y = fminf(fmaxf(vis_a.y, vis_b.y), map_h * 0.5f);
     if (clip_min_x >= clip_max_x || clip_min_y >= clip_max_y)
@@ -666,15 +678,19 @@ void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
         dl->AddText(font, font_size, pos, col, buf);
     }
 
-    /* longitude labels along the top edge of the visible map */
-    const int lon_max = (179 / spacing) * spacing;
-    for (int lon = -lon_max; lon <= lon_max; lon += spacing)
+    /* longitude labels along the top edge of each visible wrap copy */
+    int first_copy = 0, last_copy = 0;
+    MapVisibleCopyRange(*ctx->camera2d, map_w, &first_copy, &last_copy);
+    for (int k = first_copy; k <= last_copy; k++)
+    for (int lon = -180 + spacing; lon <= 180; lon += spacing)
     {
-        const float x = ((float)lon / 360.0f) * map_w;
+        const float x = ((float)lon / 360.0f) * map_w + k * map_w;
         if (x < clip_min_x || x > clip_max_x)
             continue;
 
-        if (lon > 0)
+        if (lon == 180)
+            snprintf(buf, sizeof(buf), "180°");
+        else if (lon > 0)
             snprintf(buf, sizeof(buf), "%d°E", lon);
         else if (lon < 0)
             snprintf(buf, sizeof(buf), "%d°W", -lon);

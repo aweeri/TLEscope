@@ -41,6 +41,29 @@ inline void Viewport3DSetRect(float x, float y, float w, float h)
     g_view3d_h = h;
 }
 
+/* Inclusive range of horizontally repeated map copies intersecting the scene
+ * viewport. This also handles deliberate zoom-out beyond one map width. */
+inline void MapVisibleCopyRange(const Camera2D &cam, float map_w, int *first, int *last)
+{
+    if (map_w <= 0.0f)
+    {
+        if (first) *first = 0;
+        if (last) *last = 0;
+        return;
+    }
+
+    const float sx0 = g_view3d_w > 0.0f ? g_view3d_x : 0.0f;
+    const float sx1 = g_view3d_w > 0.0f ? g_view3d_x + g_view3d_w : (float)GetScreenWidth();
+    const float sy = g_view3d_h > 0.0f ? g_view3d_y + g_view3d_h * 0.5f : cam.offset.y;
+    const float wx0 = GetScreenToWorld2D((Vector2){sx0, sy}, cam).x;
+    const float wx1 = GetScreenToWorld2D((Vector2){sx1, sy}, cam).x;
+    const float min_x = fminf(wx0, wx1);
+    const float max_x = fmaxf(wx0, wx1);
+
+    if (first) *first = (int)floorf((min_x + map_w * 0.5f) / map_w);
+    if (last) *last = (int)floorf((max_x + map_w * 0.5f) / map_w);
+}
+
 /** ratio of framebuffer (render) pixels to logical (screen) pixels */
 inline Vector2 Viewport3DPixelRatio(void)
 {
