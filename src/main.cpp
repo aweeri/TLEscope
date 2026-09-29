@@ -1015,13 +1015,42 @@ int main(void)
 
             if (IsKeyPressed(KEY_HOME))
             {
-                StartTrackingBody(&active_lock, &tracked_sat, &tracked_norad, LOCK_EARTH);
                 target_camDistance = 10.0f;
                 target_camAngleX = 0.785f;
                 target_camAngleY = 0.5f;
-                target_camera2d_zoom = fill_zoom;
-                target_camera2d_target = (Vector2){0.0f, 0.0f};
                 Camera3DParams.fovy = 45.0f;
+
+                if (is_2d_view)
+                {
+                    active_lock = LOCK_NONE;
+                    tracked_sat = NULL;
+                    tracked_norad = 0;
+
+                    Location *home = GetHomeLocation();
+                    if (home)
+                    {
+                        const float home_x = (home->lon / 360.0f) * map_w;
+                        const float home_y = -(home->lat / 180.0f) * map_h;
+
+                        /* Zoom only as far as needed to put home at the scene
+                         * centre without exposing space beyond the map poles. */
+                        const float vertical_room = map_h - 2.0f * fabsf(home_y);
+                        const float home_zoom = vertical_room > 0.0f
+                            ? vp_h / vertical_room
+                            : fill_zoom;
+                        target_camera2d_zoom = fmaxf(fill_zoom, home_zoom);
+                        target_camera2d_target = (Vector2){home_x, home_y};
+                    }
+                    else
+                    {
+                        target_camera2d_zoom = fill_zoom;
+                        target_camera2d_target = Vector2Zero();
+                    }
+                }
+                else
+                {
+                    StartTrackingBody(&active_lock, &tracked_sat, &tracked_norad, LOCK_EARTH);
+                }
             }
 
             if (IsKeyPressed(KEY_SLASH))
