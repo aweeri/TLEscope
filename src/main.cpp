@@ -1364,15 +1364,15 @@ int main(void)
                     double current_time = GetTime();
                     bool is_double_click = (current_time - last_left_click_time < 0.3);
 
-                    if (hovered_sat != NULL)
+                    if (is_double_click)
+                    {
+                        /* double-click selects the satellite under the cursor, or clears on empty space */
+                        selected_sat = hovered_sat;
+                    }
+                    else if (hovered_sat != NULL)
                     {
                         /* re-tap the already-selected satellite toggles it off */
                         selected_sat = (selected_sat == hovered_sat) ? NULL : hovered_sat;
-                    }
-                    else
-                    {
-                        /* a single clean click/tap on empty space deselects */
-                        selected_sat = NULL;
                     }
 
                     if (is_double_click)
