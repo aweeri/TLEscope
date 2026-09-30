@@ -33,6 +33,11 @@ TLEscope is a satellite visualization and tracking tool designed to transform or
   - [ReTLEctor](https://github.com/MrTalon63/retlector) — CelesTrak mirror for frequent queries
   - Custom data sources with configurable URLs and preferred formats
 
+- **Geostationary Drift Analysis**
+<img width="1000" height="414" alt="20260930_134425" src="https://github.com/user-attachments/assets/9c7854ca-6414-473b-b81b-e247fcd33675" />
+
+
+
 - **Dear ImGui Interface**: Modern, dockable-window UI built with [Dear ImGui](https://github.com/ocornut/imgui) via [rlImGui](https://github.com/raylib-extras/rlImGui), including:
 
 - **Customization**: Deeply configurable theming and functional options to suit professional or personal preferences. Settings are persisted to [`settings.json`](settings.json).
