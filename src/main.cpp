@@ -917,6 +917,9 @@ int main(void)
             }
         }
 
+        /* remember the scale so the +/- keybind can toast only on a real change */
+        const float prev_ui_scale = cfg.ui_scale;
+
         /* input handling (skipped while Demo Mode owns the scene) */
         if (!is_typing && !DemoDirectorActive())
         {
@@ -1108,6 +1111,9 @@ int main(void)
             cfg.ui_scale = 0.5f;
         if (cfg.ui_scale > 4.0f)
             cfg.ui_scale = 4.0f;
+
+        if (cfg.ui_scale != prev_ui_scale)
+            NotifyPush(NOTIFY_INFO, ICON_FA_MAGNIFYING_GLASS, "UI scale: %.0f%%", cfg.ui_scale * 100.0f);
 
         /* time warp logic for jumping to specific dates */
         UpdateAutoWarpState(&is_auto_warping, &auto_warp_target, &auto_warp_initial_diff, &current_epoch, &time_multiplier, &saved_multiplier);
