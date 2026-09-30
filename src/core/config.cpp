@@ -49,6 +49,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
     config->network_timeout_seconds = 45;
+    config->prop_use_short_period = true;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
     config->tool_settings.count = 0;  // tool-owned settings start empty
@@ -171,6 +172,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     if (config->network_timeout_seconds < 15) config->network_timeout_seconds = 15;
                     if (config->network_timeout_seconds > 300) config->network_timeout_seconds = 300;
                     config->first_day_of_week = get_int("first_day_of_week", config->first_day_of_week);
+                    config->prop_use_short_period = get_bool("prop_use_short_period", config->prop_use_short_period);
 
                     config->show_clouds = get_bool("show_clouds", config->show_clouds);
                     config->show_night_lights = get_bool("show_night_lights", config->show_night_lights);
@@ -598,6 +600,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_coast_lines = true;
         config->hint_vsync = true;
         config->night_mode = false;
+        config->prop_use_short_period = true;
         // first run: a single default home location, no forced example marker
         location_count = 0;
         int home_idx = AddLocation("Home", 0.0f, 0.0f, 0.0f);
@@ -657,6 +660,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["first_day_of_week"] = config->first_day_of_week;
     root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
     root["network_timeout_seconds"] = config->network_timeout_seconds;
+    root["prop_use_short_period"] = config->prop_use_short_period;
 
     if (config->custom_data_source_count > 0)
     {

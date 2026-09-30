@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "core/astro.h"
+#include "core/propagator.h"
 #include "core/config.h"
 #include "core/theme.h"
 #include "core/location.h"
@@ -471,6 +472,7 @@ int main(void)
 
     LoadAppConfig("settings.json", &cfg);
     SetUseLocalTime(cfg.use_local_time);
+    sat_prop_set_short_period(cfg.prop_use_short_period);
     RotatorLoadSettings(&cfg); /* restore persisted rotator config */
     NotifyLoadSettings(&cfg);  /* restore persisted notification toggles */
 
@@ -1705,10 +1707,9 @@ int main(void)
             
             /* create an LVLH local coordinate frame */
             double t_unix = get_unix_from_epoch(current_epoch);
-            Vector3 pos_next_3d = Vector3Scale(calculate_position(selected_sat, t_unix + 1.0), 1.0f / DRAW_SCALE);
+            Vector3 vel = Vector3Normalize(calculate_velocity(selected_sat, t_unix));
             
             Vector3 nadir = Vector3Normalize(Vector3Negate(sat_pos_3d));
-            Vector3 vel = Vector3Normalize(Vector3Subtract(pos_next_3d, sat_pos_3d));
             
             Vector3 right = Vector3Normalize(Vector3CrossProduct(vel, nadir));
             Vector3 fwd = Vector3Normalize(Vector3CrossProduct(nadir, right));

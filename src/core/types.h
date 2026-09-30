@@ -136,6 +136,27 @@ typedef struct {
     time_t epoch_time;
 } OrbitalDataMeta;
 
+// cheap per-frame propagation state; angles in rad, rates per minute (SGP4 native)
+typedef struct {
+    // epoch mean elements (SGP4 native: rad, rad/min)
+    double mo, argpo, nodeo, inclo, ecco, no_unkozai;
+
+    // secular rates (rad/min)
+    double mdot, argpdot, nodedot, nodecf;
+
+    // drag coefficients (SGP4 native)
+    double bstar, cc1, cc4, cc5, t2cof, omgcof, xmcof, eta, delmo, sinmao;
+    double d2, d3, d4, t3cof, t4cof, t5cof;
+    int    isimp;
+
+    // short-period constants
+    double radiusearthkm, xke, j2, j3oj2, con41, x1mth2, x7thm1, aycof, xlcof;
+
+    bool   is_deep_space;  // satrec->method == 'd' -> use full SGP4 per frame
+    bool   valid;
+    bool   prop_failed;    // init reported an error
+} SatPropState;
+
 /** keeps track of satellite data */
 typedef struct
 {
@@ -156,6 +177,7 @@ typedef struct
     Vector3 current_pos;
 
     struct elsetrec satrec;
+    SatPropState prop;          // cheap per-frame propagation state
 
     Vector3 orbit_cache[ORBIT_CACHE_SIZE];
     int orbit_cache_resolution;  // how many points are valid
@@ -340,6 +362,8 @@ typedef struct
     bool use_local_time;   // display dates/times in the system local timezone (default true)
     bool night_mode;       // full-screen monochrome-red post-process for dark adaptation
     int first_day_of_week; // first day of the week in date pickers: 0 = Sunday, 1 = Monday (default)
+
+    bool prop_use_short_period;   // include J2 short-period terms in the cheap path (default true)
 
     RotatorSettings rotator_settings;  // persisted rotator connection config
 

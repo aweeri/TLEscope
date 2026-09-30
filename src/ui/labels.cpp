@@ -102,6 +102,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     bool hide_unselected = ctx->hide_unselected ? *ctx->hide_unselected : false;
     bool is_pov = ctx->is_pov_mode ? *ctx->is_pov_mode : false;
     double epoch = ctx->current_epoch ? *ctx->current_epoch : 0.0;
+    double epoch_unix = get_unix_from_epoch(epoch);
 
     Satellite *selected = ctx->selected_sat ? *ctx->selected_sat : NULL;
     Satellite *hovered = ctx->hovered_sat;
@@ -215,7 +216,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         cands.push_back(c);
     }
 
-    /* ---- apsis labels (active sat) ---- */
+    // apsis labels (active sat)
     if (cfg->show_apsides && active && active->is_active)
     {
         bool is_unselected = (selected != NULL && active != selected);
@@ -233,7 +234,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 {
                     Vector2 sp = WorldToScreenViewport3D(draw_p, *ctx->camera3d);
                     LabelCandidate c;
-                    snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active));
+                    snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active, epoch_unix));
                     c.anchor = ImVec2(sp.x + 16.0f * ui_scale + pad, sp.y - 16.0f * ui_scale);
                     c.color = ToImU32(g_theme.world.periapsis);
                     c.priority = 5;
@@ -245,7 +246,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 {
                     Vector2 sp = WorldToScreenViewport3D(draw_a, *ctx->camera3d);
                     LabelCandidate c;
-                    snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active));
+                    snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active, epoch_unix));
                     c.anchor = ImVec2(sp.x + 16.0f * ui_scale + pad, sp.y - 16.0f * ui_scale);
                     c.color = ToImU32(g_theme.world.apoapsis);
                     c.priority = 5;
@@ -265,7 +266,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 Vector2 sp_a = GetWorldToScreen2D(apo2d, *ctx->camera2d);
 
                 LabelCandidate c;
-                snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active));
+                snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active, epoch_unix));
                 c.anchor = ImVec2(sp_p.x + 16.0f * ui_scale + pad, sp_p.y - 16.0f * ui_scale);
                 c.color = ToImU32(g_theme.world.periapsis);
                 c.priority = 5;
@@ -273,7 +274,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 c.centered = false;
                 cands.push_back(c);
 
-                snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active));
+                snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active, epoch_unix));
                 c.anchor = ImVec2(sp_a.x + 16.0f * ui_scale + pad, sp_a.y - 16.0f * ui_scale);
                 c.color = ToImU32(g_theme.world.apoapsis);
                 c.priority = 5;

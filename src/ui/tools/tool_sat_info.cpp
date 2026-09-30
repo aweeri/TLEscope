@@ -7,6 +7,7 @@
 #include "tools_registry.h"
 #include "tools_settings.h"
 #include "core/astro.h"
+#include "core/propagator.h"
 #include "core/theme.h"
 #include "core/location.h"
 #include "core/config.h"
@@ -65,21 +66,19 @@ static void calc_geocentric_radec(Vector3 eci_pos,
 /** apparent angular speed (deg/s) of the satellite across the sky from the observer */
 static double calc_topocentric_ang_speed(Satellite *sat, double current_unix, Vector3 obs_eci)
 {
-    Vector3 p0 = calculate_position(sat, current_unix);
-    Vector3 p1 = calculate_position(sat, current_unix + 1.0);
+    Vector3 p = calculate_position(sat, current_unix);
+    Vector3 v = calculate_velocity(sat, current_unix);
 
-    double x0 = p0.x - obs_eci.x, y0 = p0.y - obs_eci.y, z0 = p0.z - obs_eci.z;
-    double x1 = p1.x - obs_eci.x, y1 = p1.y - obs_eci.y, z1 = p1.z - obs_eci.z;
+    double rx = p.x - obs_eci.x, ry = p.y - obs_eci.y, rz = p.z - obs_eci.z;
+    double r = sqrt(rx * rx + ry * ry + rz * rz);
+    if (r < 0.001) return 0.0;
 
-    double r0 = sqrt(x0 * x0 + y0 * y0 + z0 * z0);
-    double r1 = sqrt(x1 * x1 + y1 * y1 + z1 * z1);
-    if (r0 < 0.001 || r1 < 0.001) return 0.0;
+    /* transverse speed / range = angular rate (rad/s) */
+    double vr = (rx * v.x + ry * v.y + rz * v.z) / r;
+    double vt2 = (v.x * v.x + v.y * v.y + v.z * v.z) - vr * vr;
+    if (vt2 < 0.0) vt2 = 0.0;
 
-    double cos_a = (x0 * x1 + y0 * y1 + z0 * z1) / (r0 * r1);
-    if (cos_a > 1.0) cos_a = 1.0;
-    if (cos_a < -1.0) cos_a = -1.0;
-
-    return acos(cos_a) * RAD2DEG;   /* degrees per second */
+    return (sqrt(vt2) / r) * RAD2DEG;
 }
 
 /* -- GEO analysis constants ------------------------------------------------ */
@@ -191,14 +190,16 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         if (sat_lat < -90.0) sat_lat += 180.0;
     }
 
-    /* -- Derived orbital quantities and GEO classification ----------------- */
-    double n_revday   = sat->mean_motion * 86400.0 / (2.0 * PI);
+    // derived orbital quantities + GEO classification
+    SatPropElements elem;
+    sat_prop_elements(sat, current_unix, &elem);
+    double n_revday   = elem.mean_motion * 1440.0 / (2.0 * PI);
     double period_min = (n_revday > 0.0) ? (1440.0 / n_revday) : 0.0;
-    double a_km       = sat->semi_major_axis;
-    double incl_deg   = sat->inclination * RAD2DEG;
-    double ecc        = sat->eccentricity;
+    double a_km       = elem.sma_km;
+    double incl_deg   = elem.incl * RAD2DEG;
+    double ecc        = elem.ecc;
 
-    /* Tiered detection: GEO band, then inclination/eccentricity limits. */
+    // tiered detection: GEO band, then inclination/eccentricity limits
     bool is_geo = (n_revday > 0.0 && a_km > 0.0 &&
                    classify_geo(period_min, incl_deg, ecc) == GEO_YES);
 
@@ -215,8 +216,8 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             InfoRow("Longitude", "%.4f\xc2\xb0", sat_lon);
             InfoRow("Period", "%.2f min", period_min);
         }
-        InfoRow("Apogee", "%.1f km", calc_apogee_km(sat));
-        InfoRow("Perigee", "%.1f km", calc_perigee_km(sat));
+        InfoRow("Apogee", "%.1f km", calc_apogee_km(sat, current_unix));
+        InfoRow("Perigee", "%.1f km", calc_perigee_km(sat, current_unix));
         ImGui::EndTable();
     }
 
@@ -360,11 +361,11 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
 
-            InfoRow("Inclination", "%.4f\xc2\xb0", sat->inclination * RAD2DEG);
-            InfoRow("Eccentricity", "%.6f", sat->eccentricity);
-            InfoRow("RAAN", "%.4f\xc2\xb0", sat->raan * RAD2DEG);
-            InfoRow("Arg of Perigee", "%.4f\xc2\xb0", sat->arg_perigee * RAD2DEG);
-            InfoRow("Mean Anomaly", "%.4f\xc2\xb0", sat->mean_anomaly * RAD2DEG);
+            InfoRow("Inclination", "%.4f\xc2\xb0", elem.incl * RAD2DEG);
+            InfoRow("Eccentricity", "%.6f", elem.ecc);
+            InfoRow("RAAN", "%.4f\xc2\xb0", elem.raan * RAD2DEG);
+            InfoRow("Arg of Perigee", "%.4f\xc2\xb0", elem.argp * RAD2DEG);
+            InfoRow("Mean Anomaly", "%.4f\xc2\xb0", elem.mean_anom * RAD2DEG);
             InfoRow("Mean Motion", "%.6f rev/day", n_revday);
             InfoRow("Semi-major Axis", "%.3f km", a_km);
             InfoRow("B* Drag", "%.4e", sat->bstar);

@@ -70,12 +70,13 @@ bool is_sat_eclipsed(Vector3 pos_km, Vector3 sun_dir_norm);
 void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float map_w, float map_h,
                          float *out_x, float *out_y);
 Vector3 calculate_position(Satellite *sat, double current_unix);
+Vector3 calculate_velocity(Satellite *sat, double current_unix);
 Vector3 calculate_moon_position(double current_time_days);
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset,
                   float map_w, float map_h, Vector2 *out);
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix);
-double calc_apogee_km(const Satellite *sat);
-double calc_perigee_km(const Satellite *sat);
+double calc_apogee_km(const Satellite *sat, double current_unix);
+double calc_perigee_km(const Satellite *sat, double current_unix);
 void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, double *oy, double *oz);
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el);
 void CalculatePasses(Satellite *sat, double start_epoch);
@@ -89,12 +90,9 @@ void epoch_to_local_fields(double epoch, int *year, int *day, int *hour, int *mi
 double local_fields_to_epoch(int year, int day, int hour, int min, int sec);
 void update_orbit_cache(Satellite *sat, double current_epoch);
 bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
-int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count);
+int calculate_orbit_cache_resolution(double eccentricity);
 
 double get_sat_range(Satellite *sat, double epoch, Location obs);
 double calculate_doppler_freq(Satellite *sat, double epoch, Location obs, double base_freq);
-void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Location obs,
-                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el,
-                               float scope_beam, Color orbit_color);
 
 #endif // ASTRO_H

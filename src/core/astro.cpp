@@ -1,5 +1,7 @@
 #include "astro.h"
 #include "types.h"
+#include "propagator.h"
+#include "astro_constants.h"
 #include "location.h"
 #include "data/storage.h"
 
@@ -16,21 +18,28 @@
 
 #include <raymath.h>
 
-/* WGS-84 ellipsoid constants */
-#define WGS84_A  6378.137
-#define WGS84_E2 0.00669437999014
-
-/** converts geodetic lat/lon/alt to ECEF using WGS-84 instead of spherical earth */
+// geodetic lat/lon/alt -> ECEF using WGS-84 (not spherical earth)
 void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, double *oy, double *oz)
 {
     double lat = lat_deg * DEG2RAD;
     double lon = lon_deg * DEG2RAD;
     double sin_lat = sin(lat), cos_lat = cos(lat);
     double alt_km = alt_m / 1000.0;
-    double N = WGS84_A / sqrt(1.0 - WGS84_E2 * sin_lat * sin_lat);
+    double N = ASTRO_RE_WGS84 / sqrt(1.0 - ASTRO_E2_WGS84 * sin_lat * sin_lat);
     *ox = (N + alt_km) * cos_lat * cos(lon);
     *oy = (N + alt_km) * cos_lat * sin(lon);
-    *oz = (N * (1.0 - WGS84_E2) + alt_km) * sin_lat;
+    *oz = (N * (1.0 - ASTRO_E2_WGS84) + alt_km) * sin_lat;
+}
+
+// ECI (app axis: x, z, -y) -> ECEF cartesian, rotating by GMST
+static void eci_to_ecef(Vector3 eci, double gmst_deg, double *ox, double *oy, double *oz)
+{
+    double theta = gmst_deg * DEG2RAD;
+    double cos_t = cos(theta);
+    double sin_t = sin(theta);
+    *ox = eci.x * cos_t - eci.z * sin_t;
+    *oy = -eci.x * sin_t - eci.z * cos_t;
+    *oz = eci.y;
 }
 
 Satellite satellites[MAX_SATELLITES];
@@ -163,40 +172,6 @@ void epoch_to_datetime_str(double epoch, char *buffer)
     }
 }
 
-/**
- * @brief Initialize SGP4 directly from stored orbital elements
- *
- * Calls sgp4init_from_elements() with the satellite's stored orbital data,
- * bypassing the legacy TLE generation/parsing round-trip entirely.
- * This is the modern path for JSON/CSV OMM data and cached orbital stores.
- */
-static bool init_sgp4_from_satellite(Satellite *sat)
-{
-    // mean motion: convert from rad/s (stored) to rad/min (SGP4 expects)
-    double no_kozai = sat->mean_motion * 60.0;
-
-    int ret = sgp4init_from_elements(
-        &sat->satrec,
-        sat->epoch_unix,
-        (double)sat->bstar,       // B* drag term (decimal)
-        0.0,                      // ndot: first derivative (rad/min^2) - typically 0 for OMM
-        0.0,                      // nddot: second derivative (rad/min^3) - typically 0 for OMM
-        sat->eccentricity,
-        sat->arg_perigee,
-        sat->inclination,
-        sat->mean_anomaly,
-        no_kozai,
-        sat->raan
-    );
-
-    if (ret != 0 || sat->satrec.error != 0)
-    {
-        LOG_WARN("SGP4 init failed for %s - error=%d", sat->name, sat->satrec.error);
-        return false;
-    }
-    return true;
-}
-
 /** parses TLE lines and populates the satellite struct */
 bool add_satellite_from_tle(const char* line0, const char* line1, const char* line2, OrbitalDataMeta *meta)
 {
@@ -247,7 +222,7 @@ bool add_satellite_from_tle_to(Satellite *sats, int *count,
 
     double revs_per_day = parse_tle_double(line2, 52, 11);
     sat->mean_motion = (revs_per_day * 2.0 * PI) / 86400.0;
-    sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
+    sat->semi_major_axis = pow(ASTRO_MU_SGP4 / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
 
     // parse B* drag term from TLE line 1 (positions 53-61)
     char bstar_buf[16] = {0};
@@ -267,7 +242,7 @@ bool add_satellite_from_tle_to(Satellite *sats, int *count,
     }
 
     // initialize SGP4 directly from orbital elements (no TLE round-trip)
-    if (!init_sgp4_from_satellite(sat))
+    if (!sat_prop_init(sat))
     {
         LOG_WARN("SGP4 init failed for TLE satellite: %s", line0);
         memset(sat, 0, sizeof(Satellite));
@@ -325,7 +300,7 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
     sat->arg_perigee = arg_perigee_deg * DEG2RAD;
     sat->mean_anomaly = mean_anomaly_deg * DEG2RAD;
     sat->mean_motion = (mean_motion_revday * 2.0 * PI) / 86400.0;
-    sat->semi_major_axis = pow(MU / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
+    sat->semi_major_axis = pow(ASTRO_MU_SGP4 / (sat->mean_motion * sat->mean_motion), 1.0 / 3.0);
     sat->bstar = bstar;
     sat->is_active = false;
 
@@ -339,7 +314,7 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
     }
 
     // initialize SGP4 directly from orbital elements (no TLE round-trip)
-    if (!init_sgp4_from_satellite(sat))
+    if (!sat_prop_init(sat))
     {
         LOG_WARN("SGP4 init failed for %s (NORAD: %s)", name, norad_id);
         memset(sat, 0, sizeof(Satellite));
@@ -368,7 +343,7 @@ void load_orbital_data(const char *filename)
         for (int i = 0; i < sat_count; i++)
         {
             Satellite *sat = &satellites[i];
-            if (!init_sgp4_from_satellite(sat))
+            if (!sat_prop_init(sat))
             {
                 LOG_WARN("SGP4 re-init failed for %s - deactivating", sat->name);
                 sat->is_active = false;
@@ -391,7 +366,7 @@ void load_orbital_data_from_string(const char *json)
         for (int i = 0; i < sat_count; i++)
         {
             Satellite *sat = &satellites[i];
-            if (!init_sgp4_from_satellite(sat))
+            if (!sat_prop_init(sat))
             {
                 LOG_WARN("SGP4 re-init failed for %s - deactivating", sat->name);
                 sat->is_active = false;
@@ -438,47 +413,16 @@ void load_manual_entries(AppConfig *config)
     }
 }
 
-/**
- * @brief main sgp4 crank; outputs raw ECI coordinates
- *
- * precalculated unix time passed down to prevent extra year/day conversions
- */
+// thin wrapper over the cheap propagator (kept for API stability)
 Vector3 calculate_position(Satellite *sat, double current_unix)
 {
-    double tsince = (current_unix - sat->epoch_unix) / 60.0;
+    return sat_prop_position(sat, current_unix);
+}
 
-    double ro[3] = {0};
-    double vo[3] = {0};
-
-    sgp4(&sat->satrec, tsince, ro, vo);
-
-    /* Check for SGP4 errors that produce NaN positions */
-    if (sat->satrec.error != 0)
-    {
-        LOG_WARN("SGP4 error %d for %s at tsince=%.1f", sat->satrec.error, sat->name, tsince);
-        return (Vector3){NAN, NAN, NAN};
-    }
-
-    /* Check for NaN/Inf in output */
-    bool nan_or_inf = false;
-    for (int i = 0; i < 3; i++)
-    {
-        if (isnan(ro[i]) || isinf(ro[i]))
-            nan_or_inf = true;
-    }
-    if (nan_or_inf)
-    {
-        LOG_WARN("SGP4 produced NaN/Inf for %s at tsince=%.1f", sat->name, tsince);
-        sat->satrec.error = 7;
-        return (Vector3){NAN, NAN, NAN};
-    }
-
-    Vector3 pos;
-    pos.x = (float)(ro[0]);
-    pos.y = (float)(ro[2]);
-    pos.z = (float)(-ro[1]);
-
-    return pos;
+// analytic ECI velocity (km/s, app axis convention)
+Vector3 calculate_velocity(Satellite *sat, double current_unix)
+{
+    return sat_prop_velocity(sat, current_unix);
 }
 
 /** projects 3D orbital space onto a 2D equirectangular map plane */
@@ -504,15 +448,17 @@ void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float
     *out_y = (v - 0.5f) * map_h;
 }
 
-/** finds where the satellite hits the high and low points of its orbit in 2D */
+// find where the satellite hits the high/low points of its orbit in 2D
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset, float map_w, float map_h, Vector2 *out)
 {
     (void)gmst_deg;
 
     double current_unix = get_unix_from_epoch(current_time);
-    double delta_time_s = current_unix - sat->epoch_unix;
+    SatPropElements el;
+    sat_prop_elements(sat, current_unix, &el);
+    double n = (el.mean_motion > 0.0) ? el.mean_motion : sat->mean_motion * 60.0; // rad/min
 
-    double M = fmod(sat->mean_anomaly + sat->mean_motion * delta_time_s, 2.0 * PI);
+    double M = fmod(el.mean_anom, 2.0 * PI);
     if (M < 0)
         M += 2.0 * PI;
 
@@ -521,7 +467,7 @@ void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double 
     if (diff < 0)
         diff += 2.0 * PI;
 
-    double t_target = current_time + (diff / sat->mean_motion) / 86400.0;
+    double t_target = current_time + (diff / n) / 1440.0;
     double t_target_unix = get_unix_from_epoch(t_target);
     Vector3 pos3d = calculate_position(sat, t_target_unix);
     double gmst_target = epoch_to_gmst(t_target);
@@ -529,25 +475,31 @@ void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double 
     get_map_coordinates(pos3d, gmst_target, earth_offset, map_w, map_h, &out->x, &out->y);
 }
 
-/** compute apogee altitude (km) from semi-major axis and eccentricity */
-double calc_apogee_km(const Satellite *sat)
+// apogee altitude (km) from the current-time mean elements
+double calc_apogee_km(const Satellite *sat, double current_unix)
 {
-    return sat->semi_major_axis * (1.0 + sat->eccentricity) - EARTH_RADIUS_KM;
+    SatPropElements el;
+    sat_prop_elements(sat, current_unix, &el);
+    return el.sma_km * (1.0 + el.ecc) - ASTRO_RE_SGP4;
 }
 
-/** compute perigee altitude (km) from semi-major axis and eccentricity */
-double calc_perigee_km(const Satellite *sat)
+// perigee altitude (km) from the current-time mean elements
+double calc_perigee_km(const Satellite *sat, double current_unix)
 {
-    return sat->semi_major_axis * (1.0 - sat->eccentricity) - EARTH_RADIUS_KM;
+    SatPropElements el;
+    sat_prop_elements(sat, current_unix, &el);
+    return el.sma_km * (1.0 - el.ecc) - ASTRO_RE_SGP4;
 }
 
-/** predicts the timestamps for the next perigee and apoapsis */
+// timestamps of the next perigee and apoapsis
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix)
 {
     double current_unix = get_unix_from_epoch(current_time);
-    double delta_time_s = current_unix - sat->epoch_unix;
+    SatPropElements el;
+    sat_prop_elements(sat, current_unix, &el);
+    double n = (el.mean_motion > 0.0) ? el.mean_motion : sat->mean_motion * 60.0; // rad/min
 
-    double M = fmod(sat->mean_anomaly + sat->mean_motion * delta_time_s, 2.0 * PI);
+    double M = fmod(el.mean_anom, 2.0 * PI);
     if (M < 0)
         M += 2.0 * PI;
 
@@ -558,19 +510,13 @@ void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix,
     if (diff_apo < 0)
         diff_apo += 2.0 * PI;
 
-    double t_peri = current_time + (diff_peri / sat->mean_motion) / 86400.0;
-    double t_apo = current_time + (diff_apo / sat->mean_motion) / 86400.0;
-
-    *out_peri_unix = get_unix_from_epoch(t_peri);
-    *out_apo_unix = get_unix_from_epoch(t_apo);
+    *out_peri_unix = current_unix + (diff_peri / n) * 60.0;
+    *out_apo_unix = current_unix + (diff_apo / n) * 60.0;
 }
 
 /** calculates cache resolution based on orbital eccentricity */
-int calculate_orbit_cache_resolution(double eccentricity, int active_sat_count, int total_sat_count)
+int calculate_orbit_cache_resolution(double eccentricity)
 {
-    (void)active_sat_count;  // unused
-    (void)total_sat_count;   // unused
-    
     // low eccentricity
     if (eccentricity < 0.05)
         return 180;
@@ -594,7 +540,7 @@ bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_thres
 /** bakes the future orbital path into a vertex buffer so sgp4 isnt re-run every frame */
 void update_orbit_cache(Satellite *sat, double current_epoch)
 {
-    int new_res = calculate_orbit_cache_resolution(sat->eccentricity, 0, sat_count);
+    int new_res = calculate_orbit_cache_resolution(sat->eccentricity);
     if (new_res != sat->orbit_cache_resolution)
     {
         LOG_DEBUG("Orbit cache resolution changed for %s: %d -> %d pts",
@@ -622,22 +568,15 @@ void update_orbit_cache(Satellite *sat, double current_epoch)
 /** converts raw orbital data into azimuth/elevation for a specific ground station */
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el)
 {
-    double sat_r = Vector3Length(eci_pos);
-    if (sat_r == 0)
+    if (Vector3Length(eci_pos) == 0.0f)
     {
         *az = 0;
         *el = -90;
         return;
     }
 
-    double sat_lat = asin(eci_pos.y / sat_r);
-    double sat_lon_eci = atan2(-eci_pos.z, eci_pos.x);
-    double theta = (gmst_deg + 0) * DEG2RAD; /* assuming earth_rotation_offset handled before */
-    double sat_lon_ecef = sat_lon_eci - theta;
-
-    double s_x = sat_r * cos(sat_lat) * cos(sat_lon_ecef);
-    double s_y = sat_r * cos(sat_lat) * sin(sat_lon_ecef);
-    double s_z = sat_r * sin(sat_lat);
+    double s_x, s_y, s_z;
+    eci_to_ecef(eci_pos, gmst_deg, &s_x, &s_y, &s_z);
 
     double o_x, o_y, o_z;
     geodetic_to_ecef(obs_lat, obs_lon, obs_alt, &o_x, &o_y, &o_z);
@@ -1009,7 +948,7 @@ bool is_sat_eclipsed(Vector3 pos_km, Vector3 sun_dir_norm)
     if (dot > 0.0f)
         return false;
     float dist_sq = Vector3LengthSqr(pos_km) - (dot * dot);
-    return dist_sq < (EARTH_RADIUS_KM * EARTH_RADIUS_KM);
+    return dist_sq < (ASTRO_RE_SGP4 * ASTRO_RE_SGP4);
 }
 
 /**
@@ -1062,27 +1001,19 @@ Vector3 calculate_moon_position(double current_time_days)
     return pos;
 }
 
-/** internal helper to figure out straight-line distance to a satellite */
+// straight-line distance to a satellite
 double get_sat_range(Satellite *sat, double epoch, Location obs)
 {
     double t_unix = get_unix_from_epoch(epoch);
-    double theta = epoch_to_gmst(epoch) * DEG2RAD;
-
     Vector3 eci = calculate_position(sat, t_unix);
 
-    /* direct cartesian rotation (ECI to ECEF) */
-    double cos_t = cos(theta);
-    double sin_t = sin(theta);
+    double s_x, s_y, s_z;
+    eci_to_ecef(eci, epoch_to_gmst(epoch), &s_x, &s_y, &s_z);
 
-    double s_x = eci.x * cos_t - eci.z * sin_t;
-    double s_y = -eci.x * sin_t - eci.z * cos_t;
-    double s_z = eci.y;
-
-    /* observer ECEF (WGS-84 ellipsoid) */
+    // observer ECEF (WGS-84 ellipsoid)
     double o_x, o_y, o_z;
     geodetic_to_ecef(obs.lat, obs.lon, obs.alt, &o_x, &o_y, &o_z);
 
-    /* dist */
     double dx = s_x - o_x;
     double dy = s_y - o_y;
     double dz = s_z - o_z;
@@ -1090,110 +1021,38 @@ double get_sat_range(Satellite *sat, double epoch, Location obs)
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-/** shifts the frequency based on velocity relative to the observer; essential for tuning */
+// frequency shift from velocity relative to the observer
 double calculate_doppler_freq(Satellite *sat, double epoch, Location obs, double base_freq)
 {
-    /* line-of-sight range */
-    double dt = 0.1 / 86400.0; /* 0.1 seconds step */
-    double r1 = get_sat_range(sat, epoch - dt, obs);
-    double r2 = get_sat_range(sat, epoch + dt, obs);
-    double range_rate = (r2 - r1) / 0.2; /* km/s */
+    double t_unix = get_unix_from_epoch(epoch);
+    double gmst = epoch_to_gmst(epoch);
 
-    double c = 299792.458; /* in km/s */
+    Vector3 eci = calculate_position(sat, t_unix);
+    Vector3 vel = calculate_velocity(sat, t_unix);
+
+    double s_x, s_y, s_z;
+    eci_to_ecef(eci, gmst, &s_x, &s_y, &s_z);
+
+    double o_x, o_y, o_z;
+    geodetic_to_ecef(obs.lat, obs.lon, obs.alt, &o_x, &o_y, &o_z);
+
+    double dx = s_x - o_x;
+    double dy = s_y - o_y;
+    double dz = s_z - o_z;
+    double range = sqrt(dx * dx + dy * dy + dz * dz);
+    if (range < 1e-6)
+        return base_freq;
+
+    // satellite velocity in the rotating ECEF frame: rotate ECI velocity, then
+    // subtract the Earth-rotation term (omega x r) so a GEO sat reads zero
+    double v_x, v_y, v_z;
+    eci_to_ecef(vel, gmst, &v_x, &v_y, &v_z);
+    v_x += ASTRO_EARTH_ROT * s_y;
+    v_y -= ASTRO_EARTH_ROT * s_x;
+
+    double range_rate = (dx * v_x + dy * v_y + dz * v_z) / range;
+
+    double c = 299792.458; // in km/s
     return base_freq * (c / (c + range_rate));
 }
 
-/** draws the satellite's orbital path as an arc on the radar scope */
-void draw_satellite_orbit_arch(Satellite *sat, double current_epoch, double gmst_deg, Location obs,
-                               Vector2 scope_center, float scope_radius, float scope_az, float scope_el, 
-                               float scope_beam, Color orbit_color)
-{
-    if (!sat || !sat->is_active) return;
-    
-    // how long it takes this satellite to go around the planet
-    double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
-    int num_points = 360; // orbit res
-    double time_step = period_days / num_points;
-    
-    // setup the radar scope projection
-    float rad_beam_half = (scope_beam / 2.0f) * DEG2RAD;
-    float c_az_rad = scope_az * DEG2RAD;
-    float c_el_rad = scope_el * DEG2RAD;
-    
-    // get observer's position in ECI
-    double ecef_x, ecef_y, ecef_z;
-    geodetic_to_ecef(obs.lat, obs.lon + gmst_deg, obs.alt, &ecef_x, &ecef_y, &ecef_z);
-    Vector3 O_eci = { (float)ecef_x, (float)ecef_z, (float)-ecef_y };
-    
-    Vector2 prev_point = {0};
-    bool has_prev_point = false;
-    
-    // generate all the points that make up the orbit path
-    for (int i = 0; i <= num_points; i++) {
-        double t = current_epoch + (i * time_step);
-        double t_unix = get_unix_from_epoch(t);
-        Vector3 sat_pos = calculate_position(sat, t_unix);
-        
-        // convert to azimuth/elevation to know where to draw it
-        double s_az, s_el;
-        get_az_el(sat_pos, gmst_deg, obs.lat, obs.lon, obs.alt, &s_az, &s_el);
-        
-        // don't draw parts of the orbit that are below the horizon
-        if (s_el < 0) {
-            has_prev_point = false;
-            continue;
-        }
-        
-        // project the satellite position
-        float s_az_rad = s_az * DEG2RAD;
-        float s_el_rad = s_el * DEG2RAD;
-        
-        // calculate how far this point is from the center of scope view
-        float cos_theta = sinf(c_el_rad) * sinf(s_el_rad) + cosf(c_el_rad) * cosf(s_el_rad) * cosf(s_az_rad - c_az_rad);
-        if (cos_theta < -1.0f) cos_theta = -1.0f;
-        if (cos_theta > 1.0f) cos_theta = 1.0f;
-        
-        // cull if outside scope view
-        if (cos_theta >= cosf(rad_beam_half)) {
-            float theta = acosf(cos_theta);
-            float dx = cosf(s_el_rad) * sinf(s_az_rad - c_az_rad);
-            float dy = cosf(c_el_rad) * sinf(s_el_rad) - sinf(c_el_rad) * cosf(s_el_rad) * cosf(s_az_rad - c_az_rad);
-            
-            float r_dist = (theta / rad_beam_half) * scope_radius;
-            float angle = atan2f(-dy, dx);
-            
-            Vector2 current_point = { 
-                scope_center.x + r_dist * cosf(angle), 
-                scope_center.y + r_dist * sinf(angle) 
-            };
-            
-            // connect points
-            if (has_prev_point) {
-                float prev_dist = Vector2Distance(prev_point, scope_center);
-                float curr_dist = Vector2Distance(current_point, scope_center);
-                
-                if (prev_dist <= scope_radius && curr_dist <= scope_radius) {
-                    Color faded_color = orbit_color;
-                    faded_color.a = (unsigned char)(orbit_color.a * 0.3f);
-                    DrawLineEx(prev_point, current_point, 1.5f, faded_color);
-                } else if (prev_dist <= scope_radius || curr_dist <= scope_radius) {
-                    // clip the line to the edge of the radar scope
-                    Vector2 clipped_point = current_point;
-                    if (curr_dist > scope_radius) {
-                        float t = (scope_radius - prev_dist) / (curr_dist - prev_dist);
-                        clipped_point.x = prev_point.x + t * (current_point.x - prev_point.x);
-                        clipped_point.y = prev_point.y + t * (current_point.y - prev_point.y);
-                    }
-                    Color faded_color = orbit_color;
-                    faded_color.a = (unsigned char)(orbit_color.a * 0.3f);
-                    DrawLineEx(prev_point, clipped_point, 1.5f, faded_color);
-                }
-            }
-            
-            prev_point = current_point;
-            has_prev_point = true;
-        } else {
-            has_prev_point = false;
-        }
-    }
-}

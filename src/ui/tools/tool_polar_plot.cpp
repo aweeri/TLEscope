@@ -94,11 +94,10 @@ void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
         float tick_len = 0.05f; /* ~150 km at DRAW_SCALE, clearly visible */
         double dt = 30.0 / 86400.0; /* ~30 s sample for the tangent */
 
-        /* helper: orbit tangent at an epoch (finite difference) */
+        /* helper: orbit tangent at an epoch (analytic velocity) */
         auto tangent_at = [&](double epoch) -> Vector3 {
-            Vector3 p1 = pos_at(epoch - dt);
-            Vector3 p2 = pos_at(epoch + dt);
-            return Vector3Normalize(Vector3Subtract(p2, p1));
+            double unix = get_unix_from_epoch(epoch);
+            return Vector3Normalize(calculate_velocity(pass->sat, unix));
         };
 
         /* helper: draw a tick perpendicular to the orbit and facing the camera */
