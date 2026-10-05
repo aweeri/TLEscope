@@ -3,7 +3,7 @@
  *
  * Replaces the old raylib DrawTextEx/DrawUIText label calls in main.cpp with a
  * unified Dear ImGui draw-list overlay. Labels are collected each frame,
- * projected to screen space, decluttered (priority + overlap rejection), and
+ * projected to screen space, decluttered by priority and alternate placement, and
  * rendered via ImGui::GetBackgroundDrawList() so they draw on top of the scene
  * with full theme support (text shadow / background for contrast).
  *
@@ -42,12 +42,13 @@
 
 struct LabelCandidate
 {
-    ImVec2 anchor;      /* screen-space anchor (top-left of text) */
+    ImVec2 anchor;
     char text[96];
     ImU32 color;
-    int priority;       /* higher = placed first / survives declutter */
+    int priority;
     float size;
-    bool centered;      /* anchor is the text center (slant range) */
+    float marker_half = 0.0f;
+    bool centered = false;
 };
 
 static ImU32 ToImU32(Color c)
@@ -178,7 +179,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                                 ctx->map_w, ctx->map_h, &mx, &my);
             ImVec2 sp;
             if (!MapToScreen2D(mx, my, &sp)) continue;
-            anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+            anchor = ImVec2(sp.x, sp.y);
         }
         else
         {
@@ -190,7 +191,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             if (Vector3DotProduct(toTarget, camForward) <= 0.0f) continue;
             if (IsOccludedByEarth(ctx->camera3d->position, draw_pos, draw_earth_radius)) continue;
             Vector2 sp = WorldToScreenViewport3D(draw_pos, *ctx->camera3d);
-            anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+            anchor = ImVec2(sp.x, sp.y);
         }
 
         LabelCandidate c;
@@ -205,7 +206,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         }
         c.anchor = anchor;
         c.size = size;
-        c.centered = false;
+        c.marker_half = icon_half;
         /* the selected/hovered satellite's name always wins decluttering:
          * it must outrank its own apo/peri labels (priority 5) and every
          * other satellite label so the focused sat is never occluded */
@@ -235,11 +236,11 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     Vector2 sp = WorldToScreenViewport3D(draw_p, *ctx->camera3d);
                     LabelCandidate c;
                     snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active, epoch_unix));
-                    c.anchor = ImVec2(sp.x + 16.0f * ui_scale + pad, sp.y - 16.0f * ui_scale);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     c.color = ToImU32(g_theme.world.periapsis);
                     c.priority = 5;
                     c.size = size;
-                    c.centered = false;
+                    c.marker_half = 16.0f * ui_scale;
                     cands.push_back(c);
                 }
                 if (!IsOccludedByEarth(ctx->camera3d->position, draw_a, draw_earth_radius))
@@ -247,11 +248,11 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     Vector2 sp = WorldToScreenViewport3D(draw_a, *ctx->camera3d);
                     LabelCandidate c;
                     snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active, epoch_unix));
-                    c.anchor = ImVec2(sp.x + 16.0f * ui_scale + pad, sp.y - 16.0f * ui_scale);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     c.color = ToImU32(g_theme.world.apoapsis);
                     c.priority = 5;
                     c.size = size;
-                    c.centered = false;
+                    c.marker_half = 16.0f * ui_scale;
                     cands.push_back(c);
                 }
             }
@@ -267,19 +268,19 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
 
                 LabelCandidate c;
                 snprintf(c.text, sizeof(c.text), "P %.0f km", calc_perigee_km(active, epoch_unix));
-                c.anchor = ImVec2(sp_p.x + 16.0f * ui_scale + pad, sp_p.y - 16.0f * ui_scale);
+                c.anchor = ImVec2(sp_p.x, sp_p.y);
                 c.color = ToImU32(g_theme.world.periapsis);
                 c.priority = 5;
                 c.size = size;
-                c.centered = false;
+                c.marker_half = 16.0f * ui_scale;
                 cands.push_back(c);
 
                 snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active, epoch_unix));
-                c.anchor = ImVec2(sp_a.x + 16.0f * ui_scale + pad, sp_a.y - 16.0f * ui_scale);
+                c.anchor = ImVec2(sp_a.x, sp_a.y);
                 c.color = ToImU32(g_theme.world.apoapsis);
                 c.priority = 5;
                 c.size = size;
-                c.centered = false;
+                c.marker_half = 16.0f * ui_scale;
                 cands.push_back(c);
             }
         }
@@ -296,7 +297,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             c.color = ToImU32(WHITE);
             c.priority = 2;
             c.size = size;
-            c.centered = false;
+            c.marker_half = icon_half;
             if (is_2d && ctx->camera2d)
             {
                 float hx = (home->lon / 360.0f) * ctx->map_w;
@@ -304,7 +305,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 ImVec2 sp;
                 if (MapToScreen2D(hx, hy, &sp))
                 {
-                    c.anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     cands.push_back(c);
                 }
             }
@@ -323,7 +324,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     Vector3DotProduct(h_toTarget, camForward) > 0.0f)
                 {
                     Vector2 sp = WorldToScreenViewport3D(h_pos, *ctx->camera3d);
-                    c.anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     cands.push_back(c);
                 }
             }
@@ -337,7 +338,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             c.color = ToImU32(WHITE);
             c.priority = 1;
             c.size = size;
-            c.centered = false;
+            c.marker_half = icon_half;
             if (is_2d && ctx->camera2d)
             {
                 float mx = (locations[i].lon / 360.0f) * ctx->map_w;
@@ -345,7 +346,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 ImVec2 sp;
                 if (MapToScreen2D(mx, my, &sp))
                 {
-                    c.anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     cands.push_back(c);
                 }
             }
@@ -364,7 +365,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     Vector3DotProduct(toTarget, camForward) > 0.0f)
                 {
                     Vector2 sp = WorldToScreenViewport3D(m_pos, *ctx->camera3d);
-                    c.anchor = ImVec2(sp.x + icon_half + pad, sp.y - icon_half);
+                    c.anchor = ImVec2(sp.x, sp.y);
                     cands.push_back(c);
                 }
             }
@@ -449,29 +450,61 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         if (placed >= max_count) break;
 
         ImVec2 tsz = font->CalcTextSizeA(c.size, FLT_MAX, 0.0f, c.text);
-        float bx = UIPx(6.0f), by = UIPx(3.0f); /* background padding */
-        ImVec2 text_pos = c.anchor;
+        float bx = UIPx(6.0f), by = UIPx(3.0f);
+
+        ImVec2 positions[6];
+        int position_count = 1;
         if (c.centered)
-            text_pos = ImVec2(c.anchor.x - tsz.x * 0.5f, c.anchor.y - tsz.y * 0.5f);
-        ImVec2 rmin = ImVec2(text_pos.x - bx, text_pos.y - by);
-        ImVec2 rmax = ImVec2(text_pos.x + tsz.x + bx, text_pos.y + tsz.y + by);
-
-        /* off-screen culling */
-        if (rmax.x < clipMin.x || rmin.x > clipMax.x ||
-            rmax.y < clipMin.y || rmin.y > clipMax.y)
-            continue;
-
-        /* overlap rejection */
-        bool overlap = false;
-        for (int k = 0; k < placed; k++)
         {
-            if (RectsOverlap(rmin, rmax, placedMin[k], placedMax[k]))
+            positions[0] = ImVec2(c.anchor.x - tsz.x * 0.5f,
+                                  c.anchor.y - tsz.y * 0.5f);
+        }
+        else
+        {
+            const float d = c.marker_half + pad;
+            positions[0] = ImVec2(c.anchor.x + d, c.anchor.y - c.marker_half);
+            positions[1] = ImVec2(c.anchor.x + d, c.anchor.y + c.marker_half - tsz.y);
+            positions[2] = ImVec2(c.anchor.x - d - tsz.x, c.anchor.y - c.marker_half);
+            positions[3] = ImVec2(c.anchor.x - d - tsz.x,
+                                  c.anchor.y + c.marker_half - tsz.y);
+            positions[4] = ImVec2(c.anchor.x - tsz.x * 0.5f,
+                                  c.anchor.y - d - tsz.y);
+            positions[5] = ImVec2(c.anchor.x - tsz.x * 0.5f, c.anchor.y + d);
+            position_count = 6;
+        }
+
+        bool found = false;
+        ImVec2 text_pos, rmin, rmax;
+        for (int p = 0; p < position_count && !found; p++)
+        {
+            ImVec2 test_min(positions[p].x - bx, positions[p].y - by);
+            ImVec2 test_max(positions[p].x + tsz.x + bx,
+                            positions[p].y + tsz.y + by);
+
+            if (test_min.x < clipMin.x || test_max.x > clipMax.x ||
+                test_min.y < clipMin.y || test_max.y > clipMax.y)
+                continue;
+
+            bool overlap = false;
+            for (int k = 0; k < placed; k++)
             {
-                overlap = true;
-                break;
+                if (RectsOverlap(test_min, test_max, placedMin[k], placedMax[k]))
+                {
+                    overlap = true;
+                    break;
+                }
+            }
+
+            if (!overlap)
+            {
+                text_pos = positions[p];
+                rmin = test_min;
+                rmax = test_max;
+                found = true;
             }
         }
-        if (overlap) continue;
+
+        if (!found) continue;
 
         /* draw */
         if (use_bg)

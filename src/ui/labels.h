@@ -11,7 +11,7 @@
  *
  * Replaces the old raylib DrawTextEx/DrawUIText label calls in main.cpp with a
  * unified Dear ImGui draw-list overlay. Labels are collected each frame,
- * projected to screen space, decluttered (priority + overlap rejection), and
+ * projected to screen space, decluttered by priority and alternate placement, and
  * rendered via ImGui::GetBackgroundDrawList() so they draw on top of the scene
  * with full theme support (text shadow / background for contrast).
  *
