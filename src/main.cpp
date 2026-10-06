@@ -18,6 +18,9 @@
 #include "core/theme.h"
 #include "core/location.h"
 #include "util/log.h"
+#ifdef __APPLE__
+#include "util/window_macos.h"
+#endif
 #include "core/types.h"
 #include "ui/ui.h"
 #include "ui/ui_layout.h"
@@ -491,10 +494,15 @@ int main(void)
     InitWindow(cfg.window_width, cfg.window_height, window_title);
     LOG_INFO("Window created: %dx%d, theme=%s", cfg.window_width, cfg.window_height, cfg.theme);
 
+#ifdef __APPLE__
+    ConfigureMacWindowFrameAutosave(GetWindowHandle());
+#endif
+
     /* install the Windows touch observer (no-op elsewhere) and restore fullscreen */
     TouchGestureInit();
     if (cfg.fullscreen) ToggleFullscreen();
 
+#ifndef __APPLE__
     int monitor = GetCurrentMonitor();
     int max_w = GetMonitorWidth(monitor);
     int max_h = GetMonitorHeight(monitor);
@@ -513,6 +521,7 @@ int main(void)
     {
         SetWindowPosition((int)monitorPos.x + (max_w - current_w) / 2, (int)monitorPos.y + (max_h - current_h) / 2);
     }
+#endif
 
     SetExitKey(0);
 
