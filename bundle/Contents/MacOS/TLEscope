@@ -2,7 +2,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/../Resources"
+RESOURCE_DIR="$SCRIPT_DIR/../Resources"
+USER_DIR="$HOME/Library/Application Support/TLEscope"
+
+mkdir -p "$USER_DIR"
+ln -sfn "$RESOURCE_DIR/themes" "$USER_DIR/themes"
+ln -sfn "$RESOURCE_DIR/logo.png" "$USER_DIR/logo.png"
 
 # Finder-launched apps do not inherit shell proxy environment variables.
 # If none are already present, mirror static macOS HTTP/HTTPS proxy settings
@@ -33,4 +38,5 @@ if [[ -z "${http_proxy:-}${HTTP_PROXY:-}" && "$(proxy_value HTTPEnable)" == "1" 
     fi
 fi
 
+cd "$USER_DIR"
 exec "$SCRIPT_DIR/TLEscope.bin" "$@"
