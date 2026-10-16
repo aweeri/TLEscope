@@ -2,6 +2,9 @@
 #include "cache.h"
 #include "storage.h"
 #include "util/log.h"
+#ifdef __APPLE__
+#include "util/proxy_macos.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -283,6 +286,35 @@ static FetchResult http_fetch(const char *url)
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
 
+    size_t proxy_count = 1;
+#ifdef __APPLE__
+    auto env_set = [](const char *name) {
+        const char *value = getenv(name);
+        return value && *value;
+    };
+    const bool is_https = strncmp(url, "https://", 8) == 0;
+    const bool env_proxy =
+        env_set("all_proxy") || env_set("ALL_PROXY") ||
+        (is_https
+             ? (env_set("https_proxy") || env_set("HTTPS_PROXY"))
+             : env_set("http_proxy"));
+
+    std::vector<std::string> system_proxies;
+    if (!env_proxy)
+    {
+        std::string proxy_error;
+        if (!ResolveMacSystemProxies(url, &system_proxies, &proxy_error))
+        {
+            LOG_ERROR("macOS proxy resolution failed for %s: %s",
+                      url, proxy_error.c_str());
+            curl_easy_cleanup(curl);
+            free(chunk.memory);
+            return result;
+        }
+        proxy_count = system_proxies.size();
+    }
+#endif
+
     char user_agent[256];
     snprintf(user_agent, sizeof(user_agent),
              "Mozilla 5.0 (compatible; TLEscope/%s; +https://github.com/aweeri/TLEscope)",
@@ -297,29 +329,54 @@ static FetchResult http_fetch(const char *url)
     CURLcode res = CURLE_OK;
     long http_code = 0;
 
-    for (int attempt = 1; attempt <= max_attempts; attempt++)
+    for (size_t proxy_index = 0; proxy_index < proxy_count; ++proxy_index)
     {
-        res = curl_easy_perform(curl);
-        http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+#ifdef __APPLE__
+        if (!env_proxy)
+        {
+            const std::string &proxy = system_proxies[proxy_index];
+            curl_easy_setopt(curl, CURLOPT_PROXY, proxy.c_str());
+            LOG_DEBUG("macOS proxy for %s: %s",
+                      url, proxy.empty() ? "DIRECT" : proxy.c_str());
+        }
+#endif
 
-        if (res != CURLE_OK || http_status_success(http_code))
+        for (int attempt = 1; attempt <= max_attempts; attempt++)
+        {
+            res = curl_easy_perform(curl);
+            http_code = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+            if (res != CURLE_OK || http_status_success(http_code))
+                break;
+
+            if (!http_status_retryable(http_code) || attempt == max_attempts)
+                break;
+
+            const int delay_seconds = 1 << (attempt - 1);
+            LOG_WARN("HTTP %ld from %s; retrying in %d s (%d/%d)",
+                     http_code, url, delay_seconds, attempt + 1, max_attempts);
+
+            if (!reset_memory_buffer(&chunk))
+            {
+                res = CURLE_OUT_OF_MEMORY;
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::seconds(delay_seconds));
+        }
+
+        if (res == CURLE_OK || res == CURLE_OUT_OF_MEMORY ||
+            proxy_index + 1 == proxy_count)
             break;
 
-        if (!http_status_retryable(http_code) || attempt == max_attempts)
-            break;
-
-        const int delay_seconds = 1 << (attempt - 1);
-        LOG_WARN("HTTP %ld from %s; retrying in %d s (%d/%d)",
-                 http_code, url, delay_seconds, attempt + 1, max_attempts);
-
+        LOG_WARN("Proxy failed for %s (%s); trying next system proxy",
+                 url, curl_easy_strerror(res));
         if (!reset_memory_buffer(&chunk))
         {
             res = CURLE_OUT_OF_MEMORY;
             break;
         }
-
-        std::this_thread::sleep_for(std::chrono::seconds(delay_seconds));
     }
 
     curl_easy_cleanup(curl);
