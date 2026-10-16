@@ -118,19 +118,20 @@ void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
 
 static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
 {
-    /* concentric rings for 0°, 30°, 60°, 90° elevation — theme-aware (12.2) */
     Color grid_theme = g_theme.ui.text_dim;
     Color label_theme = g_theme.ui.text_dim;
-    int rings[4] = { 90, 60, 30, 0 };
+
+    int rings[3] = { 60, 30, 0 };
     ImU32 ring_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80);
     ImU32 ring_col_bold = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 160);
 
-    for (int r = 0; r < 4; r++)
+    for (int r = 0; r < 3; r++)
     {
-        float r_ratio = (90.0f - rings[r]) / 90.0f;
-        float r_px = radius * r_ratio;
-        ImU32 col = (r == 0) ? ring_col_bold : ring_col;
-        dl->AddCircle(center, r_px, col, 64, 1.0f);
+        float el = (float)rings[r];
+        float r_norm = (90.0f - el) / 90.0f;
+        float r_px = radius * r_norm;
+        ImU32 col = (rings[r] == 0) ? ring_col_bold : ring_col;
+        dl->AddCircle(center, r_px, col, 64, (rings[r] == 0) ? 2.0f : 1.0f);
     }
 
     /* crosshairs (N-S, E-W) */
@@ -153,10 +154,13 @@ static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
         dl->AddText(pos, label_col, labels[i]);
     }
 
-    /* elevation labels on the 0° ring */
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 4.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 120), "0°");
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.34f + 2.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 100), "30°");
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * 0.67f + 2.0f), IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80), "60°");
+    // elevation labels
+    ImU32 lbl_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 140);
+    /* horizon (el = 0) at the outer rim (radius) */
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 2.0f), lbl_col, "Horizon 0°");
+    /* +30° at radius*(2/3), +60° at radius/3 */
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * (2.0f / 3.0f) + 2.0f), lbl_col, "30°");
+    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius / 3.0f + 2.0f), lbl_col, "60°");
 }
 
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
@@ -165,7 +169,32 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     float avail_w = ImGui::GetContentRegionAvail().x;
     ImGui::PushTextWrapPos(0.0f);
 
-    ImGui::Checkbox("Lunar Mode", &g_ui.polar_lunar_mode);
+    Satellite *sat = *ctx->selected_sat;
+    Location *home = GetHomeLocation();
+
+    /* observation geometry shared by the header, canvas dot and readout */
+    bool have_obs = (sat && sat->is_active && home);
+    double az = 0.0, el = 0.0, range = 0.0;
+    if (have_obs)
+    {
+        get_az_el(sat->current_pos, ctx->gmst_deg,
+                  home->lat, home->lon, home->alt,
+                  &az, &el);
+        range = get_sat_range(sat, *ctx->current_epoch, *home);
+    }
+
+    /* ---- satellite name header (above the canvas) ---- */
+    Color accent_theme = g_theme.ui.accent;
+    if (have_obs)
+    {
+        ImGui::TextColored(ImVec4(accent_theme.r / 255.0f, accent_theme.g / 255.0f,
+                                  accent_theme.b / 255.0f, 1.0f),
+                           "%s", sat->name);
+    }
+    else
+    {
+        ImGui::TextDisabled("No satellite");
+    }
 
     /* ---- Polar plot canvas ---- */
     float plot_size = fminf(avail_w, 360.0f);
@@ -178,7 +207,6 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     ImDrawList *dl = ImGui::GetWindowDrawList();
     /* background circle - theme-aware (12.2) */
     Color bg_theme = g_theme.ui.bg;
-    Color accent_theme = g_theme.ui.accent;
     dl->AddCircleFilled(center, radius + 4.0f,
                         IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 200), 64);
     DrawPolarPlotGrid(dl, center, radius);
@@ -193,10 +221,11 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         Color marker_col = g_theme.ui.warning;
         Color maxel_col = g_theme.ui.success;
 
-        /* project a (az, el) pair to canvas coords (same as the live dot) */
         auto project = [&](double az, double el) -> ImVec2 {
             float a_rad = (float)(az * DEG2RAD);
             float e_ratio = (90.0f - (float)el) / 90.0f;
+            if (e_ratio < 0.0f) e_ratio = 0.0f;
+            if (e_ratio > 1.0f) e_ratio = 1.0f;
             float r = radius * e_ratio;
             return ImVec2(center.x + r * sinf(a_rad),
                           center.y - r * cosf(a_rad));
@@ -263,19 +292,12 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     }
 
     /* ---- Plot satellite position ---- */
-    Satellite *sat = *ctx->selected_sat;
-    Location *home = GetHomeLocation();
-    if (sat && sat->is_active && home)
+    if (have_obs)
     {
-        double az = 0.0, el = 0.0;
-        get_az_el(sat->current_pos, ctx->gmst_deg,
-                  home->lat, home->lon, home->alt,
-                  &az, &el);
-
-        /* convert azimuth (degrees from North, clockwise) to canvas angle
-         * canvas: 0° = up (North), clockwise = positive screen angle */
         float angle_rad = (float)(az * DEG2RAD);
         float el_ratio = (90.0f - (float)el) / 90.0f;
+        if (el_ratio < 0.0f) el_ratio = 0.0f;
+        if (el_ratio > 1.0f) el_ratio = 1.0f;
         float dot_r = radius * el_ratio;
 
         ImVec2 dot_pos = ImVec2(
@@ -283,21 +305,29 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
             center.y - dot_r * cosf(angle_rad)
         );
 
-        /* draw current position dot */
-        dl->AddCircleFilled(dot_pos, 6.0f,
-                            IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), 16);
-        dl->AddCircle(dot_pos, 6.0f,
-                      IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 200), 16, 2.0f);
+        // below-horizon dot shrinks with depth
+        float dot_scale = 1.0f;
+        if (el < 0.0f)
+        {
+            float depth = (float)(-el) / 90.0f;   /* 0 at horizon, 1 at el = -90 */
+            if (depth > 1.0f) depth = 1.0f;
+            dot_scale = 1.0f - 0.8f * depth;   /* 1.0 -> 0.2 (reaches 0.2x at el = -90) */
+        }
+        float dot_radius = 6.0f * dot_scale;
 
-        /* satellite name label */
-        char label[128];
-        snprintf(label, sizeof(label), "%s  AZ: %.1f°  EL: %.1f°", sat->name, az, el);
-        ImVec2 label_sz = ImGui::CalcTextSize(label);
-        ImVec2 label_pos = ImVec2(canvas_pos.x + 6.0f, canvas_pos.y + 4.0f);
-        dl->AddRectFilled(label_pos, ImVec2(label_pos.x + label_sz.x + 8.0f, label_pos.y + label_sz.y + 6.0f),
-                          IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 180), 4.0f);
-        dl->AddText(ImVec2(label_pos.x + 4.0f, label_pos.y + 3.0f),
-                    IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), label);
+        /* draw current position dot: filled above the horizon, hollow below */
+        if (el >= 0.0)
+        {
+            dl->AddCircleFilled(dot_pos, dot_radius,
+                                IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), 16);
+            dl->AddCircle(dot_pos, dot_radius,
+                          IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 200), 16, 2.0f);
+        }
+        else
+        {
+            dl->AddCircle(dot_pos, dot_radius,
+                          IM_COL32(accent_theme.r, accent_theme.g, accent_theme.b, 255), 16, 2.5f);
+        }
     }
     else
     {
@@ -312,6 +342,28 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 
     ImGui::Dummy(ImVec2(0, 6.0f));
 
+    /* ---- AZ/EL readout (aligned two-column block) ---- */
+    if (have_obs)
+    {
+        if (ImGui::BeginTable("##polar_azel", 2, ImGuiTableFlags_SizingFixedFit))
+        {
+            ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Azimuth");
+            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f°", az);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Elevation");
+            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f°", el);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Range");
+            ImGui::TableSetColumnIndex(1); ImGui::Text("%.1f km", range);
+
+            ImGui::EndTable();
+        }
+    }
+
     /* ---- Pass info ---- */
     if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
     {
@@ -325,18 +377,32 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     }
 
     ImGui::Separator();
-    float half_w = (avail_w - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-    if (ImGui::Button("Jump to AOS", ImVec2(half_w, 0)))
+    if (ImGui::Button("Jump to AOS", ImVec2(avail_w, 0)))
     {
-        if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
+        /* warp smoothly to the next upcoming AOS */
+        double now = *ctx->current_epoch;
+        double target = -1.0;
+        for (int i = 0; i < num_passes; i++)
         {
-            *ctx->current_epoch = passes[g_ui.selected_pass_idx].aos_epoch;
+            if (passes[i].aos_epoch >= now &&
+                (target < 0.0 || passes[i].aos_epoch < target))
+            {
+                target = passes[i].aos_epoch;
+            }
         }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Doppler Analysis", ImVec2(half_w, 0)))
-    {
-        LayoutOpenPanel(PANEL_DOPPLER);
+        /* fall back to the selected pass's AOS if none is upcoming */
+        if (target < 0.0 &&
+            g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
+        {
+            target = passes[g_ui.selected_pass_idx].aos_epoch;
+        }
+
+        if (target >= 0.0)
+        {
+            *ctx->auto_warp_target = target;
+            *ctx->auto_warp_initial_diff = (target - *ctx->current_epoch) * 86400.0;
+            *ctx->is_auto_warping = true;
+        }
     }
 
     ImGui::PopTextWrapPos();
