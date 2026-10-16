@@ -4,6 +4,7 @@
 #include "location.h"
 #include "util/log.h"
 #include "ui/tools/tools_settings.h"
+#include "ui/tools/tools_registry.h"
 #include "data/curl_diagnostics.h"
 
 #include <nlohmann/json.hpp>
@@ -81,35 +82,33 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         L->left_restore_width = 300.0f;
         L->right_restore_width = 300.0f;
 
-        // left sidebar: core functions
-        int left_defaults[MAX_PANELS] = {0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1}; // SAT_MGR, DATA_SOURCES, LAYERS, SCOPE, ROTATOR
-        bool left_open_defaults[MAX_PANELS] = {true, true, true, false, false, false, false, false, false, false, false};
         for (int i = 0; i < MAX_PANELS; i++)
         {
-            L->left_panel_order[i] = left_defaults[i];
-            L->left_panel_open[i] = left_open_defaults[i];
-        }
-
-        // right sidebar: inspector + scientific tools
-        int right_defaults[MAX_PANELS] = {5, 6, 7, 8, 9, 10, -1, -1, -1, -1, -1}; // SAT_INFO, PASSES, POLAR_PLOT, DOPPLER, LOG, TRXDB
-        bool right_open_defaults[MAX_PANELS] = {true, false, false, false, false, false, false, false, false, false, false};
-        for (int i = 0; i < MAX_PANELS; i++)
-        {
-            L->right_panel_order[i] = right_defaults[i];
-            L->right_panel_open[i] = right_open_defaults[i];
-        }
-
-        // all panels disabled by default (Tools dropdown); only the
-        // essential core/inspector tools are turned on for first run.
-        // New tools added to the enum stay off automatically.
-        for (int i = 0; i < MAX_PANELS; i++)
+            L->left_panel_order[i] = -1;
+            L->right_panel_order[i] = -1;
+            L->left_panel_open[i] = false;
+            L->right_panel_open[i] = false;
             L->panel_enabled[i] = false;
-        L->panel_enabled[PANEL_SAT_MGR]      = true;
-        L->panel_enabled[PANEL_DATA_SOURCES] = true;
-        L->panel_enabled[PANEL_LAYERS]       = true;
-        L->panel_enabled[PANEL_SAT_INFO]     = true;
-        L->panel_enabled[PANEL_PASSES]       = true;
-        L->panel_enabled[PANEL_POLAR_PLOT]   = true;
+        }
+
+        int li = 0, ri = 0;
+        for (int i = 0; i < PANEL_COUNT; i++)
+        {
+            const PanelDef *def = &g_panel_defs[i];
+            if (def->default_side == SIDEBAR_LEFT)
+            {
+                L->left_panel_order[li] = def->id;
+                L->left_panel_open[li] = def->default_open;
+                li++;
+            }
+            else
+            {
+                L->right_panel_order[ri] = def->id;
+                L->right_panel_open[ri] = def->default_open;
+                ri++;
+            }
+            L->panel_enabled[def->id] = def->default_enabled;
+        }
     }
 
     if (FileExists(filename))

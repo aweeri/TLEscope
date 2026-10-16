@@ -112,6 +112,7 @@ typedef enum
     PANEL_DOPPLER,          /* Doppler Analysis             -> right */
     PANEL_LOG,              /* Log                          -> right */
     PANEL_TRXDB,            /* TRXDB NORAD TEST             -> right */
+    PANEL_EXAMPLE,          /* Example Tool                 -> right */
     PANEL_COUNT
 } PanelId;
 

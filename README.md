@@ -57,6 +57,10 @@ The project is heavily influenced by the Kerbal Space Program map view and Blend
 
 TLEscope is an evolving project with a rich roadmap. We welcome bug reports, feature requests, and code contributions via the project's issue tracker. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines.
 
+### **Extending TLEscope with Custom Tools**
+
+The interface is built from modular, self-contained tool panels, so extending TLEscope is rather easy: **adding your own custom tool** takes just a few small steps and requires no changes to the core layout engine. See the [modular tools developer guide](src/ui/tools/README.md) to get started.
+
 ### **Download from GitHub**
 
 To download TLEscope, grab a portable zip from the [Releases tab](https://github.com/aweeri/TLEscope/releases), then extract its contents into a directory of choice.
