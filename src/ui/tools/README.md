@@ -67,8 +67,6 @@ New tools are **disabled by default** (the `default_enabled` field is `false`),
 so they stay hidden from the sidebar until the user enables them in the Tools
 modal. Only the essential core/inspector tools ship enabled on first run.
 
-Finally, add your new file to the `SRC` list in the root `Makefile`.
-
 That's it! The Tools modal, the enable/disable persistence, the left/right
 placement, and the sidebar renderer all pick your tool up automatically
 because they iterate the `g_panel_defs` registry.
@@ -125,15 +123,17 @@ Add a second function to your `tool_my_tool.cpp`:
 ```cpp
 #include "tools_scene.h"
 
+#include "raymath.h"
+
 void DrawSceneMyTool(SceneContext *sctx, AppConfig *cfg)
 {
     // Draw a cube in the 3D world when the tool's setting is enabled.
     if (!ToolSettingGetBool(cfg, "mytool.show_cube", false))
         return;
-
-    Vector3 pos = { 0.0f, 0.0f, 0.0f };   // world space (draw units)
-    float size = 0.5f;
-    DrawCube(pos, size, RED);             // raylib 3D draw call
+        
+	Vector3 pos  = Vector3Scale(Vector3( 0.0f, 0.0f, 1.0f ),ctx->draw_earth_radius);
+	Vector3 size = Vector3Scale(Vector3( 0.5f, 0.5f, 0.5f ),ctx->draw_earth_radius);
+    DrawCubeV(pos, size, RED);             // raylib 3D draw call
 }
 ```
 
@@ -161,13 +161,13 @@ scene state:
 Add the `draw_scene` callback to your registry row in `tools_registry.cpp`:
 
 ```cpp
-{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, DrawPanelMyTool, DrawSceneMyTool },
+{ PANEL_MY_TOOL, "My Tool", ICON_FA_WRENCH, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, false, DrawPanelMyTool, DrawSceneMyTool },
 ```
 
 Declare it in `tools.h`:
 
 ```cpp
-void DrawSceneMyTool(SceneContext *s, AppConfig *cfg);
+void DrawSceneMyTool(SceneContext *sctx, AppConfig *cfg);
 ```
 
 That's it. The render loop picks up your scene hook automatically because it
@@ -216,6 +216,7 @@ persists its own toggle — with **no changes to `main.cpp`, `types.h`, or
 #include "tools_settings.h"
 #include "core/config.h"
 #include "imgui.h"
+#include "raymath.h"
 
 void DrawPanelCubeifier(UIContext *ctx, AppConfig *cfg)
 {
@@ -225,22 +226,24 @@ void DrawPanelCubeifier(UIContext *ctx, AppConfig *cfg)
         ToolSettingSetBool(cfg, "cubeifier.enabled", show);
 }
 
-void DrawSceneCubeifier(SceneContext *s, AppConfig *cfg)
+void DrawSceneCubeifier(SceneContext *sctx, AppConfig *cfg)
 {
     if (!ToolSettingGetBool(cfg, "cubeifier.enabled", false))
         return;
-    DrawCube((Vector3){ 0.0f, 0.0f, 0.0f }, 0.5f, RED);
+    Vector3 pos  = Vector3Scale(Vector3( 0.0f, 0.0f, 1.0f ),sctx->draw_earth_radius);
+    Vector3 size = Vector3Scale(Vector3( 0.5f, 0.5f, 0.5f ),sctx->draw_earth_radius);
+    DrawCubeV(pos, size, RED);             // raylib 3D draw call
 }
 ```
 
 Register it in `tools_registry.cpp`:
 
 ```cpp
-{ PANEL_CUBEIFIER, "Cubeifier", ICON_FA_CUBE, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, false, DrawPanelCubeifier, DrawSceneCubeifier },
+{ PANEL_CUBEIFIER, "Cubeifier", ICON_FA_CUBE, PANEL_CAT_EXTRA, SIDEBAR_RIGHT, true, false, DrawPanelCubeifier, DrawSceneCubeifier },
 ```
 
-Add `PANEL_CUBEIFIER` to the `PanelId` enum in `core/types.h`, declare both
-functions in `tools.h`, and add `tool_cubeifier.cpp` to the Makefile `SRC`.
+Add `PANEL_CUBEIFIER` to the `PanelId` enum in `core/types.h` and declare both
+functions in `tools.h`.
 
 ## File layout
 
