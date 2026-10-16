@@ -15,7 +15,7 @@ Thank you for your interest in contributing. TLEscope is built for performance a
 
 ## **Coding Standards**
 
-TLEscope is written in **pure C** using the **Raylib/RayGui** framework. 
+TLEscope is written in C++ using the **Raylib** and **Dear ImGui** frameworks. 
 
 * **Keep it Lightweight**: Avoid adding heavy external dependencies unles absolutely neccessary. If it can be done in pure C or with Raylib, do it there.
 * **Performance First**: Code should be efficient. Avoid unnecessary allocations in the main render loop.
