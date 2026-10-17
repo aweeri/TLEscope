@@ -107,7 +107,7 @@ typedef enum
     PANEL_SCOPE,            /* Scope                        -> left  */
     PANEL_ROTATOR,          /* Rotator Control              -> left  */
     PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
-    PANEL_PASSES,           /* Satellite Passes             -> right */
+    PANEL_TRANSIT,          /* Transit Tracking             -> right */
     PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
     PANEL_DOPPLER,          /* Doppler Analysis             -> right */
     PANEL_LOG,              /* Log                          -> right */

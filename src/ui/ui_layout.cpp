@@ -111,7 +111,6 @@ void LayoutInitDefaults(void)
     g_layout.show_bottom_bar = true;
     g_layout.drag_panel = -1;
     g_layout.drag_target = -1;
-    g_layout.bottom_bar_expanded = false;
 
     int li = 0, ri = 0;
     for (int i = 0; i < PANEL_COUNT; i++)
@@ -132,8 +131,7 @@ void LayoutInitDefaults(void)
         g_layout.right_order[i] = -1;
 }
 
-/** Sanitise a panel order array: remove invalid IDs and duplicates,
- *  filling remaining slots with -1. Returns the number of valid entries. */
+/** sanitise a panel order array: drop invalid/duplicate ids, fill the rest with -1; returns the valid count */
 static int SanitiseOrder(int *order, int max_slots)
 {
     bool seen[PANEL_COUNT] = {false};
@@ -238,9 +236,7 @@ void LayoutOpenPanel(PanelId id)
     EnsureSidebar(g_panel_defs[id].default_side);
 }
 
-/** move a panel to the given sidebar, appending it to that side's order.
- *  Removes it from the source side's order first. Each sidebar can hold up
- *  to MAX_PANELS panels, so a move never evicts another panel. */
+/** move a panel to the given sidebar, appending it to that side's order */
 void LayoutSetPanelSide(PanelId id, SidebarSide side)
 {
     if (id < 0 || id >= PANEL_COUNT) return;
@@ -380,15 +376,10 @@ static HeaderSlot s_right_headers[MAX_PANELS];
 static int s_left_hc = 0, s_right_hc = 0;
 
 /* ========================================================================== */
-/*  Pull-tab                                                                  */
-/* ========================================================================== */
-
-/* ========================================================================== */
 /*  Notch (show/hide tab)                                                     */
 /* ========================================================================== */
 
-/** Draw a small rounded notch at the edge of a hidden sidebar.
- *  Also draws a notch on the visible sidebar edge so the user can hide it. */
+/** draw the show/hide notch at a sidebar edge (also on the visible edge, to hide it) */
 static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_visible)
 {
     const float screen_w = ImGui::GetIO().DisplaySize.x;
@@ -403,10 +394,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
     float notch_x;
     if (sidebar_visible)
     {
-        /* notch sits at the inner edge of the visible sidebar, mostly
-         * sticking out into the canvas so it never covers panel controls.
-         * Left: 4px overlap into the sidebar (the rest sticks out right).
-         * Right: 4px overlap into the sidebar (the rest sticks out left). */
+        /* notch sits at the inner edge of the visible sidebar, mostly sticking out into the canvas */
         float sidebar_edge = is_left ? UIPx(g_layout.left_width) : (screen_w - UIPx(g_layout.right_width));
         notch_x = is_left ? (sidebar_edge - UIPx(4.0f)) : (sidebar_edge - notch_w + UIPx(4.0f));
     }
@@ -423,9 +411,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
     /* max distance the tab travels away from its attached edge while engaged */
     const float max_grow = UIPx(4.0f);
 
-    /* the window rect depends ONLY on the screen edge, never on the per-frame
-     * animation, so it is identical every frame and can never be moved by
-     * ImGui's position clamping; the detached edge stays exactly on the edge */
+    /* window rect depends only on the screen edge, never the animation, so ImGui can't clamp it */
     float win_x, win_w;
     if (is_left)
     {
@@ -453,8 +439,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground))
     {
-        /* absolute origin of the window (WindowPadding is 0); the animation
-         * only moves the drawn tab inside this frame-invariant window */
+        /* window origin (WindowPadding is 0); the animation only moves the drawn tab inside it */
         const ImVec2 o = ImGui::GetCursorScreenPos();
         float grow = max_grow * s_notch_anim[side];
         float tab_left  = is_left ? o.x : (o.x + max_grow - grow);
@@ -475,8 +460,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
-        /* theme-aware colors (12.1): ui_primary fill, window_border border,
-         * ui_accent hover blend, text_secondary icon. */
+        /* theme-aware colors: surface fill, border stroke, accent hover blend, text_dim icon */
         auto lerp4 = [](const ImVec4 &a, const ImVec4 &b, float u) {
             return ImVec4(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u,
                           a.z + (b.z - a.z) * u, a.w + (b.w - a.w) * u);
@@ -508,13 +492,11 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         }
 
         dl->AddRectFilled(p0, p1, ImGui::GetColorU32(fill), rounding, corners);
-        /* the 1px stroke is centered on the path, so inset it by 0.5px to stop
-         * the window clip rect trimming the outer half of the top/attached side */
+        /* inset the 1px stroke by 0.5px so the window clip rect doesn't trim its outer half */
         dl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(p1.x - 0.5f, p1.y - 0.5f),
                     ImGui::GetColorU32(bcol), rounding, corners, 1.0f);
 
-        /* chevron icon: points inward when the sidebar is visible (collapse),
-         * outward when it is hidden (expand). */
+        /* chevron points inward when visible (collapse), outward when hidden (expand) */
         const char *icon;
         if (sidebar_visible)
             icon = is_left ? ICON_FA_CHEVRON_LEFT : ICON_FA_CHEVRON_RIGHT;
@@ -643,8 +625,7 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
             if (is_left)
             {
                 *width = fmaxf(MIN_SIDEBAR_W, fminf(MAX_SIDEBAR_W, mouse_x / UIScale()));
-                /* deliberate snap-hide: only when the cursor is dragged fully
-                 * past the screen edge (12.1) - not merely near it */
+                /* snap-hide only when the cursor is dragged fully past the screen edge */
                 if (mouse_x <= 0.0f) { SnapHide(is_left); ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(4); return; }
             }
             else
@@ -761,12 +742,7 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
 /*  Reorder finalisation                                                      */
 /* ========================================================================== */
 
-/** Map a "visible target" (a count of enabled, non-dragged header slots above
- *  the mouse) to a full-array insertion index. The order[] arrays contain both
- *  enabled and disabled panels (disabled ones are skipped at render time but
- *  still occupy a slot), so the visible count must be translated back into a
- *  real array position. Pass dragged = -1 when the panel is not in this array
- *  (e.g. when moving it into the other sidebar). */
+/** map a visible header target to a full-array insertion index (dragged = -1 if not in this array) */
 static int FindInsertIndex(int *order, int dragged, int visible_target)
 {
     int seen = 0;
@@ -984,6 +960,7 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
             if (!g_layout.panel_enabled[pid]) continue;  /* skip disabled panels entirely */
 
             const PanelDef *def = &g_panel_defs[pid];
+            if (def->hidden) continue;  /* retired panel: never shown */
             bool is_open = g_layout.panel_open[pid];
 
             DrawAccordionHeader(def, &g_layout.panel_open[pid], i, is_left);
@@ -1113,14 +1090,12 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
     if (!g_layout.settings_open) return;
 
     ImGui::OpenPopup("Settings");
-    /* fixed width + auto height: expanding/collapsing sections changes the
-     * height but never the width, so the modal doesn't "grow" sideways. */
+    /* fixed width + auto height so expanding sections never widen the modal */
     ImGui::SetNextWindowSize(ImVec2(UIPx(420.0f), 0), ImGuiCond_Always);
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    /* p_open draws a native close button in the title bar; clicking it sets
-     * settings_open to false so the modal closes. */
+    /* p_open draws a native close button; clicking it clears settings_open */
     bool *p_open = &g_layout.settings_open;
     if (ImGui::BeginPopupModal("Settings", p_open, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1186,9 +1161,7 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 ImGui::SetTooltip("Keep the 2D map filling the viewport by capping how far it can zoom out");
             ImGui::Checkbox("VSync", &cfg->hint_vsync);
 
-            /* number of predicted (future) orbit steps drawn for each ground
-             * track in 2D mode. Float slider with a 0.25-orbit sub-step grid
-             * (snapped both on-screen and on write), default 2.0. */
+            /* predicted (future) orbit steps per ground track in 2D mode; 0.25-orbit grid, default 2.0 */
             ImGui::Separator();
             float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
                                                      LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);
@@ -1449,9 +1422,7 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 
 /* -- Tools modal row helper ------------------------------------------------ */
 
-/** draw one tool row: an enable/disable checkbox and a small left/right
- *  toggle aligned to the right edge of the row. Changes are saved
- *  immediately so the modal needs no explicit save button. */
+/** one tool row: enable checkbox + right-aligned left/right toggle; changes save immediately */
 static void DrawToolRow(const PanelDef *def, AppConfig *cfg)
 {
     bool enabled = g_layout.panel_enabled[def->id];
@@ -1509,8 +1480,7 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    /* p_open draws a native close button in the title bar; clicking it sets
-     * tools_open to false so the modal closes. */
+    /* p_open draws a native close button; clicking it clears tools_open */
     bool *p_open = &g_layout.tools_open;
     if (ImGui::BeginPopupModal("Manage Tools", p_open, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1520,6 +1490,7 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
             for (int i = 0; i < PANEL_COUNT; i++)
             {
                 const PanelDef *def = &g_panel_defs[i];
+                if (def->hidden) continue;
                 if (def->category != PANEL_CAT_CORE) continue;
                 DrawToolRow(def, cfg);
             }
@@ -1531,6 +1502,7 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
             for (int i = 0; i < PANEL_COUNT; i++)
             {
                 const PanelDef *def = &g_panel_defs[i];
+                if (def->hidden) continue;
                 if (def->category != PANEL_CAT_EXTRA) continue;
                 DrawToolRow(def, cfg);
             }
@@ -1542,6 +1514,7 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
             for (int i = 0; i < PANEL_COUNT; i++)
             {
                 const PanelDef *def = &g_panel_defs[i];
+                if (def->hidden) continue;
                 if (def->category != PANEL_CAT_DEBUG) continue;
                 DrawToolRow(def, cfg);
             }
@@ -1585,9 +1558,7 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
         DrawResizeStrip(false, nav_y, GetContentBottom(rx, display_w) - nav_y);
     }
 
-    /* show/hide notches — drawn last so they sit on top of everything.
-     * A notch appears on the visible sidebar edge (to hide it) and at the
-     * screen edge when the sidebar is hidden (to restore it). */
+    /* show/hide notches, drawn last so they sit on top of everything */
     float nav_h2 = ImGui::GetFrameHeight();
     /* content area height (below the nav bar) - used to center the notches */
     float content_h = ImGui::GetIO().DisplaySize.y - nav_h2;

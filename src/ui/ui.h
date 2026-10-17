@@ -165,6 +165,10 @@ typedef struct
     double locked_pass_aos;
     double locked_pass_los;
 
+    /* transit tracking panel state */
+    bool transit_overview_open;   /* "Transit Overview" modal visibility */
+    int transit_plot_tab;         /* last active modal plot tab (0..2)   */
+
     /* misc UI state */
     bool ui_initialized;
     int last_drawable_height;

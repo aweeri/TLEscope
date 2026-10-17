@@ -3,6 +3,7 @@
  */
 
 #include "tools.h"
+#include "tools_plot.h"
 #include "tools_registry.h"
 #include "ui/ui_layout.h"
 #include "ui/ui.h"
@@ -156,8 +157,6 @@ static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
 
     // elevation labels
     ImU32 lbl_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 140);
-    /* horizon (el = 0) at the outer rim (radius) */
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius + 2.0f), lbl_col, "Horizon 0°");
     /* +30° at radius*(2/3), +60° at radius/3 */
     dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * (2.0f / 3.0f) + 2.0f), lbl_col, "30°");
     dl->AddText(ImVec2(center.x + 4.0f, center.y + radius / 3.0f + 2.0f), lbl_col, "60°");
@@ -219,7 +218,6 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         SatPass *pass = &passes[g_ui.selected_pass_idx];
         Color path_col = g_theme.ui.accent;
         Color marker_col = g_theme.ui.warning;
-        Color maxel_col = g_theme.ui.success;
 
         auto project = [&](double az, double el) -> ImVec2 {
             float a_rad = (float)(az * DEG2RAD);
@@ -265,16 +263,8 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
             dl->AddCircleFilled(los_pt, 4.0f, IM_COL32(marker_col.r, marker_col.g, marker_col.b, 220), 12);
         }
 
-        /* max-elevation point */
-        if (pass->num_pts > 0)
-        {
-            int max_idx = 0;
-            for (int k = 1; k < pass->num_pts; k++)
-                if (pass->path_pts[k].y > pass->path_pts[max_idx].y)
-                    max_idx = k;
-            ImVec2 max_pt = project(pass->path_pts[max_idx].x, pass->path_pts[max_idx].y);
-            dl->AddCircleFilled(max_pt, 5.0f, IM_COL32(maxel_col.r, maxel_col.g, maxel_col.b, 240), 12);
-        }
+        /* max-elevation direction arrow */
+        PlotDrawMaxElArrow(dl, center, radius, pass, 1.0f);
 
         /* current-time position along the pass */
         double now = *ctx->current_epoch;

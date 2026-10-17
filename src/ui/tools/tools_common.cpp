@@ -354,8 +354,18 @@ void InfoRow(const char *label, const char *fmt, ...)
 {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("%s", label);
+    // wrap the label so its real rendered height reflects however many lines it needs
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+    ImGui::TextWrapped("%s", label);
+    ImGui::PopTextWrapPos();
+    float label_h = ImGui::GetItemRectSize().y;
+
     ImGui::TableNextColumn();
+    // nudge the value down so it sits centered against a multiline label
+    float value_h = ImGui::GetTextLineHeight();
+    if (label_h > value_h)
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (label_h - value_h) * 0.5f);
+
     va_list args;
     va_start(args, fmt);
     ImGui::TextV(fmt, args);

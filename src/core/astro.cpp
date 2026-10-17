@@ -155,14 +155,10 @@ void epoch_to_datetime_str(double epoch, char *buffer)
 
     if (g_use_local_time)
     {
-        /* compact numeric UTC offset (e.g. +0200) instead of the long
-         * Windows timezone name like "Central European Summer Time" */
-        char tz_off[16] = "";
-        strftime(tz_off, sizeof(tz_off), "%z", tm_info);
-        if (tz_off[0] == '\0') strcpy(tz_off, "+0000");
-        sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d UTC%s",
+        /* local display carries no zone suffix, it's the user's own clock */
+        sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d",
                 tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
-                tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec, tz_off);
+                tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
     }
     else
     {

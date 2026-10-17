@@ -52,6 +52,7 @@ typedef struct
     bool default_enabled;    /* enabled in Tools dropdown on first run */
     void (*draw_content)(UIContext *ctx, AppConfig *cfg); /* body renderer */
     void (*draw_scene)(SceneContext *sctx, AppConfig *cfg); /* optional scene hook */
+    bool hidden;
 } PanelDef;
 
 /* the single registry table (defined in tools_registry.cpp) */

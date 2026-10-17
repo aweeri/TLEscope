@@ -26,6 +26,8 @@ void DrawPanelRotator(UIContext *ctx, AppConfig *cfg);
 void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg);
 void DrawPanelPasses(UIContext *ctx, AppConfig *cfg);
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg);
+void DrawPanelTransit(UIContext *ctx, AppConfig *cfg);
+void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg);
 void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg);
 void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
@@ -34,6 +36,7 @@ void DrawPanelExample(UIContext *ctx, AppConfig *cfg); /* reference example tool
 /* scene hooks (draw into the 3D globe / 2D map, see tools_scene.h) */
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg);
 void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg);
+void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg);
 
 /* screen-space ImGui overlay hook (runs after rlImGuiBegin, see ui.cpp) */
 void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg);

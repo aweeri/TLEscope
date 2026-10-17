@@ -269,14 +269,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief full-screen monochrome-red post-process (night / dark-adaptation mode).
- *
- * Reads the already-composited frame (3D scene + UI) and collapses it to a
- * single red channel. The strongest colour channel is used as luminance so
- * every hue stays visible (a pure blue or green UI element does not wash out).
- * `intensity` (0..1) scales the final brightness for dark adaptation.
- */
+// night mode: collapse the composited frame to red, using the strongest channel as luminance
 inline constexpr const char *fsNight = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -286,6 +279,11 @@ uniform float intensity;
 void main() {
     vec4 c = texture(texture0, fragTexCoord);
     float l = max(c.r, max(c.g, c.b));
+    // tone curve: lift blacks, add mid-tone contrast
+    l = smoothstep(0.05, 1.0, l);
+    l = pow(l, 1.18);
+    l *= 1.06;
+    l = clamp((l - 0.5) * 1.12 + 0.5, 0.0, 1.0);
     finalColor = vec4(l * intensity, 0.0, 0.0, c.a);
 }
 )GLSL";

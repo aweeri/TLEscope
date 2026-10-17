@@ -4,6 +4,7 @@
 
 #include "tools.h"
 #include "tools_common.h"
+#include "tools_plot.h"
 #include "core/astro.h"
 #include "core/config.h"
 #include "core/theme.h"
@@ -56,14 +57,12 @@ static void RebuildCache(Satellite *sat, double aos_epoch, double los_epoch,
     g_cache.aos_epoch = aos_epoch;
     g_cache.los_epoch = los_epoch;
 
-    double span = (los_epoch > aos_epoch) ? (los_epoch - aos_epoch) : 0.0;
+    PlotSampleDoppler(sat, aos_epoch, los_epoch, base_freq, obs,
+                      g_cache.plot, DOPPLER_SAMPLES);
     for (int i = 0; i < DOPPLER_SAMPLES; i++)
     {
-        double t = aos_epoch + span * (span > 0.0 ? (double)i / (double)(DOPPLER_SAMPLES - 1) : 0.0);
-        double f = (span > 0.0) ? calculate_doppler_freq(sat, t, obs, base_freq) : base_freq;
-        g_cache.freq[i] = f;
-        g_cache.off[i]  = f - base_freq;
-        g_cache.plot[i] = (float)(f - base_freq); /* offset in Hz, S-curve view */
+        g_cache.off[i]  = g_cache.plot[i];          /* offset in Hz, S-curve view */
+        g_cache.freq[i] = base_freq + g_cache.off[i];
     }
 }
 
@@ -165,14 +164,44 @@ void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg)
     ImGui::TextDisabled("Pass Doppler profile  (base %.0f Hz)", freq);
     ImGui::Text("Max offset: %+.2f %s", max_off / off_scale, off_unit);
 
-    /* ---- graph -------------------------------------------------------------
-     * Auto-scaled offset (S-curve) plot. The samples are static (cached), so
-     * this is cheap each frame. */
+    /* ---- graph: auto-scaled offset (S-curve) plot ---- */
     float plot_h = 110.0f;
     float graph_scale = (max_off > 0.0) ? (float)max_off : 1.0f;
     ImGui::PlotLines("##doppler_offset", g_cache.plot, DOPPLER_SAMPLES, 0,
                      "Offset (Hz)", -graph_scale, graph_scale,
                      ImVec2(avail_w, plot_h));
+
+    /* current-time marker over the pass window (matches the polar plot dot) */
+    if (win_los > win_aos)
+    {
+        float frac = (float)((*ctx->current_epoch - win_aos) / (win_los - win_aos));
+        if (frac < 0.0f) frac = 0.0f;
+        if (frac > 1.0f) frac = 1.0f;
+        ImVec2 rmin = ImGui::GetItemRectMin();
+        ImVec2 rmax = ImGui::GetItemRectMax();
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        Color accent = g_theme.ui.accent;
+        float mx = rmin.x + frac * (rmax.x - rmin.x);
+        dl->AddLine(ImVec2(mx, rmin.y), ImVec2(mx, rmax.y),
+                    IM_COL32(accent.r, accent.g, accent.b, 160), 1.5f);
+        /* interpolate across the bracketing samples so the dot glides smoothly */
+        float fpos = frac * (float)(DOPPLER_SAMPLES - 1);
+        int i0 = (int)floorf(fpos);
+        if (i0 < 0) i0 = 0;
+        if (i0 > DOPPLER_SAMPLES - 1) i0 = DOPPLER_SAMPLES - 1;
+        int i1 = i0 + 1;
+        if (i1 > DOPPLER_SAMPLES - 1) i1 = DOPPLER_SAMPLES - 1;
+        float sub = fpos - (float)i0;
+        if (sub < 0.0f) sub = 0.0f;
+        if (sub > 1.0f) sub = 1.0f;
+        float val = g_cache.plot[i0] + (g_cache.plot[i1] - g_cache.plot[i0]) * sub;
+        float t = (val + graph_scale) / (2.0f * graph_scale);
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        float my = rmax.y - t * (rmax.y - rmin.y);
+        dl->AddCircleFilled(ImVec2(mx, my), 4.0f,
+                            IM_COL32(accent.r, accent.g, accent.b, 255), 12);
+    }
 
     /* ---- live readout at current simulation time -------------------------- */
     double now = *ctx->current_epoch;

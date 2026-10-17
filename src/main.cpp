@@ -2683,7 +2683,9 @@ int main(void)
                                 draw_orbit_3d(&satellites[i], current_epoch, true, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position);
                                 Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
                                 Vector3 ground_pt = Vector3Scale(Vector3Normalize(draw_pos), draw_earth_radius);
-                                DrawLine3D(ground_pt, draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
+                                /* cull the nadir line when the globe hides the satellite */
+                                if (!IsOrbitSegmentOccluded(Camera3DParams.position, ground_pt, draw_pos, draw_earth_radius))
+                                    DrawLine3D(ground_pt, draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
                             }
                             continue;
                         }

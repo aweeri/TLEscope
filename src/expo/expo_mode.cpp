@@ -39,13 +39,15 @@ void ExpoModeDrawOverlay(Texture2D logo, Font font, AppConfig *cfg, Rectangle vi
     float logo_w = (logo.id!=0) ? logo.width*(logo_h/logo.height) : 0.0f;
     float text_h = tm.y + gap + gm.y;
     float group_h = (logo_h > text_h) ? logo_h : text_h;
-    float group_left = viewport.x + margin;
-    float group_bottom = viewport.y + viewport.height - margin;
-    float group_top = group_bottom - group_h;
+    float text_w = (tm.x > gm.x) ? tm.x : gm.x;
+    float group_w = logo_w + gap + text_w;
+    float group_left = viewport.x + viewport.width - margin - group_w;
+    float group_top = viewport.y + margin;
+    float text_x = group_left;
+    float logo_x = group_left + text_w + gap;
     float logo_y = group_top + (group_h - logo_h)*0.5f;
-    float text_x = group_left + logo_w + gap;
     float text_y = group_top + (group_h - text_h)*0.5f;
-    if (logo.id!=0) DrawTextureEx(logo, (Vector2){group_left, logo_y}, 0.0f, logo_h/logo.height, Fade(WHITE,0.95f));
+    if (logo.id!=0) DrawTextureEx(logo, (Vector2){logo_x, logo_y}, 0.0f, logo_h/logo.height, Fade(WHITE,0.95f));
     DrawUIText(font, title, text_x, text_y,               title_sz, g_theme.ui.text);
     DrawUIText(font, gh,    text_x, text_y+tm.y+gap,      gh_sz,   g_theme.ui.text_dim);
 }
