@@ -19,7 +19,7 @@
 #include "core/location.h"
 #include "data/curl_diagnostics.h"
 #include "util/log.h"
-#include "demo/demo_director.h"
+#include "expo/expo_mode.h"
 
 #include <raylib.h>
 #include <imgui.h>
@@ -1412,17 +1412,16 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 NotifySetCategoryEnabled(NOTIFY_ERROR, cat_err);
         }
 
-        /* ---- Demo Mode section ------------------------------------------- */
-        if (ImGui::CollapsingHeader("Demo Mode"))
+        /* ---- Expo Mode section ------------------------------------------- */
+        if (ImGui::CollapsingHeader("Expo Mode"))
         {
-            if (ImGui::Button(ICON_FA_PLAY " Start Demo Mode", ImVec2(UIPx(200.0f), 0)))
-            {
-                g_layout.settings_open = false;
-                ImGui::CloseCurrentPopup();
-                DemoDirectorRequestStart();
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Self-running cinematic showcase. Press Esc to exit.");
+            bool en = ExpoModeEnabled(cfg);
+            if (ImGui::Checkbox("Enable Expo Mode", &en)) { ExpoModeSetEnabled(cfg, en); SaveAppConfig("settings.json", cfg); }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the TLEscope + 'available on GitHub' overlay in the bottom-right corner.");
+
+            float sz = ExpoModeGetSize(cfg);
+            if (ImGui::SliderFloat("Overlay Size", &sz, EXPO_SIZE_MIN, EXPO_SIZE_MAX, "%.2fx")) ExpoModeSetSize(cfg, sz);
+            if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
         }
 
         /* ---- Buttons ----------------------------------------------------- */

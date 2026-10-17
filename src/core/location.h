@@ -29,7 +29,4 @@ void UpdateLocation(int idx, const char *name, float lat, float lon, float alt);
 /** find a location by exact name, or -1 if not present */
 int FindLocationByName(const char *name);
 
-/** DEMO-ONLY: swap in a neutral aerospace marker set (restored on exit). */
-void LoadDemoAerospaceMarkers(void);
-
 #endif // LOCATION_H

@@ -39,7 +39,7 @@
 #include "render/coverage_shaders.h"
 #include "render/coverage_mesh.h"
 #include "render/map_view.h"
-#include "demo/demo_director.h"
+#include "expo/expo_mode.h"
 
 /* application state and resources */
 static AppConfig cfg = []() -> AppConfig {
@@ -769,41 +769,6 @@ int main(void)
     bool left_press_over_ui = false;
     bool left_drag_active = false;
 
-    /* Demo Mode director context: points at the live main-loop locals above */
-    DemoContext demo_ctx = {
-        .cfg = &cfg,
-        .is_2d_view = &is_2d_view,
-        .is_pov_mode = &is_pov_mode,
-        .is_ecliptic_frame = &is_ecliptic_frame,
-        .current_epoch = &current_epoch,
-        .time_multiplier = &time_multiplier,
-        .selected_sat = &selected_sat,
-        .hovered_sat = &hovered_sat,
-        .hide_unselected = &hide_unselected,
-        .unselected_fade = &unselected_fade,
-        .camera3d = &Camera3DParams,
-        .cam_distance = &camDistance,
-        .cam_angle_x = &camAngleX,
-        .cam_angle_y = &camAngleY,
-        .target_cam_distance = &target_camDistance,
-        .target_cam_angle_x = &target_camAngleX,
-        .target_cam_angle_y = &target_camAngleY,
-        .target_camera3d_target = &target_camera3d_target,
-        .camera2d = &Camera2DParams,
-        .target_camera2d_zoom = &target_camera2d_zoom,
-        .target_camera2d_target = &target_camera2d_target,
-        .show_scope = &show_scope,
-        .scope_az = &scope_az,
-        .scope_el = &scope_el,
-        .scope_beam = &scope_beam,
-        .selected_pass_idx = &g_ui.selected_pass_idx,
-        .active_lock = &active_lock,
-        .draw_earth_radius = draw_earth_radius,
-        .map_w = map_w,
-        .map_h = map_h,
-    };
-    DemoDirectorInit();
-
     /* apply vsync / fps limit at startup so the window state matches the config */
     if (cfg.hint_vsync)
     {
@@ -887,19 +852,6 @@ int main(void)
             SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
         }
 
-        /* Demo Mode: Esc exits the demo, before the normal Esc handler below */
-        if (IsKeyPressed(KEY_ESCAPE) && DemoDirectorActive())
-            DemoDirectorRequestStop();
-        DemoDirectorUpdate(&demo_ctx, GetFrameTime());
-
-        /* demo mode owns the camera; tracking is not applicable and must not toast */
-        if (DemoDirectorActive())
-        {
-            active_lock = LOCK_NONE;
-            tracked_sat = NULL;
-            tracked_norad = 0;
-        }
-
         /* 3-finger double-tap toggles clean view (identical to pressing H).
          * Consumed unconditionally so it works even while a text field is focused. */
         if (TouchGestureConsumeThreeFingerDoubleTap())
@@ -914,9 +866,7 @@ int main(void)
         Viewport3DSetRect(vp_x, vp_y, vp_w, vp_h);
 
         /* Keep the 2D map centered on whole pixels and preserve the user's
-         * relative zoom when the window size changes. Demo Mode owns the
-         * camera while active, so defer viewport adjustment until it exits. */
-        if (!DemoDirectorActive())
+         * relative zoom when the window size changes. */
         {
             Camera2DParams.offset = (Vector2){floorf(vp_x + vp_w * 0.5f), floorf(vp_y + vp_h * 0.5f)};
             const float new_fill = MapFillZoomFor(map_w, map_h, vp_w, vp_h);
@@ -931,8 +881,8 @@ int main(void)
         /* remember the scale so the +/- keybind can toast only on a real change */
         const float prev_ui_scale = cfg.ui_scale;
 
-        /* input handling (skipped while Demo Mode owns the scene) */
-        if (!is_typing && !DemoDirectorActive())
+        /* input handling */
+        if (!is_typing)
         {
             if (IsKeyPressed(KEY_SPACE))
             {
@@ -1266,8 +1216,8 @@ int main(void)
             }
         }
         
-        /* 2D picking/camera (skipped while Demo Mode owns the scene) */
-        if (!DemoDirectorActive() && is_2d_view)
+        /* 2D picking/camera */
+        if (is_2d_view)
         {
             if (!over_ui)
             {
@@ -1322,7 +1272,7 @@ int main(void)
                 }
             }
         }
-        else if (!DemoDirectorActive())
+        else
         {
             /* handle picking and camera in 3d mode */
             if (!over_ui)
@@ -1438,8 +1388,8 @@ int main(void)
             }
         }
 
-        /* selection/double-click planet lock on release; skipped in Demo Mode */
-        if (!DemoDirectorActive() && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
+        /* selection/double-click planet lock on release */
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
         {
             if (!over_ui)
             {
@@ -1540,8 +1490,7 @@ int main(void)
             }
         }
 
-        /* camera interpolation targets (skipped while Demo Mode owns the camera) */
-        if (!DemoDirectorActive())
+        /* camera interpolation targets */
         {
             if (active_lock == LOCK_EARTH)
             {
@@ -1703,7 +1652,7 @@ int main(void)
 
         Satellite *active_sat = hovered_sat ? hovered_sat : selected_sat;
 
-        if (!DemoDirectorActive() && !is_2d_view && is_pov_mode && selected_sat && selected_sat->is_active)
+        if (!is_2d_view && is_pov_mode && selected_sat && selected_sat->is_active)
         {
             Vector3 sat_pos_3d = Vector3Scale(selected_sat->current_pos, 1.0f / DRAW_SCALE);
             Camera3DParams.position = sat_pos_3d;
@@ -2983,10 +2932,6 @@ int main(void)
             DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_dim);
         }
 
-        /* Demo Mode chrome (Esc hint, logo, letterbox, fade) */
-        if (DemoDirectorActive())
-            DemoDirectorDrawOverlay(logoTex, customFont, &cfg);
-
         /* Night mode: single screen-space post-process pass. Everything above
          * (3D/2D scene + raylib UI + ImGui) was drawn to the default MSAA
          * framebuffer. Flush the queued raylib/rlImGui geometry, copy the
@@ -3039,6 +2984,10 @@ int main(void)
                 EndShaderMode();
             }
         }
+
+        /* Expo Mode overlay: drawn after the night-mode post-process so it
+         * stays full-colour. */
+        ExpoModeDrawOverlay(logoTex, customFont, &cfg, (Rectangle){vp_x, vp_y, vp_w, vp_h});
 
         EndDrawing();
     }
