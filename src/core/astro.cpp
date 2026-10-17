@@ -1001,6 +1001,26 @@ Vector3 calculate_moon_position(double current_time_days)
     return pos;
 }
 
+/* samples the geocentric lunar orbit */
+void calculate_moon_orbit(double current_epoch, Vector3 *out_km, int count)
+{
+    if (!out_km || count <= 0)
+        return;
+
+    const double step = MOON_SIDEREAL_PERIOD_DAYS / (double)count;
+    for (int i = 0; i < count; i++)
+        out_km[i] = calculate_moon_position(current_epoch + i * step);
+
+    /* spread perturbations across the samples so the last point lands exactly on the first */
+    Vector3 end = calculate_moon_position(current_epoch + MOON_SIDEREAL_PERIOD_DAYS);
+    Vector3 err = Vector3Subtract(end, out_km[0]);
+    for (int i = 0; i < count; i++)
+    {
+        float f = (float)i / (float)count;
+        out_km[i] = Vector3Subtract(out_km[i], Vector3Scale(err, f));
+    }
+}
+
 // straight-line distance to a satellite
 double get_sat_range(Satellite *sat, double epoch, Location obs)
 {

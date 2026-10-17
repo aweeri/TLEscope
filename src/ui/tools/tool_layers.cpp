@@ -6,6 +6,7 @@
 #include "tools_common.h"
 #include "core/theme.h"
 #include "core/config.h"
+#include "core/astro.h"
 #include "ui/labels.h"
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
@@ -320,6 +321,16 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
                 cfg->show_skybox = val;
         }
 
+        /* Moon Orbit */
+        {
+            bool val = ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true);
+            bool prev = val;
+            DrawLayerCheckbox("Moon Orbit", &val, ICON_FA_MOON,
+                              "Show the Moon's geocentric orbital path (3D only).");
+            if (val != prev)
+                ToolSettingSetBool(cfg, LAYERS_KEY_MOON_ORBIT, val);
+        }
+
         ImGui::Unindent();
     }
 
@@ -523,6 +534,32 @@ static void DrawMapGrid3D(const SceneContext *sctx, AppConfig *cfg)
     rlDrawRenderBatchActive();
 }
 
+/* -- Moon orbit ------------------------------------------------------------ */
+
+static void DrawMoonOrbit3D(const SceneContext *sctx)
+{
+    Vector3 pts[MOON_ORBIT_SAMPLES];
+    calculate_moon_orbit(sctx->current_epoch, pts, MOON_ORBIT_SAMPLES);
+
+    Color col = g_theme.world.orbit;
+    col.a = 200;
+
+    rlDrawRenderBatchActive();
+    rlSetLineWidth(1.5f);
+    rlBegin(RL_LINES);
+    rlColor4ub(col.r, col.g, col.b, col.a);
+    for (int i = 0; i < MOON_ORBIT_SAMPLES; i++)
+    {
+        Vector3 a = Vector3Scale(pts[i], 1.0f / DRAW_SCALE);
+        Vector3 b = Vector3Scale(pts[(i + 1) % MOON_ORBIT_SAMPLES], 1.0f / DRAW_SCALE);
+        rlVertex3f(a.x, a.y, a.z);
+        rlVertex3f(b.x, b.y, b.z);
+    }
+    rlEnd();
+    rlSetLineWidth(1.0f);
+    rlDrawRenderBatchActive();
+}
+
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
     if (sctx->is_2d_view && sctx->camera2d)
@@ -541,6 +578,9 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
         if (cfg->show_latlon_grid)
             DrawMapGrid3D(sctx, cfg);
     }
+
+    if (!sctx->is_2d_view && ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true))
+        DrawMoonOrbit3D(sctx);
 
     if (sctx->is_2d_view && sctx->camera2d && cfg->show_latlon_grid)
     {

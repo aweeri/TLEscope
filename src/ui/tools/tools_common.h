@@ -38,6 +38,9 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 /* favourite (starred) satellite orbit coloring (checkbox 2, bool default false) */
 #define LAYERS_KEY_FAV_ORBITS_3D "layers.favorite_orbits_3d"
 
+/* Moon geocentric orbital path (bool, default true) */
+#define LAYERS_KEY_MOON_ORBIT "layers.moon_orbit"
+
 /* Ground Coverage scope: 0 = Sel (active satellite only), 1 = All (every active satellite), 2 = fav (favorites) */
 #define LAYERS_KEY_GC_MODE       "layers.ground_coverage_mode"
 #define LAYERS_GC_MODE_SELECTED  0

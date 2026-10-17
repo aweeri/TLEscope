@@ -72,6 +72,11 @@ void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float
 Vector3 calculate_position(Satellite *sat, double current_unix);
 Vector3 calculate_velocity(Satellite *sat, double current_unix);
 Vector3 calculate_moon_position(double current_time_days);
+
+/* geocentric lunar orbit sampling (one sidereal month) */
+#define MOON_ORBIT_SAMPLES 256
+#define MOON_SIDEREAL_PERIOD_DAYS 27.321661
+void calculate_moon_orbit(double current_epoch, Vector3 *out_km, int count);
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset,
                   float map_w, float map_h, Vector2 *out);
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix);
