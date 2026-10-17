@@ -97,6 +97,10 @@ void update_orbit_cache(Satellite *sat, double current_epoch);
 bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
 int calculate_orbit_cache_resolution(double eccentricity);
 
+/* fills out_times[0..n-1] with adaptive sample epochs (days), uniform in eccentric anomaly */
+void orbit_adaptive_sample_times(const Satellite *sat, double start_epoch, int n,
+                                 double span_orbits, double *out_times);
+
 double get_sat_range(Satellite *sat, double epoch, Location obs);
 double calculate_doppler_freq(Satellite *sat, double epoch, Location obs, double base_freq);
 

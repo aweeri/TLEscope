@@ -49,6 +49,54 @@ bool str_contains_ic(const char *str, const char *substr)
     return false;
 }
 
+// -- Orbit direction-of-motion styling --------------------------------------
+
+// wrap a phase into [-0.5, 0.5] (shortest signed distance around the loop)
+static double orbit_dir_wrap(double p)
+{
+    return p - floor(p + 0.5);
+}
+
+float OrbitDirectionIntensity(double phase, bool animated, double anim_time, float floor)
+{
+    const double s = orbit_dir_wrap(phase);
+    double g; // 1 at the satellite, decaying with distance along the orbit
+
+    if (animated)
+    {
+        // a bright comet sweeps the orbit in the direction of motion: a sharp
+        // head at the pulse with a tail trailing behind it (dim ahead of it)
+        const double pulse = anim_time * ORBIT_DIR_ANIM_SPEED;
+        const double d = orbit_dir_wrap(s - pulse); // signed distance from the pulse
+        g = (d > 0.0) ? 0.0 : exp(d / ORBIT_DIR_ANIM_TAU);
+    }
+    else
+    {
+        // static ramp: the future (ahead, s>0) sits at the flat base level and is
+        // never highlighted. The trail (behind, s<0) is highlighted, fading from
+        // the satellite back over ORBIT_DIR_TRAIL_LEN of an orbit. The smoothstep
+        // falloff is C1-continuous at the satellite, so there is no seam.
+        if (s >= 0.0)
+        {
+            g = 0.0;
+        }
+        else
+        {
+            const double x = -s / ORBIT_DIR_TRAIL_LEN; // 0 at satellite, 1 at trail end
+            g = (x >= 1.0) ? 0.0 : 1.0 - x * x * (3.0 - 2.0 * x);
+        }
+    }
+
+    return floor + (1.0f - floor) * (float)g;
+}
+
+float OrbitDirectionWidth(double phase, bool animated, double anim_time, float floor)
+{
+    const float t = (OrbitDirectionIntensity(phase, animated, anim_time, floor) - floor) /
+                    (1.0f - floor);
+    return 1.0f + t * (ORBIT_DIR_WIDTH_MAX - 1.0f);
+}
+
 // -- Data Source Selection List (shopping-cart model) -----------------------
 
 static DataSourceSelection g_data_selections[MAX_DATA_SOURCE_SELECTIONS];

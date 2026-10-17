@@ -181,10 +181,31 @@ static Color MultiGroundTrackColor(int index)
     return g_theme.ground_tracks.palette[index % GROUND_TRACK_PALETTE_SIZE];
 }
 
+/** apply the direction-of-motion alpha ramp; phase is the signed fraction of an orbit (positive = ahead) */
+static Color ApplyOrbitDirection(Color c, double phase, float floor = ORBIT_DIR_MIN)
+{
+    if (!ToolSettingGetBool(&cfg, LAYERS_KEY_ORBIT_DIRECTION, true))
+        return c;
+    const bool anim = ToolSettingGetBool(&cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, false);
+    const float k = OrbitDirectionIntensity(phase, anim, GetTime(), floor);
+    c.a = (unsigned char)(c.a * k);
+    return c;
+}
+
+/** line-width multiplier for the direction ramp (1.0 when the layer is off) */
+static float OrbitDirectionWidthScale(double phase, float floor = ORBIT_DIR_MIN)
+{
+    if (!ToolSettingGetBool(&cfg, LAYERS_KEY_ORBIT_DIRECTION, true))
+        return 1.0f;
+    const bool anim = ToolSettingGetBool(&cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, false);
+    return OrbitDirectionWidth(phase, anim, GetTime(), floor);
+}
+
 /** render orbit lines in 3d space */
-static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step, bool apply_sunlit)
+static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step, bool apply_sunlit, Vector3 cam_pos)
 {
     Color orbitColor = ApplyAlpha(is_highlighted ? g_theme.world.orbit_active : g_theme.world.orbit, alpha);
+    const float earth_r = EARTH_RADIUS_KM / DRAW_SCALE;
 
     if (is_highlighted)
     {
@@ -217,7 +238,10 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
                     else
                         drawCol = ApplyAlpha(g_theme.world.orbit, alpha);
                 }
-                DrawLine3D(prev_pos, pos, drawCol);
+                drawCol = ApplyOrbitDirection(drawCol, (double)i / (double)segments,
+                                              ORBIT_DIR_MIN_SELECTED);
+                if (!IsOrbitSegmentOccluded(cam_pos, prev_pos, pos, earth_r))
+                    DrawLine3D(prev_pos, pos, drawCol);
             }
             prev_pos = pos;
         }
@@ -236,13 +260,15 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
         Vector3 prev_pos = sat->orbit_cache[0];
         int cache_size = sat->orbit_cache_resolution;
 
+        /* direction trail is a selected-orbit indicator only, so dimmed orbits stay flat */
         for (int i = step; i < cache_size; i += step)
         {
             Vector3 pos = sat->orbit_cache[i];
             Color drawCol = orbitColor;
             if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(pos, DRAW_SCALE), base_sun_dir))
                 drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
-            DrawLine3D(prev_pos, pos, drawCol);
+            if (!IsOrbitSegmentOccluded(cam_pos, prev_pos, pos, earth_r))
+                DrawLine3D(prev_pos, pos, drawCol);
             prev_pos = pos;
         }
 
@@ -253,17 +279,20 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
             int last = cache_size - 1;
             if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(sat->orbit_cache[last], DRAW_SCALE), base_sun_dir))
                 drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
-            DrawLine3D(prev_pos, sat->orbit_cache[last], drawCol);
+            if (!IsOrbitSegmentOccluded(cam_pos, prev_pos, sat->orbit_cache[last], earth_r))
+                DrawLine3D(prev_pos, sat->orbit_cache[last], drawCol);
         }
     }
 }
 
 /** draw a favorite satellite's orbit in 3d using a palette color (lit-up look). */
-static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color color, float alpha, int step, bool apply_sunlit)
+static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color color, float alpha, int step, bool apply_sunlit, Vector3 cam_pos)
 {
     Color orbitColor = ApplyAlpha(color, alpha);
     if (!sat->orbit_cached)
         return;
+
+    const float earth_r = EARTH_RADIUS_KM / DRAW_SCALE;
 
     Vector3 base_sun_dir = {0};
     if (cfg.highlight_sunlit && apply_sunlit)
@@ -281,7 +310,9 @@ static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color co
         Color drawCol = orbitColor;
         if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(pos, DRAW_SCALE), base_sun_dir))
             drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
-        DrawLine3D(prev_pos, pos, drawCol);
+        drawCol = ApplyOrbitDirection(drawCol, sat->orbit_cache_phase[i]);
+        if (!IsOrbitSegmentOccluded(cam_pos, prev_pos, pos, earth_r))
+            DrawLine3D(prev_pos, pos, drawCol);
         prev_pos = pos;
     }
 
@@ -292,7 +323,9 @@ static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color co
         int last = cache_size - 1;
         if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(sat->orbit_cache[last], DRAW_SCALE), base_sun_dir))
             drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
-        DrawLine3D(prev_pos, sat->orbit_cache[last], drawCol);
+        drawCol = ApplyOrbitDirection(drawCol, sat->orbit_cache_phase[last]);
+        if (!IsOrbitSegmentOccluded(cam_pos, prev_pos, sat->orbit_cache[last], earth_r))
+            DrawLine3D(prev_pos, sat->orbit_cache[last], drawCol);
     }
     rlSetLineWidth(1.0f);
 }
@@ -750,7 +783,7 @@ int main(void)
     double auto_warp_target = 0.0;
     double auto_warp_initial_diff = 0.0;
     bool exit_app = false;
-    bool is_ecliptic_frame = false;
+    bool is_ecliptic_frame = cfg.show_ecliptic_frame;
     float current_ecliptic_angle = 0.0f;
     bool is_pov_mode = false;
 
@@ -2108,120 +2141,154 @@ int main(void)
                 if (future_orbits_enabled && cfg.highlight_sunlit)
                     future_sun_dir = Vector3Normalize(calculate_sun_position(current_epoch));
 
-                /* render all satellites on 2d map */
-                for (int i = 0; i < sat_count; i++)
+                /* three passes: dimmed tracks, then important tracks, then satellite icons on top */
+                for (int pass = 0; pass < 3; pass++)
                 {
-                    if (!satellites[i].is_active)
-                        continue;
-                    bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
-                    float sat_alpha = is_unselected ? unselected_fade : 1.0f;
-                    if (sat_alpha <= 0.0f)
-                        continue;
-
-                    bool is_hl = (active_sat == &satellites[i]);
-                    const auto extra_it =
-                        std::find(extra_track_sats.begin(), extra_track_sats.end(),
-                                  &satellites[i]);
-                    const bool extra_is_fav_color =
-                        extra_it != extra_track_sats.end() &&
-                        extra_track_is_fav[(size_t)(extra_it - extra_track_sats.begin())];
-                    const bool draw_future_track =
-                        future_orbits_enabled && satellites[i].mean_motion > 0.0 &&
-                        !(is_pov_mode && &satellites[i] == selected_sat) &&
-                        (is_hl || extra_it != extra_track_sats.end());
-
-                    Color sCol = (selected_sat == &satellites[i])
-                        ? g_theme.world.sat_selected
-                        : (hovered_sat == &satellites[i])
-                            ? g_theme.world.sat_hover
-                            : g_theme.world.sat;
-                    if (draw_future_track)
+                    for (int i = 0; i < sat_count; i++)
                     {
-                        sCol = is_hl ? g_theme.world.orbit_active
-                                     : (extra_is_fav_color ? MultiGroundTrackColor(i)
-                                                           : g_theme.world.orbit);
-                    }
-                    sCol = ApplyAlpha(sCol, sat_alpha);
+                        if (!satellites[i].is_active)
+                            continue;
+                        bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
+                        float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                        if (sat_alpha <= 0.0f)
+                            continue;
 
-                    /* sunlit scope: Sel = active only, Fav = favorites only, All = everyone */
-                    bool apply_sunlit = sunlit_scope == LAYERS_ORBITS_SUNLIT_ALL ||
-                                        (sunlit_scope == LAYERS_ORBITS_SUNLIT_SELECTED && is_hl) ||
-                                        (sunlit_scope == LAYERS_ORBITS_SUNLIT_FAV &&
-                                         IsFavorite(satellites[i].norad_id_num));
+                        bool is_hl = (active_sat == &satellites[i]);
+                        const auto extra_it =
+                            std::find(extra_track_sats.begin(), extra_track_sats.end(),
+                                      &satellites[i]);
+                        const bool extra_is_fav_color =
+                            extra_it != extra_track_sats.end() &&
+                            extra_track_is_fav[(size_t)(extra_it - extra_track_sats.begin())];
+                        const bool draw_future_track =
+                            future_orbits_enabled && satellites[i].mean_motion > 0.0 &&
+                            !(is_pov_mode && &satellites[i] == selected_sat) &&
+                            (is_hl || extra_it != extra_track_sats.end());
+                        const bool track_important = is_hl || extra_is_fav_color;
 
-                    if (draw_future_track)
-                    {
-                        const int segments = is_hl ? requested_future_segments : extra_future_segments;
-                        Vector2 track_pts[4001];
-                        bool is_sunlit_arr[4001];
-
-                        const Color track_color = ApplyAlpha(
-                            is_hl ? g_theme.world.orbit_active
-                                  : (extra_is_fav_color ? MultiGroundTrackColor(i)
-                                                        : g_theme.world.orbit),
-                            sat_alpha);
-
-                        double period_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
-                        double time_step = (period_days * future_orbit_span) / segments;
-
-                        for (int j = 0; j <= segments; j++)
+                        Color sCol = (selected_sat == &satellites[i])
+                            ? g_theme.world.sat_selected
+                            : (hovered_sat == &satellites[i])
+                                ? g_theme.world.sat_hover
+                                : g_theme.world.sat;
+                        if (draw_future_track)
                         {
-                            double t = (j == 0) ? current_epoch : (current_epoch - fmod(current_epoch, time_step) + (j * time_step));
-                            double t_unix = get_unix_from_epoch(t);
-                            Vector3 raw_pos = calculate_position(&satellites[i], t_unix);
-                            get_map_coordinates(raw_pos, epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
-
-                            if (cfg.highlight_sunlit && apply_sunlit)
-                            {
-                                is_sunlit_arr[j] = !is_sat_eclipsed(raw_pos, future_sun_dir);
-                            }
+                            sCol = is_hl ? g_theme.world.orbit_active
+                                         : (extra_is_fav_color ? MultiGroundTrackColor(i)
+                                                               : g_theme.world.orbit);
                         }
+                        /* orbit color is faint for lines; keep the satellite icon itself visible */
+                        if (sCol.a < g_theme.world.sat.a)
+                            sCol.a = g_theme.world.sat.a;
+                        sCol = ApplyAlpha(sCol, sat_alpha);
 
-                        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
+                        /* sunlit scope: Sel = active only, Fav = favorites only, All = everyone */
+                        bool apply_sunlit = sunlit_scope == LAYERS_ORBITS_SUNLIT_ALL ||
+                                            (sunlit_scope == LAYERS_ORBITS_SUNLIT_SELECTED && is_hl) ||
+                                            (sunlit_scope == LAYERS_ORBITS_SUNLIT_FAV &&
+                                             IsFavorite(satellites[i].norad_id_num));
+
+                        /* pass 0 draws dimmed tracks, pass 1 draws important (active + favourite) tracks on top */
+                        const bool track_pass =
+                            (pass == 0 && !track_important) || (pass == 1 && track_important);
+
+                        if (draw_future_track && track_pass)
                         {
-                            float x_off = offset_i * map_w;
-                            for (int j = 1; j <= segments; j++)
+                            const int segments = is_hl ? requested_future_segments : extra_future_segments;
+                            Vector2 track_pts[4001];
+                            bool is_sunlit_arr[4001];
+                            double track_times[4001];
+
+                            const Color track_color = ApplyAlpha(
+                                is_hl ? g_theme.world.orbit_active
+                                      : (extra_is_fav_color ? MultiGroundTrackColor(i)
+                                                            : g_theme.world.orbit),
+                                sat_alpha);
+
+                            double period_days = (2.0 * PI / satellites[i].mean_motion) / 86400.0;
+                            if (!(period_days > 0.0))
+                                period_days = 1.0 / 1440.0;
+
+                            /* adaptive sampling: denser near perigee keeps high-eccentricity tracks smooth */
+                            orbit_adaptive_sample_times(&satellites[i], current_epoch, segments + 1,
+                                                        future_orbit_span, track_times);
+
+                            for (int j = 0; j <= segments; j++)
                             {
-                                if (fabs(track_pts[j].x - track_pts[j - 1].x) < map_w * 0.6f)
+                                double t = track_times[j];
+                                double t_unix = get_unix_from_epoch(t);
+                                Vector3 raw_pos = calculate_position(&satellites[i], t_unix);
+                                get_map_coordinates(raw_pos, epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
+
+                                if (cfg.highlight_sunlit && apply_sunlit)
                                 {
-                                    Color drawCol = track_color;
-                                    if (cfg.highlight_sunlit && apply_sunlit && is_sunlit_arr[j])
-                                        drawCol = ApplyAlpha(g_theme.world.sat_hover, sat_alpha);
-                                    float track_w = is_hl ? 2.0f : (extra_is_fav_color ? 1.5f : 1.0f);
-                                    track_w /= Camera2DParams.zoom;
-                                    DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, track_w, drawCol);
+                                    is_sunlit_arr[j] = !is_sat_eclipsed(raw_pos, future_sun_dir);
                                 }
                             }
 
-                            if (cfg.show_apsides && is_hl)
+                            for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                             {
-                                Vector2 peri2d, apo2d;
-                                get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
-                                get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
+                                float x_off = offset_i * map_w;
+                                for (int j = 1; j <= segments; j++)
+                                {
+                                    if (fabs(track_pts[j].x - track_pts[j - 1].x) < map_w * 0.6f)
+                                    {
+                                        Color drawCol = track_color;
+                                        if (cfg.highlight_sunlit && apply_sunlit && is_sunlit_arr[j])
+                                            drawCol = ApplyAlpha(g_theme.world.sat_hover, sat_alpha);
+                                        float track_w = is_hl ? 2.0f : (extra_is_fav_color ? 1.5f : 1.0f);
+                                        /* direction trail is a selected-orbit indicator: dimmed tracks stay flat */
+                                        if (is_hl || extra_is_fav_color)
+                                        {
+                                            const float dir_floor = is_hl ? ORBIT_DIR_MIN_SELECTED : ORBIT_DIR_MIN;
+                                            /* 2D tracks only draw the future, so the trail is anchored at the
+                                             * satellite's current position and clamped so it never wraps onto
+                                             * the predicted portion or repeats on later orbits */
+                                            const double dir_phase = (track_times[j] - current_epoch) / period_days;
+                                            const double trail_phase = fmax(-dir_phase, -(double)ORBIT_DIR_TRAIL_LEN);
+                                            drawCol = ApplyOrbitDirection(drawCol, trail_phase, dir_floor);
+                                            /* keep the 2D trail thin: damp the width ramp the 3D-style width uses */
+                                            track_w *= 1.0f + (OrbitDirectionWidthScale(trail_phase, dir_floor) - 1.0f) * 0.2f;
+                                        }
+                                        track_w /= Camera2DParams.zoom;
+                                        DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, track_w, drawCol);
+                                    }
+                                }
 
-                                DrawTexturePro(
-                                    periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d},
-                                    (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.periapsis, sat_alpha)
-                                );
-                                DrawTexturePro(
-                                    apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d},
-                                    (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
-                                );
+                                if (cfg.show_apsides && is_hl)
+                                {
+                                    Vector2 peri2d, apo2d;
+                                    get_apsis_2d(&satellites[i], current_epoch, false, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &peri2d);
+                                    get_apsis_2d(&satellites[i], current_epoch, true, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &apo2d);
 
+                                    DrawTexturePro(
+                                        periMark, (Rectangle){0, 0, periMark.width, periMark.height}, (Rectangle){peri2d.x + x_off, peri2d.y, mark_size_2d, mark_size_2d},
+                                        (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.periapsis, sat_alpha)
+                                    );
+                                    DrawTexturePro(
+                                        apoMark, (Rectangle){0, 0, apoMark.width, apoMark.height}, (Rectangle){apo2d.x + x_off, apo2d.y, mark_size_2d, mark_size_2d},
+                                        (Vector2){mark_size_2d / 2.f, mark_size_2d / 2.f}, 0.0f, ApplyAlpha(g_theme.world.apoapsis, sat_alpha)
+                                    );
+
+                                }
                             }
                         }
-                    }
 
-                    float sat_mx, sat_my;
-                    get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &sat_mx, &sat_my);
-                    if (!(is_pov_mode && &satellites[i] == selected_sat))
-                    {
-                        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
+                        /* pass 2: satellite icons stay on top of every track */
+                        if (pass == 2)
                         {
-                            DrawTexturePro(
-                                satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
-                                (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
-                            );
+                            float sat_mx, sat_my;
+                            get_map_coordinates(satellites[i].current_pos, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &sat_mx, &sat_my);
+                            if (!(is_pov_mode && &satellites[i] == selected_sat))
+                            {
+                                for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
+                                {
+                                    DrawTexturePro(
+                                        satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sat_mx + (offset_i * map_w), sat_my, m_size_2d, m_size_2d},
+                                        (Vector2){m_size_2d / 2.f, m_size_2d / 2.f}, 0.0f, sCol
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -2562,63 +2629,91 @@ int main(void)
             uint32_t fav_ids[MAX_SATELLITES];
             int fav_count = orbits_fav_colored ? GetFavoriteIds(fav_ids, MAX_SATELLITES) : 0;
 
-            /* single orbit style per satellite: sunlit (per-seg) > highlight > fav-color > dimmed.
-             * One pass keeps exactly one color per orbit, never overlapping another. */
+            /* one orbit style per satellite: sunlit > highlight > fav-color > dimmed */
             if (orbits_enabled)
             {
-                for (int i = 0; i < sat_count; i++)
+                /* important pass draws with depth test off so dimmed orbits and the Earth can't occlude it */
+                for (int pass = 0; pass < 2; pass++)
                 {
-                    if (!satellites[i].is_active)
-                        continue;
-                    if (is_pov_mode && &satellites[i] == selected_sat)
-                        continue;
-                    bool is_hl = (active_sat == &satellites[i]);
-                    bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
-                    float sat_alpha = is_unselected ? unselected_fade : 1.0f;
-                    if (sat_alpha <= 0.0f)
-                        continue;
-
-                    bool is_fav = false;
-                    int fav_index = 0;
-                    if (orbits_fav_colored)
+                    if (pass == 1)
                     {
-                        for (int k = 0; k < fav_count; k++)
+                        rlDrawRenderBatchActive();
+                        rlDisableDepthTest();
+                        rlDisableDepthMask();
+                    }
+
+                    for (int i = 0; i < sat_count; i++)
+                    {
+                        if (!satellites[i].is_active)
+                            continue;
+                        if (is_pov_mode && &satellites[i] == selected_sat)
+                            continue;
+                        bool is_hl = (active_sat == &satellites[i]);
+                        bool is_unselected = (selected_sat != NULL && &satellites[i] != selected_sat);
+                        float sat_alpha = is_unselected ? unselected_fade : 1.0f;
+                        if (sat_alpha <= 0.0f)
+                            continue;
+
+                        bool is_fav = false;
+                        int fav_index = 0;
+                        if (orbits_fav_colored)
                         {
-                            if (satellites[i].norad_id_num == fav_ids[k])
+                            for (int k = 0; k < fav_count; k++)
                             {
-                                is_fav = true;
-                                fav_index = k;
-                                break;
+                                if (satellites[i].norad_id_num == fav_ids[k])
+                                {
+                                    is_fav = true;
+                                    fav_index = k;
+                                    break;
+                                }
                             }
+                        }
+
+                        /* sunlit scope: Sel = active only, Fav = favorites only, All = everyone */
+                        bool apply_sunlit = sunlit_scope == LAYERS_ORBITS_SUNLIT_ALL ||
+                                            (sunlit_scope == LAYERS_ORBITS_SUNLIT_SELECTED && is_hl) ||
+                                            (sunlit_scope == LAYERS_ORBITS_SUNLIT_FAV &&
+                                             IsFavorite(satellites[i].norad_id_num));
+
+                        /* priority 2: highlighted (active) orbit outranks fav-color */
+                        if (is_hl)
+                        {
+                            if (pass == 1)
+                            {
+                                draw_orbit_3d(&satellites[i], current_epoch, true, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position);
+                                Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
+                                Vector3 ground_pt = Vector3Scale(Vector3Normalize(draw_pos), draw_earth_radius);
+                                DrawLine3D(ground_pt, draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
+                            }
+                            continue;
+                        }
+
+                        /* priority 3: fav-colored orbit outranks the dimmed unselected track */
+                        if (is_fav && orbits_fav_colored)
+                        {
+                            if (pass == 1)
+                            {
+                                Color fav_color = MultiGroundTrackColor(fav_index);
+                                draw_orbit_3d_colored(&satellites[i], current_epoch, fav_color, 0.9f, global_orbit_step, apply_sunlit, Camera3DParams.position);
+                            }
+                            continue;
+                        }
+
+                        /* dimmed/unselected orbit (first pass only) */
+                        if (pass == 0)
+                        {
+                            if (&satellites[i] != selected_sat && !orbits_dimmed)
+                                continue;
+                            draw_orbit_3d(&satellites[i], current_epoch, false, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position);
                         }
                     }
 
-                    /* sunlit scope: Sel = active only, Fav = favorites only, All = everyone */
-                    bool apply_sunlit = sunlit_scope == LAYERS_ORBITS_SUNLIT_ALL ||
-                                        (sunlit_scope == LAYERS_ORBITS_SUNLIT_SELECTED && is_hl) ||
-                                        (sunlit_scope == LAYERS_ORBITS_SUNLIT_FAV &&
-                                         IsFavorite(satellites[i].norad_id_num));
-
-                    /* priority 2: highlighted (active) orbit outranks fav-color */
-                    if (is_hl)
+                    if (pass == 1)
                     {
-                        draw_orbit_3d(&satellites[i], current_epoch, true, sat_alpha, global_orbit_step, apply_sunlit);
-                        Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                        DrawLine3D(Vector3Zero(), draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
-                        continue;
+                        rlDrawRenderBatchActive();
+                        rlEnableDepthTest();
+                        rlEnableDepthMask();
                     }
-
-                    /* priority 3: fav-colored orbit outranks the dimmed unselected track */
-                    if (is_fav && orbits_fav_colored)
-                    {
-                        Color fav_color = MultiGroundTrackColor(fav_index);
-                        draw_orbit_3d_colored(&satellites[i], current_epoch, fav_color, 0.9f, global_orbit_step, apply_sunlit);
-                        continue;
-                    }
-
-                    if (&satellites[i] != selected_sat && !orbits_dimmed)
-                        continue;
-                    draw_orbit_3d(&satellites[i], current_epoch, false, sat_alpha, global_orbit_step, apply_sunlit);
                 }
             }
 
@@ -2790,6 +2885,9 @@ int main(void)
                                 }
                             }
                         }
+                        /* orbit color is faint for lines; keep the satellite icon itself visible */
+                        if (sCol.a < g_theme.world.sat.a)
+                            sCol.a = g_theme.world.sat.a;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = WorldToScreenViewport3D(draw_pos, Camera3DParams);
                         /* rotate the icon so its bottom-right corner points toward the earth
@@ -3026,6 +3124,7 @@ int main(void)
     LayoutFillPersist(&cfg.ui_layout);
     RotatorSaveSettings(&cfg); /* copy live rotator settings into cfg */
     SaveSatSelection(&cfg);    /* copy live active-satellite selection into cfg */
+    cfg.show_ecliptic_frame = is_ecliptic_frame; /* copy live ecliptic-frame state into cfg */
     SaveAppConfig("settings.json", &cfg);
 
     SaveDataSelections();

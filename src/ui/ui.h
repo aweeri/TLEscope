@@ -232,5 +232,6 @@ Color ApplyAlpha(Color c, float alpha);
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color);
 double StepTimeMultiplier(double current, bool increase);
 bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius);
+bool IsOrbitSegmentOccluded(Vector3 camPos, Vector3 a, Vector3 b, float earthRadius);
 
 #endif // UI_H

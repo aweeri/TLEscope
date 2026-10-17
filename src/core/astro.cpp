@@ -537,6 +537,75 @@ bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_thres
     return drift < drift_threshold_km;
 }
 
+/** solves Kepler's equation M = E - e*sin(E) for E (Newton, valid for e < 1) */
+static double solve_kepler_eccentric(double M, double e)
+{
+    double E = M;
+    for (int i = 0; i < 8; i++)
+    {
+        double f = E - e * sin(E) - M;
+        double fp = 1.0 - e * cos(E);
+        if (fabs(fp) < 1e-12)
+            break;
+        double d = f / fp;
+        E -= d;
+        if (fabs(d) < 1e-12)
+            break;
+    }
+    return E;
+}
+
+/** adaptive sample epochs: uniform in eccentric anomaly, so points bunch up near perigee */
+void orbit_adaptive_sample_times(const Satellite *sat, double start_epoch, int n,
+                                 double span_orbits, double *out_times)
+{
+    if (n <= 0)
+        return;
+    if (n == 1)
+    {
+        out_times[0] = start_epoch;
+        return;
+    }
+
+    double start_unix = get_unix_from_epoch(start_epoch);
+    SatPropElements el;
+    sat_prop_elements(sat, start_unix, &el);
+
+    double e = el.ecc;
+    if (!(e >= 0.0))
+        e = 0.0;
+    if (e > 0.95)
+        e = 0.95;
+
+    double n_rad_min = el.mean_motion;
+    if (!(n_rad_min > 0.0))
+        n_rad_min = sat->mean_motion * 60.0;
+
+    // no usable mean motion: fall back to uniform time spacing
+    if (!(n_rad_min > 0.0))
+    {
+        double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
+        if (!(period_days > 0.0))
+            period_days = 1.0 / 1440.0;
+        for (int k = 0; k < n; k++)
+            out_times[k] = start_epoch + period_days * span_orbits * (double)k / (double)(n - 1);
+        return;
+    }
+
+    double M0 = fmod(el.mean_anom, 2.0 * PI);
+    if (M0 < 0.0)
+        M0 += 2.0 * PI;
+    double E0 = solve_kepler_eccentric(M0, e);
+
+    double total_E = 2.0 * PI * span_orbits;
+    for (int k = 0; k < n; k++)
+    {
+        double E = E0 + total_E * (double)k / (double)(n - 1);
+        double M = E - e * sin(E);
+        out_times[k] = start_epoch + ((M - M0) / n_rad_min) / 1440.0;
+    }
+}
+
 /** bakes the future orbital path into a vertex buffer so sgp4 isnt re-run every frame */
 void update_orbit_cache(Satellite *sat, double current_epoch)
 {
@@ -547,17 +616,22 @@ void update_orbit_cache(Satellite *sat, double current_epoch)
                   sat->name, sat->orbit_cache_resolution, new_res);
         sat->orbit_cache_resolution = new_res;
     }
-    
+
     double period_days = (2.0 * PI / sat->mean_motion) / 86400.0;
-    double time_step = period_days / (sat->orbit_cache_resolution - 1);
-    
+    if (!(period_days > 0.0))
+        period_days = 1.0 / 1440.0;
+
+    double sample_times[ORBIT_CACHE_SIZE];
+    orbit_adaptive_sample_times(sat, current_epoch, sat->orbit_cache_resolution, 1.0, sample_times);
+
     for (int i = 0; i < sat->orbit_cache_resolution; i++)
     {
-        double t = current_epoch + (i * time_step);
+        double t = sample_times[i];
         double t_unix = get_unix_from_epoch(t);
         sat->orbit_cache[i] = Vector3Scale(calculate_position(sat, t_unix), 1.0f / DRAW_SCALE);
+        sat->orbit_cache_phase[i] = (float)((t - current_epoch) / period_days);
     }
-    
+
     // track cache validity
     double current_unix = get_unix_from_epoch(current_epoch);
     sat->cached_orbit_base_pos = calculate_position(sat, current_unix);

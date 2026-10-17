@@ -169,6 +169,28 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
                            val);
         }
 
+        /* Direction (trail/future ramp + optional animated pulse) */
+        {
+            float row_avail = ImGui::GetContentRegionAvail().x;
+            bool val = ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION, true);
+            bool prev = val;
+            DrawLayerCheckbox("Direction", &val, ICON_FA_ARROW_RIGHT_LONG,
+                              "Fade orbit lines along the direction of motion: the trail behind each satellite/moon is brighter and thicker than the path ahead (2D and 3D)");
+            if (val != prev)
+                ToolSettingSetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION, val);
+
+            /* right-aligned animated-pulse toggle, disabled while the master is off */
+            ImGui::BeginDisabled(!val);
+            const float box_w = 26.0f;
+            ImGui::SameLine(row_avail - box_w);
+            bool anim = ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, false);
+            if (ImGui::Checkbox("##orbit_dir_anim", &anim))
+                ToolSettingSetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, anim);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Animate a bright pulse sweeping each orbit in the direction of motion");
+            ImGui::EndDisabled();
+        }
+
         /* Slant range */
         {
             bool val = cfg->show_slant_range;
@@ -319,6 +341,19 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
                               "Show the starfield skybox.\n3D only.");
             if (val != prev)
                 cfg->show_skybox = val;
+        }
+
+        /* Ecliptic Frame (3D only) */
+        {
+            bool val = *ctx->is_ecliptic_frame;
+            bool prev = val;
+            DrawLayerCheckbox("Ecliptic Frame", &val, ICON_FA_ROTATE,
+                              "Tilt the scene to the ecliptic plane.\n3D only.");
+            if (val != prev)
+            {
+                *ctx->is_ecliptic_frame = val;
+                cfg->show_ecliptic_frame = val;
+            }
         }
 
         /* Moon Orbit */
@@ -536,7 +571,7 @@ static void DrawMapGrid3D(const SceneContext *sctx, AppConfig *cfg)
 
 /* -- Moon orbit ------------------------------------------------------------ */
 
-static void DrawMoonOrbit3D(const SceneContext *sctx)
+static void DrawMoonOrbit3D(const SceneContext *sctx, AppConfig *cfg)
 {
     Vector3 pts[MOON_ORBIT_SAMPLES];
     calculate_moon_orbit(sctx->current_epoch, pts, MOON_ORBIT_SAMPLES);
@@ -544,14 +579,32 @@ static void DrawMoonOrbit3D(const SceneContext *sctx)
     Color col = g_theme.world.orbit;
     col.a = 200;
 
+    const float earth_r = sctx->draw_earth_radius;
+    const Vector3 cam_pos = sctx->camera3d ? sctx->camera3d->position : Vector3Zero();
+
+    /* sample 0 is the Moon's current position, so phase advances along the direction of travel */
+    const bool dir_on = ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION, true);
+    const bool dir_anim = dir_on && ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, false);
+    const double dir_time = GetTime();
+
     rlDrawRenderBatchActive();
     rlSetLineWidth(1.5f);
     rlBegin(RL_LINES);
-    rlColor4ub(col.r, col.g, col.b, col.a);
     for (int i = 0; i < MOON_ORBIT_SAMPLES; i++)
     {
         Vector3 a = Vector3Scale(pts[i], 1.0f / DRAW_SCALE);
         Vector3 b = Vector3Scale(pts[(i + 1) % MOON_ORBIT_SAMPLES], 1.0f / DRAW_SCALE);
+
+        if (IsOrbitSegmentOccluded(cam_pos, a, b, earth_r))
+            continue;
+
+        unsigned char alpha = col.a;
+        if (dir_on)
+        {
+            const double phase = (double)i / (double)MOON_ORBIT_SAMPLES;
+            alpha = (unsigned char)(col.a * OrbitDirectionIntensity(phase, dir_anim, dir_time));
+        }
+        rlColor4ub(col.r, col.g, col.b, alpha);
         rlVertex3f(a.x, a.y, a.z);
         rlVertex3f(b.x, b.y, b.z);
     }
@@ -580,7 +633,7 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
     }
 
     if (!sctx->is_2d_view && ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true))
-        DrawMoonOrbit3D(sctx);
+        DrawMoonOrbit3D(sctx, cfg);
 
     if (sctx->is_2d_view && sctx->camera2d && cfg->show_latlon_grid)
     {

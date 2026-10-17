@@ -182,6 +182,7 @@ typedef struct
 
     Vector3 orbit_cache[ORBIT_CACHE_SIZE];
     int orbit_cache_resolution;  // how many points are valid
+    float orbit_cache_phase[ORBIT_CACHE_SIZE];  // per-sample orbit phase (fraction of a period from the cache start)
     Vector3 cached_orbit_base_pos;  // position when cache was last calculated
     double cached_orbit_epoch;  // epoch when cache was last calculated
     bool orbit_cached;
@@ -352,6 +353,7 @@ typedef struct
     bool show_scattering;
     bool hint_vsync;
     bool show_skybox;
+    bool show_ecliptic_frame;
     bool show_ground_coverage;
     bool show_apsides;
     bool show_earth_texture;

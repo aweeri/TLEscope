@@ -41,6 +41,9 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 /* Moon geocentric orbital path (bool, default true) */
 #define LAYERS_KEY_MOON_ORBIT "layers.moon_orbit"
 
+#define LAYERS_KEY_ORBIT_DIRECTION "layers.orbit_direction"
+#define LAYERS_KEY_ORBIT_DIRECTION_ANIM "layers.orbit_direction_anim"
+
 /* Ground Coverage scope: 0 = Sel (active satellite only), 1 = All (every active satellite), 2 = fav (favorites) */
 #define LAYERS_KEY_GC_MODE       "layers.ground_coverage_mode"
 #define LAYERS_GC_MODE_SELECTED  0
@@ -74,5 +77,44 @@ void InfoRow(const char *label, const char *fmt, ...);
 
 /** draw a clickable RA or Dec value that cycles format on click */
 void DrawClickableRADec(const char *label, double deg_value, int *format_var, bool is_ra);
+
+/* -- Orbit direction-of-motion styling ------------------------------------- */
+
+/* tuning constants (see OrbitDirectionIntensity) */
+#define ORBIT_DIR_MIN          0.18f /* base alpha multiplier for dimmed/unselected orbits */
+#define ORBIT_DIR_MIN_SELECTED 0.45f /* base alpha multiplier for the selected orbit: keeps its
+                                      * dim (ahead) portion clearly brighter than a dimmed orbit
+                                      * while still leaving a visible trail gradient */
+#define ORBIT_DIR_TRAIL_LEN    0.30  /* highlighted trail length behind the satellite, in orbits */
+#define ORBIT_DIR_ANIM_TAU     0.10  /* animated pulse tail length, in orbits      */
+#define ORBIT_DIR_ANIM_SPEED   0.30  /* animated pulse sweeps per second           */
+#define ORBIT_DIR_WIDTH_MAX    2.5f  /* thickest line-width multiplier (2D only)   */
+
+/**
+ * Direction-of-motion intensity for one point on an orbit line.
+ *
+ * @param phase     signed fraction of an orbit from the satellite/moon's current
+ *                  position: positive = ahead (future), negative = behind
+ *                  (trail). Values outside [-0.5, 0.5] are wrapped.
+ * @param animated  when true, a bright pulse sweeps the orbit in the direction
+ *                  of motion (driven by anim_time) instead of the static
+ *                  trail/future ramp.
+ * @param anim_time seconds; drives the pulse position when animated.
+ * @param floor     base alpha multiplier for the dim (ahead) portion; pass
+ *                  ORBIT_DIR_MIN_SELECTED for the selected orbit so it stays
+ *                  clearly brighter than dimmed unselected orbits.
+ *
+ * @return an alpha multiplier in [floor, 1] to scale a segment's color.
+ */
+float OrbitDirectionIntensity(double phase, bool animated, double anim_time,
+                              float floor = ORBIT_DIR_MIN);
+
+/**
+ * Line-width multiplier paired with OrbitDirectionIntensity (used by the 2D
+ * ground tracks, where per-segment thickness is cheap). Returns a value in
+ * [1, ORBIT_DIR_WIDTH_MAX].
+ */
+float OrbitDirectionWidth(double phase, bool animated, double anim_time,
+                          float floor = ORBIT_DIR_MIN);
 
 #endif /* TOOLS_COMMON_H */

@@ -33,6 +33,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_slant_range = false; // default
     config->show_scattering = false;  // default
     config->show_skybox = true;       // default
+    config->show_ecliptic_frame = false; // default
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
     config->show_earth_texture = true;  // default
@@ -181,6 +182,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->highlight_sunlit = get_bool("highlight_sunlit", config->highlight_sunlit);
                     config->show_slant_range = get_bool("show_slant_range", config->show_slant_range);
                     config->show_skybox = get_bool("show_skybox", config->show_skybox);
+                    config->show_ecliptic_frame = get_bool("show_ecliptic_frame", config->show_ecliptic_frame);
                     config->show_ground_coverage = get_bool("show_ground_coverage", config->show_ground_coverage);
                     config->show_apsides = get_bool("show_apsides", config->show_apsides);
                     config->show_earth_texture = get_bool("show_earth_texture", config->show_earth_texture);
@@ -591,6 +593,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_slant_range = false;
         config->show_scattering = false;
         config->show_skybox = true;
+        config->show_ecliptic_frame = false;
         config->show_ground_coverage = true;
         config->show_apsides = true;
         config->show_earth_texture = true;
@@ -646,6 +649,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_slant_range"] = config->show_slant_range;
     root["show_scattering"] = config->show_scattering;
     root["show_skybox"] = config->show_skybox;
+    root["show_ecliptic_frame"] = config->show_ecliptic_frame;
     root["show_ground_coverage"] = config->show_ground_coverage;
     root["show_apsides"] = config->show_apsides;
     root["show_earth_texture"] = config->show_earth_texture;

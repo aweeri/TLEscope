@@ -1107,3 +1107,12 @@ bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius)
     float closestDist = Vector3Length(closest);
     return closestDist < earthRadius;
 }
+
+/** true if the earth blocks the view of the a-b segment; endpoints and midpoint are tested */
+bool IsOrbitSegmentOccluded(Vector3 camPos, Vector3 a, Vector3 b, float earthRadius)
+{
+    if (IsOccludedByEarth(camPos, a, earthRadius)) return true;
+    if (IsOccludedByEarth(camPos, b, earthRadius)) return true;
+    Vector3 mid = Vector3Scale(Vector3Add(a, b), 0.5f);
+    return IsOccludedByEarth(camPos, mid, earthRadius);
+}
