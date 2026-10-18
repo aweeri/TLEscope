@@ -1240,6 +1240,13 @@ static void DrawTransitOverviewTabs(UIContext *ctx, AppConfig *cfg, int *pending
             DrawTransitElevAzTab(ctx, cfg);
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Simulate Scan", NULL,
+                (*pending_tab == 3) ? ImGuiTabItemFlags_SetSelected : 0))
+        {
+            active_tab = 3;
+            DrawTransitSimulateScanTab(ctx, cfg);
+            ImGui::EndTabItem();
+        }
         ImGui::EndTabBar();
     }
     *pending_tab = -1;

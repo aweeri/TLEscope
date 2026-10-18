@@ -28,6 +28,7 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg);
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTransit(UIContext *ctx, AppConfig *cfg);
 void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg);
+void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg);
 void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg);
 void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
