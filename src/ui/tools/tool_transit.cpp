@@ -1240,7 +1240,7 @@ static void DrawTransitOverviewTabs(UIContext *ctx, AppConfig *cfg, int *pending
             DrawTransitElevAzTab(ctx, cfg);
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Simulate Scan", NULL,
+        if (ImGui::BeginTabItem("Imager Simulation", NULL,
                 (*pending_tab == 3) ? ImGuiTabItemFlags_SetSelected : 0))
         {
             active_tab = 3;
@@ -1262,6 +1262,7 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
     if (!g_ui.transit_overview_open)
     {
         s_tab_restored = false;
+        SimScanCancel();
         return;
     }
 

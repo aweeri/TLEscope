@@ -26,6 +26,7 @@
 #include "ui/ui_layout.h"
 #include "ui/notifications.h"
 #include "ui/touch_gesture.h"
+#include "ui/tools/tools.h"
 #include "ui/tools/tools_common.h"
 #include "ui/tools/tools_scene.h"
 #include "ui/tools/tools_settings.h"
@@ -505,6 +506,7 @@ int main(void)
 {
     LogInit();
     AsyncFetchInit();
+    SimScanInit();
 
     LoadAppConfig("settings.json", &cfg);
     SetUseLocalTime(cfg.use_local_time);
@@ -3131,6 +3133,7 @@ int main(void)
 
     SaveDataSelections();
     SaveFavorites("favorites.json"); /* persist favorite satellites */
+    SimScanShutdown();
     AsyncFetchShutdown();
     RotatorShutdown();
     LogShutdown();

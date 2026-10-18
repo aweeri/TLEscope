@@ -1,5 +1,5 @@
 /*
- * tool_simulate_scan.cpp - "Simulate Scan" tab of the Transit Overview modal.
+ * tool_simulate_scan.cpp - "Imager Simulation" tab of the Transit Overview modal.
  *
  * Two modes share one equirectangular Earth map:
  *   - Whiskbroom / Pushbroom: the full AOS->LOS cross-track swath
@@ -19,11 +19,15 @@
 #include "core/propagator.h"
 #include "core/theme.h"
 
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include <raylib.h>
@@ -33,6 +37,7 @@
 #include "IconsFontAwesome6.h"
 
 #include "ui/notifications.h"
+#include "util/log.h"
 
 #include "map_detail_data.h"
 
@@ -48,6 +53,7 @@
 #define SIMSCAN_KEY_OFFNADIR "simscan.off_nadir_deg"
 #define SIMSCAN_KEY_AZIMUTH  "simscan.azimuth_deg"
 #define SIMSCAN_KEY_ROLL     "simscan.roll_deg"
+#define SIMSCAN_KEY_SKEW     "simscan.skew_deg"
 #define SIMSCAN_KEY_VIEW     "simscan.view"
 #define SIMSCAN_KEY_MARKERS  "simscan.markers"
 #define SIMSCAN_KEY_SCAN_W   "simscan.scan_w" /* legacy read-only fallback */
@@ -272,8 +278,9 @@ static void GroundLL(const Vector3 &hit_km, double gmst_deg, float earth_offset,
     *lat = -neg_lat_deg;
 }
 
-/* day/night shaded RGBA for one earth hit point */
-static void ShadeHit(const Vector3 &hit, double gmst, float earth_offset, const Vector3 &sun, unsigned char *out)
+/* day/night shaded RGBA for one earth hit point (images passed in: worker-safe) */
+static void ShadeHit(const Vector3 &hit, double gmst, float earth_offset, const Vector3 &sun,
+                     const Image *earth, const Image *night, unsigned char *out)
 {
     float lat, lon;
     GroundLL(hit, gmst, earth_offset, &lat, &lon);
@@ -284,8 +291,8 @@ static void ShadeHit(const Vector3 &hit, double gmst, float earth_offset, const 
     float day = (s + 0.10f) / 0.20f;
     if (day < 0.0f) day = 0.0f;
     if (day > 1.0f) day = 1.0f;
-    Color dc = SampleImage(s_earth_img, u, v);
-    Color nc = s_night_img.data ? SampleImage(s_night_img, u, v) : (Color){ 0, 0, 0, 255 };
+    Color dc = earth ? SampleImage(*earth, u, v) : (Color){ 0, 0, 0, 255 };
+    Color nc = (night && night->data) ? SampleImage(*night, u, v) : (Color){ 0, 0, 0, 255 };
     float df = 0.08f + day;
     float nf = (1.0f - day) * 0.9f;
     out[0] = (unsigned char)fminf(255.0f, dc.r * df + nc.r * nf);
@@ -295,13 +302,12 @@ static void ShadeHit(const Vector3 &hit, double gmst, float earth_offset, const 
 }
 
 /* camera basis + FOV for a single-shot, mirroring ComputeShot exactly */
-static void BuildShotCamera(const SatPass *pass, AppConfig *cfg, double t, float focal, int aspect,
+static void BuildShotCamera(const Satellite *sat, double t, float focal, int aspect,
                             int pointing, float off, float az, float roll,
                             Vector3 *P, Vector3 *boresight, Vector3 *right, Vector3 *up, float *thx, float *thy)
 {
-    (void)cfg;
     Vector3 V;
-    sat_prop_state(pass->sat, get_unix_from_epoch(t), P, &V);
+    sat_prop_state(sat, get_unix_from_epoch(t), P, &V);
     Vector3 nadir = Vector3Negate(Vector3Normalize(*P));
     Vector3 along = Vector3Normalize(V);
     Vector3 cross = Vector3Normalize(Vector3CrossProduct(along, nadir));
@@ -345,6 +351,7 @@ struct SwathCache
     uint32_t norad = 0;
     double aos = 0.0;
     float half_rad = -1.0f;
+    float skew_rad = -999.0f;
     float map_w = 0.0f;
     float map_h = 0.0f;
     std::vector<Vector2> left, right;
@@ -352,7 +359,8 @@ struct SwathCache
 };
 static SwathCache s_swath;
 
-static void ComputeSwath(SatPass *pass, AppConfig *cfg, float map_w, float map_h, float half_rad)
+static void ComputeSwath(SatPass *pass, AppConfig *cfg, float map_w, float map_h, float half_rad,
+                         float skew_rad)
 {
     s_swath.left.clear();
     s_swath.right.clear();
@@ -361,6 +369,7 @@ static void ComputeSwath(SatPass *pass, AppConfig *cfg, float map_w, float map_h
     s_swath.norad = pass->sat ? pass->sat->norad_id_num : 0u;
     s_swath.aos = pass->aos_epoch;
     s_swath.half_rad = half_rad;
+    s_swath.skew_rad = skew_rad;
     s_swath.map_w = map_w;
     s_swath.map_h = map_h;
 
@@ -377,6 +386,12 @@ static void ComputeSwath(SatPass *pass, AppConfig *cfg, float map_w, float map_h
         sat_prop_state(pass->sat, get_unix_from_epoch(t), &P, &V);
         Vector3 nadir = Vector3Negate(Vector3Normalize(P));
         Vector3 cross = Vector3Normalize(Vector3CrossProduct(V, P));
+        if (skew_rad != 0.0f)
+        {
+            Vector3 axis = Vector3Normalize(V);
+            nadir = RotAxis(nadir, axis, skew_rad);
+            cross = RotAxis(cross, axis, skew_rad);
+        }
         double gmst = epoch_to_gmst(t);
 
         Vector3 dL = Vector3Normalize(Vector3Add(Vector3Scale(nadir, cosf(half)), Vector3Scale(cross, -sinf(half))));
@@ -609,7 +624,9 @@ struct ShotLineCache
 };
 static ShotLineCache s_shot_lines;
 
-static void ComputeShotLines(ShotLineCache *lc, const ShotImageCache *c, AppConfig *cfg)
+static bool SimScanCancelled(uint64_t gen);
+
+static bool ComputeShotLines(ShotLineCache *lc, const ShotImageCache *c, float earth_rotation_offset, uint64_t gen)
 {
     lc->valid = true;
     lc->norad = c->norad;
@@ -625,9 +642,11 @@ static void ComputeShotLines(ShotLineCache *lc, const ShotImageCache *c, AppConf
     lc->coast.clear();
     lc->border.clear();
 
+    bool cancelled = false;
     auto project = [&](float lat, float lon, Vector2 *out) -> bool {
+        if (SimScanCancelled(gen)) { cancelled = true; return false; }
         float latr = lat * DEG2RAD;
-        float lon_eci = (lon + (float)c->gmst + cfg->earth_rotation_offset) * DEG2RAD;
+        float lon_eci = (lon + (float)c->gmst + earth_rotation_offset) * DEG2RAD;
         Vector3 M = { EARTH_RADIUS_KM * cosf(latr) * cosf(lon_eci),
                       EARTH_RADIUS_KM * sinf(latr),
                       -EARTH_RADIUS_KM * cosf(latr) * sinf(lon_eci) };
@@ -650,7 +669,9 @@ static void ComputeShotLines(ShotLineCache *lc, const ShotImageCache *c, AppConf
     };
 
     BuildLineRuns(MAP_COAST_POINTS, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, project, &lc->coast);
+    if (cancelled) return false;
     BuildLineRuns(MAP_BORDER_POINTS, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, project, &lc->border);
+    return !cancelled;
 }
 
 struct StripImageCache
@@ -659,6 +680,7 @@ struct StripImageCache
     uint32_t norad = 0;
     double aos = 0.0, los = 0.0;
     float half_rad = -1.0f;
+    float skew_rad = -999.0f;
     int W = 0, H = 0;
     bool geocorrect = false;
     std::vector<float> geo_angle;
@@ -681,55 +703,391 @@ struct StripLineCache
 };
 static StripLineCache s_strip_lines;
 
-static void RenderShotImage(ShotImageCache *c, const SatPass *pass, AppConfig *cfg)
-{
-    EnsureEarthImages();
-    c->norad = pass->sat ? pass->sat->norad_id_num : 0u;
-    c->aos = pass->aos_epoch;
-    c->los = pass->los_epoch;
+// ---- async simulate-scan worker ------------------------------------------
 
-    double t = pass->aos_epoch + (double)c->frac * (pass->los_epoch - pass->aos_epoch);
+enum SimScanState { SIMSCAN_IDLE = 0, SIMSCAN_RUNNING, SIMSCAN_DONE };
+
+// one unit of work: a fully self-contained snapshot (no pointers into globals)
+struct SimScanJob
+{
+    uint64_t gen = 0;                 // generation; bumped on every submit/cancel
+    int      kind = 0;                // 0 = strip image, 1 = shot image
+    uint32_t norad = 0;
+    double   aos = 0.0, los = 0.0;
+    Satellite sat_copy;               // private copy: deep-space sgp4 mutates satrec
+    float swath_km = 0.0f; int swath_px = 0; bool geocorrect = false; float half_rad = 0.0f;
+    float skew_rad = 0.0f;            // whiskbroom scan-plane tilt about the along-track axis
+    int   W = 0, H = 0;
+    float frac = 0.0f; int aspect = 0; float focal = 0.0f; int pointing = 0;
+    float off = 0.0f, az = 0.0f, roll = 0.0f; int shot_res = 0;
+    bool  textured = false;
+    float earth_rotation_offset = 0.0f;
+    Color bg = { 0, 0, 0, 255 };
+    const Image *earth = nullptr;     // read-only, owned by the UI thread
+    const Image *night = nullptr;
+    char  earth_path[128] = { 0 };    // theme texture path (cache identity)
+    int marker_count = 0;
+    struct { float lat, lon; int kind; } markers[MAX_LOCATIONS + 1];
+};
+
+// completed work handed back to the UI thread
+struct SimScanResult
+{
+    uint64_t gen = 0;
+    int      kind = 0;
+    StripImageCache strip_img;
+    StripLineCache  strip_lines;
+    ShotImageCache  shot_img;
+    ShotLineCache   shot_lines;
+    std::vector<ImVec2> marker_pts;   // normalized [0,1] screen positions
+    std::vector<int>    marker_kinds;
+};
+
+// cached marker overlays (populated on commit, drawn each frame)
+static std::vector<ImVec2> s_shot_markers;
+static std::vector<int>    s_shot_marker_kinds;
+static std::vector<ImVec2> s_strip_markers;
+static std::vector<int>    s_strip_marker_kinds;
+
+// cached strip dimensions (removes 200 SGP4 calls/frame)
+struct StripDimsCache
+{
+    bool valid = false;
+    uint32_t norad = 0;
+    double aos = 0.0, los = 0.0;
+    float swath_km = -1.0f;
+    int swath_px = 0;
+    int W = 0, H = 0;
+};
+static StripDimsCache s_strip_dims;
+
+static std::thread             s_sim_thread;
+static std::mutex              s_sim_mtx;
+static std::condition_variable s_sim_cv;
+static std::atomic<bool>       s_sim_shutdown{false};
+static std::atomic<bool>       s_sim_running{false};
+static std::atomic<uint64_t>   s_sim_gen{0};
+static std::atomic<float>      s_sim_progress{0.0f};
+static std::atomic<int>        s_sim_state{SIMSCAN_IDLE};
+static SimScanJob              s_sim_pending;
+static bool                    s_sim_has_pending = false;
+static SimScanResult           s_sim_done;
+static bool                    s_sim_has_done = false;
+static uint64_t                s_sim_req_key = 0;   // dedup: last dispatched request
+
+static bool SimScanCancelled(uint64_t gen)
+{
+    return s_sim_shutdown.load() || gen != s_sim_gen.load();
+}
+
+static bool ComputeStripJob(const SimScanJob *job, SimScanResult *res);
+static bool ComputeShotJob(const SimScanJob *job, SimScanResult *res);
+
+// FNV-1a over raw bytes
+static uint64_t SimScanHashBytes(uint64_t h, const void *data, size_t n)
+{
+    const unsigned char *p = (const unsigned char *)data;
+    for (size_t i = 0; i < n; i++)
+    {
+        h ^= (uint64_t)p[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static uint64_t SimScanLocHash(uint64_t h)
+{
+    h = SimScanHashBytes(h, &location_count, sizeof(location_count));
+    for (int i = 0; i < location_count && i < MAX_LOCATIONS; i++)
+    {
+        h = SimScanHashBytes(h, &locations[i].lat, sizeof(float));
+        h = SimScanHashBytes(h, &locations[i].lon, sizeof(float));
+        h = SimScanHashBytes(h, &locations[i].is_home, sizeof(bool));
+    }
+    return h;
+}
+
+// this is just magic actually
+static int64_t SimScanQuantEpoch(double e)
+{
+    return (int64_t)llround(e / 1e-3);
+}
+
+static uint64_t SimScanStripKey(uint32_t norad, double aos, double los, float half_rad,
+                                float skew_rad, bool geocorrect, int W, int H, bool textured,
+                                const char *earth_path)
+{
+    uint64_t h = 1469598103934665603ULL;
+    h = SimScanHashBytes(h, &norad, sizeof(norad));
+    int64_t aos_q = SimScanQuantEpoch(aos);
+    int64_t los_q = SimScanQuantEpoch(los);
+    h = SimScanHashBytes(h, &aos_q, sizeof(aos_q));
+    h = SimScanHashBytes(h, &los_q, sizeof(los_q));
+    h = SimScanHashBytes(h, &half_rad, sizeof(half_rad));
+    h = SimScanHashBytes(h, &skew_rad, sizeof(skew_rad));
+    h = SimScanHashBytes(h, &geocorrect, sizeof(geocorrect));
+    h = SimScanHashBytes(h, &W, sizeof(W));
+    h = SimScanHashBytes(h, &H, sizeof(H));
+    h = SimScanHashBytes(h, &textured, sizeof(textured));
+    if (earth_path) h = SimScanHashBytes(h, earth_path, strlen(earth_path));
+    return SimScanLocHash(h);
+}
+
+static uint64_t SimScanShotKey(uint32_t norad, double aos, double los, float frac, int aspect,
+                               float focal, int pointing, float off, float az, float roll,
+                               int res, int W, int H, bool textured, const char *earth_path)
+{
+    uint64_t h = 1469598103934665603ULL;
+    h = SimScanHashBytes(h, &norad, sizeof(norad));
+    int64_t aos_q = SimScanQuantEpoch(aos);
+    int64_t los_q = SimScanQuantEpoch(los);
+    h = SimScanHashBytes(h, &aos_q, sizeof(aos_q));
+    h = SimScanHashBytes(h, &los_q, sizeof(los_q));
+    h = SimScanHashBytes(h, &frac, sizeof(frac));
+    h = SimScanHashBytes(h, &aspect, sizeof(aspect));
+    h = SimScanHashBytes(h, &focal, sizeof(focal));
+    h = SimScanHashBytes(h, &pointing, sizeof(pointing));
+    h = SimScanHashBytes(h, &off, sizeof(off));
+    h = SimScanHashBytes(h, &az, sizeof(az));
+    h = SimScanHashBytes(h, &roll, sizeof(roll));
+    h = SimScanHashBytes(h, &res, sizeof(res));
+    h = SimScanHashBytes(h, &W, sizeof(W));
+    h = SimScanHashBytes(h, &H, sizeof(H));
+    h = SimScanHashBytes(h, &textured, sizeof(textured));
+    if (earth_path) h = SimScanHashBytes(h, earth_path, strlen(earth_path));
+    return SimScanLocHash(h);
+}
+
+// worker loop: single latest-wins job slot, single completion slot
+static void simscan_worker_main(void)
+{
+    while (true)
+    {
+        SimScanJob job;
+        {
+            std::unique_lock<std::mutex> lk(s_sim_mtx);
+            s_sim_cv.wait(lk, [] { return s_sim_shutdown.load() || s_sim_has_pending; });
+            if (s_sim_shutdown.load() && !s_sim_has_pending)
+                break;
+            job = s_sim_pending;
+            s_sim_has_pending = false;
+        }
+        if (job.gen != s_sim_gen.load())
+            continue; // superseded before start
+
+        SimScanResult res;
+        res.gen = job.gen;
+        res.kind = job.kind;
+        bool ok = (job.kind == 0) ? ComputeStripJob(&job, &res) : ComputeShotJob(&job, &res);
+        if (!ok)
+            continue; // cancelled mid-compute
+
+        {
+            std::lock_guard<std::mutex> lk(s_sim_mtx);
+            if (job.gen != s_sim_gen.load())
+                continue; // superseded during compute
+            s_sim_done = std::move(res);
+            s_sim_has_done = true;
+            s_sim_state.store(SIMSCAN_DONE);
+        }
+    }
+}
+
+// ---- public API ----------------------------------------------------------
+
+void SimScanInit(void)
+{
+    if (s_sim_running.load())
+        return;
+    s_sim_shutdown = false;
+    s_sim_running = true;
+    s_sim_thread = std::thread(simscan_worker_main);
+}
+
+void SimScanShutdown(void)
+{
+    if (!s_sim_running.load())
+        return;
+    {
+        std::lock_guard<std::mutex> lk(s_sim_mtx);
+        s_sim_shutdown = true;
+    }
+    s_sim_cv.notify_all();
+    if (s_sim_thread.joinable())
+        s_sim_thread.join();
+    s_sim_running = false;
+}
+
+void SimScanSubmit(const SimScanJob &job)
+{
+    if (!s_sim_running.load())
+        SimScanInit();
+    {
+        std::lock_guard<std::mutex> lk(s_sim_mtx);
+        uint64_t g = s_sim_gen.fetch_add(1) + 1;
+        s_sim_pending = job;
+        s_sim_pending.gen = g;
+        s_sim_has_pending = true;
+        s_sim_has_done = false;
+        s_sim_state.store(SIMSCAN_RUNNING);
+        s_sim_progress.store(0.0f);
+    }
+    s_sim_cv.notify_one();
+}
+
+void SimScanCancel(void)
+{
+    std::lock_guard<std::mutex> lk(s_sim_mtx);
+    s_sim_gen.fetch_add(1);
+    s_sim_has_pending = false;
+    s_sim_has_done = false;
+    s_sim_state.store(SIMSCAN_IDLE);
+    s_sim_progress.store(0.0f);
+    s_sim_req_key = 0;
+}
+
+bool SimScanPoll(SimScanResult *out)
+{
+    if (!out)
+        return false;
+    std::lock_guard<std::mutex> lk(s_sim_mtx);
+    if (!s_sim_has_done)
+        return false;
+    *out = std::move(s_sim_done);
+    s_sim_has_done = false;
+    s_sim_state.store(SIMSCAN_IDLE);
+    return true;
+}
+
+bool SimScanIsRunning(void)
+{
+    return s_sim_state.load() == SIMSCAN_RUNNING;
+}
+
+float SimScanProgress(void)
+{
+    return s_sim_progress.load();
+}
+
+// ---- pure, cancellable compute functions ---------------------------------
+
+// project the location + sub-satellite markers into normalized shot coords
+static bool ProjectShotMarkers(const SimScanJob *job, const ShotImageCache *c,
+                               std::vector<ImVec2> *pts, std::vector<int> *kinds)
+{
+    pts->clear();
+    kinds->clear();
+    const float ero = job->earth_rotation_offset;
+
+    struct M { float lat, lon; int kind; };
+    std::vector<M> mk;
+    mk.reserve((size_t)job->marker_count + 1);
+    for (int i = 0; i < job->marker_count; i++)
+        mk.push_back({ job->markers[i].lat, job->markers[i].lon, job->markers[i].kind });
+
+    Vector3 Psub, Vsub;
+    sat_prop_state(&job->sat_copy, get_unix_from_epoch(c->t), &Psub, &Vsub);
+    Vector3 sub = Vector3Scale(Vector3Normalize(Psub), EARTH_RADIUS_KM);
+    float sub_lat, sub_lon;
+    GroundLL(sub, epoch_to_gmst(c->t), ero, &sub_lat, &sub_lon);
+    mk.push_back({ sub_lat, sub_lon, 2 });
+
+    for (const M &m : mk)
+    {
+        if (SimScanCancelled(job->gen))
+            return false;
+        float latr = m.lat * DEG2RAD;
+        float lon_eci = (m.lon + (float)c->gmst + ero) * DEG2RAD;
+        Vector3 Mv = { EARTH_RADIUS_KM * cosf(latr) * cosf(lon_eci),
+                       EARTH_RADIUS_KM * sinf(latr),
+                       -EARTH_RADIUS_KM * cosf(latr) * sinf(lon_eci) };
+        Vector3 v = Vector3Subtract(Mv, c->P);
+        float xc = Vector3DotProduct(v, c->right);
+        float yc = Vector3DotProduct(v, c->up);
+        float zc = Vector3DotProduct(v, c->boresight);
+        if (zc <= 0.0f)
+            continue;
+        if (IsOccludedByEarth(c->P, Mv, EARTH_RADIUS_KM))
+            continue;
+        float nx = (xc / zc) / c->thx;
+        float ny = (yc / zc) / c->thy;
+        if (fabsf(nx) > 1.0f || fabsf(ny) > 1.0f)
+            continue;
+        pts->push_back(ImVec2(nx * 0.5f + 0.5f, 0.5f - ny * 0.5f));
+        kinds->push_back(m.kind);
+    }
+    return true;
+}
+
+// port of RenderShotImage: pure CPU, cancellable, progress-reporting
+static bool ComputeShotJob(const SimScanJob *job, SimScanResult *res)
+{
+    ShotImageCache &c = res->shot_img;
+    c.norad = job->norad;
+    c.aos = job->aos;
+    c.los = job->los;
+    c.frac = job->frac;
+    c.aspect = job->aspect;
+    c.focal = job->focal;
+    c.pointing = job->pointing;
+    c.off = job->off;
+    c.az = job->az;
+    c.roll = job->roll;
+    c.res = job->shot_res;
+    c.W = job->W;
+    c.H = job->H;
+    c.textured = job->textured;
+    snprintf(c.earth_path, sizeof(c.earth_path), "%s", job->earth_path);
+
+    double t = job->aos + (double)c.frac * (job->los - job->aos);
     Vector3 P, boresight, right, up;
     float thx, thy;
-    BuildShotCamera(pass, cfg, t, c->focal, c->aspect, c->pointing, c->off, c->az, c->roll,
+    BuildShotCamera(&job->sat_copy, t, c.focal, c.aspect, c.pointing, c.off, c.az, c.roll,
                     &P, &boresight, &right, &up, &thx, &thy);
-    c->P = P;
-    c->boresight = boresight;
-    c->right = right;
-    c->up = up;
-    c->thx = thx;
-    c->thy = thy;
-    c->t = t;
-    c->gmst = epoch_to_gmst(t);
+    c.P = P;
+    c.boresight = boresight;
+    c.right = right;
+    c.up = up;
+    c.thx = thx;
+    c.thy = thy;
+    c.t = t;
+    c.gmst = epoch_to_gmst(t);
 
-    if (c->textured)
+    if (c.textured)
     {
         Vector3 sun = calculate_sun_position(t);
-        int W = c->W, H = c->H;
-        c->px.assign((size_t)W * H * 4, 0);
-        Color bg = g_theme.world.bg;
+        int W = c.W, H = c.H;
+        c.px.assign((size_t)W * H * 4, 0);
+        Color bg = job->bg;
         for (int row = 0; row < H; row++)
         {
+            if ((row & 15) == 0 && (job->gen != s_sim_gen.load() || s_sim_shutdown.load()))
+                return false;
             float sy = 1.0f - 2.0f * ((row + 0.5f) / (float)H);
             for (int col = 0; col < W; col++)
             {
                 float sx = 2.0f * ((col + 0.5f) / (float)W) - 1.0f;
                 Vector3 d = Vector3Normalize(Vector3Add(boresight,
                             Vector3Add(Vector3Scale(right, sx * thx), Vector3Scale(up, sy * thy))));
-                unsigned char *o = &c->px[((size_t)row * W + col) * 4];
+                unsigned char *o = &c.px[((size_t)row * W + col) * 4];
                 Vector3 hit;
                 if (RaySphere(P, d, EARTH_RADIUS_KM, &hit))
-                    ShadeHit(hit, c->gmst, cfg->earth_rotation_offset, sun, o);
+                    ShadeHit(hit, c.gmst, job->earth_rotation_offset, sun, job->earth, job->night, o);
                 else
                 {
                     o[0] = bg.r; o[1] = bg.g; o[2] = bg.b; o[3] = 255;
                 }
             }
+            s_sim_progress.store(0.9f * (float)(row + 1) / (float)H);
         }
-        UploadOutTexture(W, H, c->px.data());
     }
-    ComputeShotLines(&s_shot_lines, c, cfg);
-    c->valid = true;
+    if (!ComputeShotLines(&res->shot_lines, &c, job->earth_rotation_offset, job->gen))
+        return false;
+    c.valid = true;
+    if (!ProjectShotMarkers(job, &c, &res->marker_pts, &res->marker_kinds))
+        return false;
+    s_sim_progress.store(1.0f);
+    return true;
 }
 
 /* derived cross-track FOV for a requested ground swath width (mid-pass basis) */
@@ -791,7 +1149,8 @@ static void ComputeSwathFov(const SatPass *pass, float swath_km, SwathFov *out)
 }
 
 /* strip dims from explicit swath width (km) + cross-track pixel count */
-static void ComputeStripDims(const SatPass *pass, float swath_km, int swath_px, int *out_W, int *out_H)
+static void ComputeStripDims(const Satellite *sat, double aos, double los,
+                             float swath_km, int swath_px, int *out_W, int *out_H)
 {
     int W = swath_px;
     if (W < 64) W = 64;
@@ -807,9 +1166,9 @@ static void ComputeStripDims(const SatPass *pass, float swath_km, int swath_px, 
     bool have_prev = false;
     for (int i = 0; i < N; i++)
     {
-        double t = pass->aos_epoch + (pass->los_epoch - pass->aos_epoch) * (double)i / (double)(N - 1);
+        double t = aos + (los - aos) * (double)i / (double)(N - 1);
         Vector3 Pi, Vi;
-        sat_prop_state(pass->sat, get_unix_from_epoch(t), &Pi, &Vi);
+        sat_prop_state(sat, get_unix_from_epoch(t), &Pi, &Vi);
         Vector3 sub = Vector3Scale(Vector3Normalize(Pi), EARTH_RADIUS_KM);
         if (have_prev)
             L_km += Vector3Distance(sub, prev_sub);
@@ -836,13 +1195,34 @@ static void ComputeStripDims(const SatPass *pass, float swath_km, int swath_px, 
     *out_H = H;
 }
 
+// cached wrapper: avoids 200 SGP4 calls/frame when nothing changed
+static void ComputeStripDimsCached(const Satellite *sat, uint32_t norad, double aos, double los,
+                                   float swath_km, int swath_px, int *out_W, int *out_H)
+{
+    if (!s_strip_dims.valid || s_strip_dims.norad != norad ||
+        fabs(s_strip_dims.aos - aos) > 1e-6 || fabs(s_strip_dims.los - los) > 1e-6 ||
+        s_strip_dims.swath_km != swath_km || s_strip_dims.swath_px != swath_px)
+    {
+        ComputeStripDims(sat, aos, los, swath_km, swath_px, &s_strip_dims.W, &s_strip_dims.H);
+        s_strip_dims.valid = true;
+        s_strip_dims.norad = norad;
+        s_strip_dims.aos = aos;
+        s_strip_dims.los = los;
+        s_strip_dims.swath_km = swath_km;
+        s_strip_dims.swath_px = swath_px;
+    }
+    *out_W = s_strip_dims.W;
+    *out_H = s_strip_dims.H;
+}
+
 /* col -> cross-track angle table, spacing columns by equal ground distance */
-static bool BuildGeoAngles(const SatPass *pass, float half, int W, std::vector<float> *out, bool *out_capped)
+static bool BuildGeoAngles(const Satellite *sat, double aos, double los, float half, int W,
+                           std::vector<float> *out, bool *out_capped)
 {
     const int M = 512;
-    double t_mid = pass->aos_epoch + 0.5 * (pass->los_epoch - pass->aos_epoch);
+    double t_mid = aos + 0.5 * (los - aos);
     Vector3 P, V;
-    sat_prop_state(pass->sat, get_unix_from_epoch(t_mid), &P, &V);
+    sat_prop_state(sat, get_unix_from_epoch(t_mid), &P, &V);
     Vector3 nadir = Vector3Negate(Vector3Normalize(P));
     Vector3 cross = Vector3Normalize(Vector3CrossProduct(V, P));
     std::vector<float> sang(M), sdist(M);
@@ -913,7 +1293,7 @@ static float GeoTableIndex(const std::vector<float> &ang, float a)
     return (float)lo + f;
 }
 
-static void ComputeStripLines(StripLineCache *lc, const StripImageCache *c, AppConfig *cfg)
+static bool ComputeStripLines(StripLineCache *lc, const StripImageCache *c, float earth_rotation_offset, uint64_t gen)
 {
     lc->valid = true;
     lc->norad = c->norad;
@@ -928,11 +1308,12 @@ static void ComputeStripLines(StripLineCache *lc, const StripImageCache *c, AppC
 
     const int Hr = (int)c->rows.size();
     if (Hr < 2)
-        return;
+        return true;
     const float half = c->half_rad;
     const bool geo = c->geocorrect && c->geo_angle.size() >= 2;
     const std::vector<RowSat> &rows = c->rows;
 
+    bool cancelled = false;
     auto project = [&](float lat, float lon, Vector2 *out) -> bool {
         float latr = lat * DEG2RAD;
         float clat = cosf(latr), slat = sinf(latr);
@@ -940,8 +1321,13 @@ static void ComputeStripLines(StripLineCache *lc, const StripImageCache *c, AppC
         float prev_b = 0.0f, prev_a = 0.0f, prev_dn = 0.0f;
         for (int r = 0; r < Hr; r++)
         {
+            if ((r & 15) == 0 && SimScanCancelled(gen))
+            {
+                cancelled = true;
+                return false;
+            }
             const RowSat &rs = rows[r];
-            float lon_eci = (lon + (float)rs.gmst + cfg->earth_rotation_offset) * DEG2RAD;
+            float lon_eci = (lon + (float)rs.gmst + earth_rotation_offset) * DEG2RAD;
             Vector3 M = { EARTH_RADIUS_KM * clat * cosf(lon_eci),
                           EARTH_RADIUS_KM * slat,
                           -EARTH_RADIUS_KM * clat * sinf(lon_eci) };
@@ -967,7 +1353,7 @@ static void ComputeStripLines(StripLineCache *lc, const StripImageCache *c, AppC
                         if (ri < 0) ri = 0;
                         if (ri >= Hr) ri = Hr - 1;
                         const RowSat &rs2 = rows[ri];
-                        float lon_eci2 = (lon + (float)rs2.gmst + cfg->earth_rotation_offset) * DEG2RAD;
+                        float lon_eci2 = (lon + (float)rs2.gmst + earth_rotation_offset) * DEG2RAD;
                         Vector3 M2 = { EARTH_RADIUS_KM * clat * cosf(lon_eci2),
                                        EARTH_RADIUS_KM * slat,
                                        -EARTH_RADIUS_KM * clat * sinf(lon_eci2) };
@@ -993,72 +1379,184 @@ static void ComputeStripLines(StripLineCache *lc, const StripImageCache *c, AppC
     };
 
     BuildLineRuns(MAP_COAST_POINTS, MAP_COAST_LINES, MAP_COAST_LINE_COUNT, project, &lc->coast);
+    if (cancelled) return false;
     BuildLineRuns(MAP_BORDER_POINTS, MAP_BORDER_LINES, MAP_BORDER_LINE_COUNT, project, &lc->border);
+    return !cancelled;
 }
 
-static void RenderStripImage(StripImageCache *c, const SatPass *pass, AppConfig *cfg)
+// project the location + sub-satellite markers into normalized strip coords
+static bool ProjectStripMarkers(const SimScanJob *job, const StripImageCache *c,
+                                std::vector<ImVec2> *pts, std::vector<int> *kinds)
 {
-    EnsureEarthImages();
-    c->norad = pass->sat ? pass->sat->norad_id_num : 0u;
-    c->aos = pass->aos_epoch;
-    c->los = pass->los_epoch;
+    pts->clear();
+    kinds->clear();
+    if (c->rows.empty())
+        return true;
+    const std::vector<RowSat> &rows = c->rows;
+    const int Hr = (int)rows.size();
+    const float half = c->half_rad;
+    const float ero = job->earth_rotation_offset;
+    const bool geo = c->geocorrect && c->geo_angle.size() >= 2;
 
-    int W = c->W, H = c->H;
-    float half = c->half_rad;
-    c->rows.resize(H);
+    struct M { float lat, lon; int kind; };
+    std::vector<M> mk;
+    mk.reserve((size_t)job->marker_count + 1);
+    for (int i = 0; i < job->marker_count; i++)
+        mk.push_back({ job->markers[i].lat, job->markers[i].lon, job->markers[i].kind });
+
+    double t_sub = rows[Hr / 2].t;
+    Vector3 Psub, Vsub;
+    sat_prop_state(&job->sat_copy, get_unix_from_epoch(t_sub), &Psub, &Vsub);
+    Vector3 sub = Vector3Scale(Vector3Normalize(Psub), EARTH_RADIUS_KM);
+    float sub_lat, sub_lon;
+    GroundLL(sub, epoch_to_gmst(t_sub), ero, &sub_lat, &sub_lon);
+    mk.push_back({ sub_lat, sub_lon, 2 });
+
+    for (const M &m : mk)
+    {
+        if (SimScanCancelled(job->gen))
+            return false;
+        float latr = m.lat * DEG2RAD;
+        float clat = cosf(latr), slat = sinf(latr);
+        bool have_prev = false;
+        float prev_b = 0.0f, prev_a = 0.0f;
+        for (int r = 0; r < Hr; r++)
+        {
+            const RowSat &rs = rows[r];
+            float lon_eci = (m.lon + (float)rs.gmst + ero) * DEG2RAD;
+            Vector3 Mv = { EARTH_RADIUS_KM * clat * cosf(lon_eci),
+                           EARTH_RADIUS_KM * slat,
+                           -EARTH_RADIUS_KM * clat * sinf(lon_eci) };
+            Vector3 d = Vector3Normalize(Vector3Subtract(Mv, rs.P));
+            float dn = Vector3DotProduct(d, rs.nadir);
+            float b = atan2f(Vector3DotProduct(d, rs.along), dn);
+            float a = atan2f(Vector3DotProduct(d, rs.cross), dn);
+            if (have_prev && ((prev_b <= 0.0f && b >= 0.0f) || (prev_b >= 0.0f && b <= 0.0f)))
+            {
+                float denom = b - prev_b;
+                float f = (denom != 0.0f) ? (-prev_b / denom) : 0.0f;
+                float a_star = prev_a + f * (a - prev_a);
+                float r_star = (float)(r - 1) + f;
+                if (fabsf(a_star) <= half)
+                {
+                    int ri = (int)(r_star + 0.5f);
+                    if (ri < 0) ri = 0;
+                    if (ri >= Hr) ri = Hr - 1;
+                    const RowSat &rs2 = rows[ri];
+                    float lon_eci2 = (m.lon + (float)rs2.gmst + ero) * DEG2RAD;
+                    Vector3 M2 = { EARTH_RADIUS_KM * clat * cosf(lon_eci2),
+                                   EARTH_RADIUS_KM * slat,
+                                   -EARTH_RADIUS_KM * clat * sinf(lon_eci2) };
+                    if (!IsOccludedByEarth(rs2.P, M2, EARTH_RADIUS_KM))
+                    {
+                        float u = geo ? GeoTableIndex(c->geo_angle, a_star) /
+                                            (float)(c->geo_angle.size() - 1)
+                                      : (a_star + half) / (2.0f * half);
+                        float v = r_star / (float)(Hr - 1);
+                        pts->push_back(ImVec2(u, v));
+                        kinds->push_back(m.kind);
+                    }
+                }
+                break;
+            }
+            prev_b = b;
+            prev_a = a;
+            have_prev = true;
+        }
+    }
+    return true;
+}
+
+// port of RenderStripImage: pure CPU, cancellable, progress-reporting
+static bool ComputeStripJob(const SimScanJob *job, SimScanResult *res)
+{
+    StripImageCache &c = res->strip_img;
+    c.norad = job->norad;
+    c.aos = job->aos;
+    c.los = job->los;
+    c.half_rad = job->half_rad;
+    c.skew_rad = job->skew_rad;
+    c.W = job->W;
+    c.H = job->H;
+    c.geocorrect = job->geocorrect;
+    c.textured = job->textured;
+    snprintf(c.earth_path, sizeof(c.earth_path), "%s", job->earth_path);
+
+    int W = c.W, H = c.H;
+    float half = c.half_rad;
+    c.rows.resize(H);
     for (int r = 0; r < H; r++)
     {
-        double t = pass->aos_epoch + (double)r / (double)(H - 1) * (pass->los_epoch - pass->aos_epoch);
+        if ((r & 15) == 0 && (job->gen != s_sim_gen.load() || s_sim_shutdown.load()))
+            return false;
+        double t = job->aos + (double)r / (double)(H - 1) * (job->los - job->aos);
         Vector3 P, V;
-        sat_prop_state(pass->sat, get_unix_from_epoch(t), &P, &V);
-        RowSat &rs = c->rows[r];
+        sat_prop_state(&job->sat_copy, get_unix_from_epoch(t), &P, &V);
+        RowSat &rs = c.rows[r];
         rs.t = t;
         rs.P = P;
         rs.nadir = Vector3Negate(Vector3Normalize(P));
         rs.cross = Vector3Normalize(Vector3CrossProduct(P, V));
         rs.along = Vector3Normalize(Vector3CrossProduct(P, rs.cross));
+        if (job->skew_rad != 0.0f)
+        {
+            /* tilt the scan plane about the along-track (velocity) axis: the plane
+               stays perpendicular to `along`, so only the column angle changes */
+            Vector3 axis = Vector3Normalize(V);
+            rs.nadir = RotAxis(rs.nadir, axis, job->skew_rad);
+            rs.cross = RotAxis(rs.cross, axis, job->skew_rad);
+        }
         rs.gmst = epoch_to_gmst(t);
+        s_sim_progress.store(0.2f * (float)(r + 1) / (float)H);
     }
 
-    if (c->geocorrect && W >= 2)
+    /* the geo table is built in the untilted scan plane and is only valid there */
+    if (c.geocorrect && W >= 2 && job->skew_rad == 0.0f)
     {
         bool capped = false;
-        BuildGeoAngles(pass, half, W, &c->geo_angle, &capped);
+        BuildGeoAngles(&job->sat_copy, job->aos, job->los, half, W, &c.geo_angle, &capped);
     }
     else
     {
-        c->geo_angle.clear();
+        c.geo_angle.clear();
     }
 
-    if (c->textured)
+    if (c.textured)
     {
-        c->px.assign((size_t)W * H * 4, 0);
-        Color bg = g_theme.world.bg;
+        c.px.assign((size_t)W * H * 4, 0);
+        Color bg = job->bg;
         for (int r = 0; r < H; r++)
         {
-            const RowSat &rs = c->rows[r];
+            if ((r & 15) == 0 && (job->gen != s_sim_gen.load() || s_sim_shutdown.load()))
+                return false;
+            const RowSat &rs = c.rows[r];
             Vector3 sun = calculate_sun_position(rs.t);
             for (int col = 0; col < W; col++)
             {
-                float a = (c->geocorrect && c->geo_angle.size() == (size_t)W)
-                              ? c->geo_angle[col]
+                float a = (c.geocorrect && c.geo_angle.size() == (size_t)W)
+                              ? c.geo_angle[col]
                               : -half + ((float)col / (float)(W - 1)) * 2.0f * half;
                 Vector3 d = Vector3Normalize(Vector3Add(Vector3Scale(rs.nadir, cosf(a)),
                                                         Vector3Scale(rs.cross, sinf(a))));
-                unsigned char *o = &c->px[((size_t)r * W + col) * 4];
+                unsigned char *o = &c.px[((size_t)r * W + col) * 4];
                 Vector3 hit;
                 if (RaySphere(rs.P, d, EARTH_RADIUS_KM, &hit))
-                    ShadeHit(hit, rs.gmst, cfg->earth_rotation_offset, sun, o);
+                    ShadeHit(hit, rs.gmst, job->earth_rotation_offset, sun, job->earth, job->night, o);
                 else
                 {
                     o[0] = bg.r; o[1] = bg.g; o[2] = bg.b; o[3] = 255;
                 }
             }
+            s_sim_progress.store(0.2f + 0.7f * (float)(r + 1) / (float)H);
         }
-        UploadOutTexture(W, H, c->px.data());
     }
-    ComputeStripLines(&s_strip_lines, c, cfg);
-    c->valid = true;
+    if (!ComputeStripLines(&res->strip_lines, &c, job->earth_rotation_offset, job->gen))
+        return false;
+    c.valid = true;
+    if (!ProjectStripMarkers(job, &c, &res->marker_pts, &res->marker_kinds))
+        return false;
+    s_sim_progress.store(1.0f);
+    return true;
 }
 
 /* ---- line-only image rendering ------------------------------------------- */
@@ -1097,25 +1595,6 @@ static void DrawStripLines(ImDrawList *dl, const ImVec2 &p0, float W, float H, c
 static void DrawScanMarkersImg(ImDrawList *dl, const ImVec2 &p0, float W, float H,
                                const SatPass *pass, AppConfig *cfg, int view)
 {
-    struct Marker { float lat, lon; const char *name; int kind; };
-    std::vector<Marker> markers;
-    for (int i = 0; i < location_count; i++)
-        markers.push_back({ locations[i].lat, locations[i].lon, locations[i].name,
-                            locations[i].is_home ? 1 : 0 });
-
-    double t_sub = pass->aos_epoch + 0.5 * (pass->los_epoch - pass->aos_epoch);
-    if (view == 1)
-        t_sub = s_shot_img.t;
-    else if (view == 2 && !s_strip_img.rows.empty())
-        t_sub = s_strip_img.rows[s_strip_img.rows.size() / 2].t;
-
-    Vector3 Psub, Vsub;
-    sat_prop_state(pass->sat, get_unix_from_epoch(t_sub), &Psub, &Vsub);
-    Vector3 sub = Vector3Scale(Vector3Normalize(Psub), EARTH_RADIUS_KM);
-    float sub_lat, sub_lon;
-    GroundLL(sub, epoch_to_gmst(t_sub), cfg->earth_rotation_offset, &sub_lat, &sub_lon);
-    markers.push_back({ sub_lat, sub_lon, "SAT", 2 });
-
     auto glyph = [&](ImVec2 p, int kind, const char *name) {
         if (kind == 2)
         {
@@ -1149,6 +1628,21 @@ static void DrawScanMarkersImg(ImDrawList *dl, const ImVec2 &p0, float W, float 
 
     if (view == 0)
     {
+        // map view: cheap, computed synchronously each frame
+        struct Marker { float lat, lon; const char *name; int kind; };
+        std::vector<Marker> markers;
+        for (int i = 0; i < location_count; i++)
+            markers.push_back({ locations[i].lat, locations[i].lon, locations[i].name,
+                                locations[i].is_home ? 1 : 0 });
+
+        double t_sub = pass->aos_epoch + 0.5 * (pass->los_epoch - pass->aos_epoch);
+        Vector3 Psub, Vsub;
+        sat_prop_state(pass->sat, get_unix_from_epoch(t_sub), &Psub, &Vsub);
+        Vector3 sub = Vector3Scale(Vector3Normalize(Psub), EARTH_RADIUS_KM);
+        float sub_lat, sub_lon;
+        GroundLL(sub, epoch_to_gmst(t_sub), cfg->earth_rotation_offset, &sub_lat, &sub_lon);
+        markers.push_back({ sub_lat, sub_lon, "SAT", 2 });
+
         double gmst = epoch_to_gmst(t_sub);
         const float offs[3] = { -W, 0.0f, W };
         for (const Marker &m : markers)
@@ -1168,85 +1662,20 @@ static void DrawScanMarkersImg(ImDrawList *dl, const ImVec2 &p0, float W, float 
 
     if (view == 1)
     {
-        for (const Marker &m : markers)
+        // shot view: positions precomputed in the async job (normalized [0,1])
+        for (size_t i = 0; i < s_shot_markers.size(); i++)
         {
-            float latr = m.lat * DEG2RAD;
-            float lon_eci = (m.lon + (float)s_shot_img.gmst + cfg->earth_rotation_offset) * DEG2RAD;
-            Vector3 M = { EARTH_RADIUS_KM * cosf(latr) * cosf(lon_eci),
-                          EARTH_RADIUS_KM * sinf(latr),
-                          -EARTH_RADIUS_KM * cosf(latr) * sinf(lon_eci) };
-            Vector3 v = Vector3Subtract(M, s_shot_img.P);
-            float xc = Vector3DotProduct(v, s_shot_img.right);
-            float yc = Vector3DotProduct(v, s_shot_img.up);
-            float zc = Vector3DotProduct(v, s_shot_img.boresight);
-            if (zc <= 0.0f)
-                continue;
-            if (IsOccludedByEarth(s_shot_img.P, M, EARTH_RADIUS_KM))
-                continue;
-            float nx = (xc / zc) / s_shot_img.thx;
-            float ny = (yc / zc) / s_shot_img.thy;
-            if (fabsf(nx) > 1.0f || fabsf(ny) > 1.0f)
-                continue;
-            glyph(ImVec2(p0.x + (nx * 0.5f + 0.5f) * W, p0.y + (0.5f - ny * 0.5f) * H), m.kind, m.name);
+            const ImVec2 &uv = s_shot_markers[i];
+            glyph(ImVec2(p0.x + uv.x * W, p0.y + uv.y * H), s_shot_marker_kinds[i], NULL);
         }
         return;
     }
 
-    /* strip */
-    if (s_strip_img.rows.empty())
-        return;
-    const std::vector<RowSat> &rows = s_strip_img.rows;
-    int Hr = (int)rows.size();
-    float half = s_strip_img.half_rad;
-    for (const Marker &m : markers)
+    // strip view: positions precomputed in the async job (normalized [0,1])
+    for (size_t i = 0; i < s_strip_markers.size(); i++)
     {
-        float latr = m.lat * DEG2RAD;
-        float clat = cosf(latr), slat = sinf(latr);
-        bool have_prev = false;
-        float prev_b = 0.0f, prev_a = 0.0f;
-        for (int r = 0; r < Hr; r++)
-        {
-            const RowSat &rs = rows[r];
-            float lon_eci = (m.lon + (float)rs.gmst + cfg->earth_rotation_offset) * DEG2RAD;
-            Vector3 M = { EARTH_RADIUS_KM * clat * cosf(lon_eci),
-                          EARTH_RADIUS_KM * slat,
-                          -EARTH_RADIUS_KM * clat * sinf(lon_eci) };
-            Vector3 d = Vector3Normalize(Vector3Subtract(M, rs.P));
-            float dn = Vector3DotProduct(d, rs.nadir);
-            float b = atan2f(Vector3DotProduct(d, rs.along), dn);
-            float a = atan2f(Vector3DotProduct(d, rs.cross), dn);
-            if (have_prev && ((prev_b <= 0.0f && b >= 0.0f) || (prev_b >= 0.0f && b <= 0.0f)))
-            {
-                float denom = b - prev_b;
-                float f = (denom != 0.0f) ? (-prev_b / denom) : 0.0f;
-                float a_star = prev_a + f * (a - prev_a);
-                float r_star = (float)(r - 1) + f;
-                if (fabsf(a_star) <= half)
-                {
-                    int ri = (int)(r_star + 0.5f);
-                    if (ri < 0) ri = 0;
-                    if (ri >= Hr) ri = Hr - 1;
-                    const RowSat &rs2 = rows[ri];
-                    float lon_eci2 = (m.lon + (float)rs2.gmst + cfg->earth_rotation_offset) * DEG2RAD;
-                    Vector3 M2 = { EARTH_RADIUS_KM * clat * cosf(lon_eci2),
-                                   EARTH_RADIUS_KM * slat,
-                                   -EARTH_RADIUS_KM * clat * sinf(lon_eci2) };
-                    if (!IsOccludedByEarth(rs2.P, M2, EARTH_RADIUS_KM))
-                    {
-                        float col = (s_strip_img.geocorrect && s_strip_img.geo_angle.size() >= 2)
-                                        ? GeoTableIndex(s_strip_img.geo_angle, a_star) /
-                                              (float)(s_strip_img.geo_angle.size() - 1) * (W - 1)
-                                        : (a_star + half) / (2.0f * half) * (W - 1);
-                        float row = (r_star / (float)(Hr - 1)) * H;
-                        glyph(ImVec2(p0.x + col, p0.y + row), m.kind, m.name);
-                    }
-                }
-                break;
-            }
-            prev_b = b;
-            prev_a = a;
-            have_prev = true;
-        }
+        const ImVec2 &uv = s_strip_markers[i];
+        glyph(ImVec2(p0.x + uv.x * (W - 1.0f), p0.y + uv.y * H), s_strip_marker_kinds[i], NULL);
     }
 }
 
@@ -1371,6 +1800,35 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         return;
     }
 
+    // drain a completed async job and commit it on the UI thread
+    SimScanResult done;
+    if (SimScanPoll(&done))
+    {
+        if (done.gen == s_sim_gen.load())
+        {
+            if (done.kind == 0)
+            {
+                s_strip_img = std::move(done.strip_img);
+                s_strip_lines = std::move(done.strip_lines);
+                s_strip_markers = std::move(done.marker_pts);
+                s_strip_marker_kinds = std::move(done.marker_kinds);
+                if (s_strip_img.textured && !s_strip_img.px.empty())
+                    UploadOutTexture(s_strip_img.W, s_strip_img.H, s_strip_img.px.data());
+                s_out_owner = 1;
+            }
+            else
+            {
+                s_shot_img = std::move(done.shot_img);
+                s_shot_lines = std::move(done.shot_lines);
+                s_shot_markers = std::move(done.marker_pts);
+                s_shot_marker_kinds = std::move(done.marker_kinds);
+                if (s_shot_img.textured && !s_shot_img.px.empty())
+                    UploadOutTexture(s_shot_img.W, s_shot_img.H, s_shot_img.px.data());
+                s_out_owner = 0;
+            }
+        }
+    }
+
     static bool s_loaded = false;
     static int s_mode = 0;           /* 0 = whiskbroom, 1 = single-shot */
     static bool s_textured = true;
@@ -1382,6 +1840,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
     static float s_off_nadir = 15.0f;
     static float s_azimuth = 0.0f;
     static float s_roll_deg = 0.0f;
+    static float s_skew_deg = 0.0f;  /* whiskbroom scan-plane tilt about the along-track axis */
     static int s_view = 0;           /* 0 = map, 1 = image */
     static bool s_markers = true;
     static int s_shot_res = 1024;
@@ -1405,6 +1864,9 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         s_off_nadir = ToolSettingGetFloat(cfg, SIMSCAN_KEY_OFFNADIR, 15.0f);
         s_azimuth = ToolSettingGetFloat(cfg, SIMSCAN_KEY_AZIMUTH, 0.0f);
         s_roll_deg = ToolSettingGetFloat(cfg, SIMSCAN_KEY_ROLL, 0.0f);
+        s_skew_deg = ToolSettingGetFloat(cfg, SIMSCAN_KEY_SKEW, 0.0f);
+        if (s_skew_deg < -120.0f) s_skew_deg = -120.0f;
+        if (s_skew_deg >  120.0f) s_skew_deg =  120.0f;
         s_view = ToolSettingGetInt(cfg, SIMSCAN_KEY_VIEW, 0);
         s_markers = ToolSettingGetBool(cfg, SIMSCAN_KEY_MARKERS, true);
         s_shot_res = ToolSettingGetInt(cfg, SIMSCAN_KEY_SHOT_RES, 1024);
@@ -1510,10 +1972,29 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         if (s_fov.capped)
             ImGui::TextDisabled("capped at limb (visible ~ %.0f km)", s_fov.visible_km);
 
+        ImGui::TextDisabled("Skew / Roll (deg)");
+        ImGui::SetNextItemWidth(cw);
+        if (ImGui::SliderFloat("##skew", &s_skew_deg, -120.0f, 120.0f, "%.1f°"))
+        {
+            ToolSettingSetFloat(cfg, SIMSCAN_KEY_SKEW, s_skew_deg);
+            if (s_skew_deg != 0.0f && s_geocorrect)
+            {
+                s_geocorrect = false;
+                ToolSettingSetBool(cfg, SIMSCAN_KEY_GEOCORRECT, s_geocorrect);
+            }
+        }
+
         if (s_view == 1)
         {
             if (ImGui::Checkbox("Geo correct", &s_geocorrect))
+            {
                 ToolSettingSetBool(cfg, SIMSCAN_KEY_GEOCORRECT, s_geocorrect);
+                if (s_geocorrect && s_skew_deg != 0.0f)
+                {
+                    s_skew_deg = 0.0f;
+                    ToolSettingSetFloat(cfg, SIMSCAN_KEY_SKEW, s_skew_deg);
+                }
+            }
             ImGui::TextDisabled("Export directory");
             ImGui::SetNextItemWidth(cw);
             if (ImGui::InputText("##export_dir", s_export_dir, sizeof(s_export_dir)))
@@ -1652,9 +2133,10 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             /* ---- whiskbroom swath ---- */
             bool need = !s_swath.valid || s_swath.norad != (pass->sat ? pass->sat->norad_id_num : 0u) ||
                         fabs(s_swath.aos - pass->aos_epoch) > 1e-6 || s_swath.half_rad != s_fov.half_rad ||
+                        s_swath.skew_rad != s_skew_deg * DEG2RAD ||
                         s_swath.map_w != map_w || s_swath.map_h != map_h;
             if (need)
-                ComputeSwath(pass, cfg, map_w, map_h, s_fov.half_rad);
+                ComputeSwath(pass, cfg, map_w, map_h, s_fov.half_rad, s_skew_deg * DEG2RAD);
 
             const ImU32 fill = ColU32(g_theme.world.footprint_fill, 0.35f);
             const ImU32 border = ColU32(g_theme.world.footprint_border, 0.95f);
@@ -1763,7 +2245,8 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         /* ---- strip image ---- */
         int W = s_swath_px;
         int H = 0;
-        ComputeStripDims(pass, s_swath_km, s_swath_px, &W, &H);
+        ComputeStripDimsCached(pass->sat, pass->sat ? pass->sat->norad_id_num : 0u,
+                               pass->aos_epoch, pass->los_epoch, s_swath_km, s_swath_px, &W, &H);
 
         float disp_w = avail.x;
         float disp_h = avail.x * ((float)H / (float)W);
@@ -1782,26 +2265,62 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
                     fabs(s_strip_img.aos - pass->aos_epoch) > 1e-6 ||
                     fabs(s_strip_img.los - pass->los_epoch) > 1e-6 ||
                     s_strip_img.half_rad != s_fov.half_rad ||
+                    s_strip_img.skew_rad != s_skew_deg * DEG2RAD ||
                     s_strip_img.geocorrect != s_geocorrect ||
                     s_strip_img.W != W || s_strip_img.H != H ||
                     s_strip_img.textured != use_tex ||
                     strcmp(s_strip_img.earth_path, earth_path) != 0 ||
                     s_out_owner != 1;
-        if (need && (!ImGui::IsAnyItemActive() || !s_strip_img.valid))
+        uint64_t key = SimScanStripKey(pass->sat ? pass->sat->norad_id_num : 0u,
+                                       pass->aos_epoch, pass->los_epoch, s_fov.half_rad,
+                                       s_skew_deg * DEG2RAD, s_geocorrect, W, H, use_tex, earth_path);
+        if (need && !ImGui::IsAnyItemActive() && key != s_sim_req_key)
         {
-            s_strip_img.W = W;
-            s_strip_img.H = H;
-            s_strip_img.half_rad = s_fov.half_rad;
-            s_strip_img.geocorrect = s_geocorrect;
-            s_strip_img.textured = use_tex;
-            snprintf(s_strip_img.earth_path, sizeof(s_strip_img.earth_path), "%s", earth_path);
-            RenderStripImage(&s_strip_img, pass, cfg);
-            s_out_owner = 1;
+            EnsureEarthImages(); // raylib image load stays on the UI thread
+            SimScanJob job;
+            job.kind = 0;
+            job.norad = pass->sat ? pass->sat->norad_id_num : 0u;
+            job.aos = pass->aos_epoch;
+            job.los = pass->los_epoch;
+            job.sat_copy = *pass->sat; // private copy: deep-space sgp4 mutates satrec
+            job.swath_km = s_swath_km;
+            job.swath_px = s_swath_px;
+            job.geocorrect = s_geocorrect;
+            job.half_rad = s_fov.half_rad;
+            job.skew_rad = s_skew_deg * DEG2RAD;
+            job.W = W;
+            job.H = H;
+            job.textured = use_tex;
+            job.earth_rotation_offset = cfg->earth_rotation_offset;
+            job.bg = g_theme.world.bg;
+            job.earth = &s_earth_img;
+            job.night = &s_night_img;
+            snprintf(job.earth_path, sizeof(job.earth_path), "%s", earth_path);
+            job.marker_count = 0;
+            for (int i = 0; i < location_count && i < MAX_LOCATIONS; i++)
+            {
+                job.markers[job.marker_count].lat = locations[i].lat;
+                job.markers[job.marker_count].lon = locations[i].lon;
+                job.markers[job.marker_count].kind = locations[i].is_home ? 1 : 0;
+                job.marker_count++;
+            }
+            if (SimScanIsRunning())
+                LOG_INFO("SimScan resubmit while a job is in flight (kind=0 key %llu->%llu) - prior job cancelled",
+                         (unsigned long long)s_sim_req_key, (unsigned long long)key);
+            SimScanSubmit(job);
+            s_sim_req_key = key;
         }
 
         const ImVec2 content = ImVec2(disp_w * s_zoom_strip, disp_h * s_zoom_strip);
         ImGui::BeginChild("##scan_preview_strip", ImVec2(avail.x, avail.y), false,
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        if (SimScanIsRunning())
+        {
+            ImGui::TextUnformatted("Loading simulation...");
+            ImGui::ProgressBar(SimScanProgress(), ImVec2(-FLT_MIN, 0.0f));
+        }
+        else
+        {
         ImVec2 p0c = ImGui::GetCursorScreenPos();
         ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton("##canvas", content);
@@ -1873,6 +2392,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             ImGui::SetScrollX(img_pt.x * s_zoom_strip - (io.MousePos.x - child_pos.x));
             ImGui::SetScrollY(img_pt.y * s_zoom_strip - (io.MousePos.y - child_pos.y));
         }
+        }
         ImGui::EndChild();
     }
     else
@@ -1918,27 +2438,60 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
                     s_shot_img.textured != use_tex ||
                     strcmp(s_shot_img.earth_path, earth_path) != 0 ||
                     s_out_owner != 0;
-        if (need && (!ImGui::IsAnyItemActive() || !s_shot_img.valid))
+        uint64_t key = SimScanShotKey(pass->sat ? pass->sat->norad_id_num : 0u,
+                                      pass->aos_epoch, pass->los_epoch, s_time_frac, s_aspect,
+                                      s_focal_mm, s_pointing, s_off_nadir, s_azimuth, s_roll_deg,
+                                      s_shot_res, W, H, use_tex, earth_path);
+        if (need && !ImGui::IsAnyItemActive() && key != s_sim_req_key)
         {
-            s_shot_img.W = W;
-            s_shot_img.H = H;
-            s_shot_img.res = s_shot_res;
-            s_shot_img.frac = s_time_frac;
-            s_shot_img.aspect = s_aspect;
-            s_shot_img.focal = s_focal_mm;
-            s_shot_img.pointing = s_pointing;
-            s_shot_img.off = s_off_nadir;
-            s_shot_img.az = s_azimuth;
-            s_shot_img.roll = s_roll_deg;
-            s_shot_img.textured = use_tex;
-            snprintf(s_shot_img.earth_path, sizeof(s_shot_img.earth_path), "%s", earth_path);
-            RenderShotImage(&s_shot_img, pass, cfg);
-            s_out_owner = 0;
+            EnsureEarthImages(); // raylib image load stays on the UI thread
+            SimScanJob job;
+            job.kind = 1;
+            job.norad = pass->sat ? pass->sat->norad_id_num : 0u;
+            job.aos = pass->aos_epoch;
+            job.los = pass->los_epoch;
+            job.sat_copy = *pass->sat; // private copy: deep-space sgp4 mutates satrec
+            job.frac = s_time_frac;
+            job.aspect = s_aspect;
+            job.focal = s_focal_mm;
+            job.pointing = s_pointing;
+            job.off = s_off_nadir;
+            job.az = s_azimuth;
+            job.roll = s_roll_deg;
+            job.shot_res = s_shot_res;
+            job.W = W;
+            job.H = H;
+            job.textured = use_tex;
+            job.earth_rotation_offset = cfg->earth_rotation_offset;
+            job.bg = g_theme.world.bg;
+            job.earth = &s_earth_img;
+            job.night = &s_night_img;
+            snprintf(job.earth_path, sizeof(job.earth_path), "%s", earth_path);
+            job.marker_count = 0;
+            for (int i = 0; i < location_count && i < MAX_LOCATIONS; i++)
+            {
+                job.markers[job.marker_count].lat = locations[i].lat;
+                job.markers[job.marker_count].lon = locations[i].lon;
+                job.markers[job.marker_count].kind = locations[i].is_home ? 1 : 0;
+                job.marker_count++;
+            }
+            if (SimScanIsRunning())
+                LOG_INFO("SimScan resubmit while a job is in flight (kind=1 key %llu->%llu) - prior job cancelled",
+                         (unsigned long long)s_sim_req_key, (unsigned long long)key);
+            SimScanSubmit(job);
+            s_sim_req_key = key;
         }
 
         const ImVec2 content = ImVec2(W_log * s_zoom_persp, H_log * s_zoom_persp);
         ImGui::BeginChild("##scan_preview_persp", ImVec2(avail.x, avail.y), false,
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        if (SimScanIsRunning())
+        {
+            ImGui::TextUnformatted("Loading simulation...");
+            ImGui::ProgressBar(SimScanProgress(), ImVec2(-FLT_MIN, 0.0f));
+        }
+        else
+        {
         ImVec2 p0c = ImGui::GetCursorScreenPos();
         ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton("##canvas", content);
@@ -2006,6 +2559,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             s_zoom_persp = ZoomClamp(old_zoom * powf(1.10f, io.MouseWheel));
             ImGui::SetScrollX(img_pt.x * s_zoom_persp - (io.MousePos.x - child_pos.x));
             ImGui::SetScrollY(img_pt.y * s_zoom_persp - (io.MousePos.y - child_pos.y));
+        }
         }
         ImGui::EndChild();
     }

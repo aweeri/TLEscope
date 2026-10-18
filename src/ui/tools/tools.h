@@ -29,6 +29,11 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTransit(UIContext *ctx, AppConfig *cfg);
 void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg);
 void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg);
+
+// async simulate-scan worker lifecycle (see tool_simulate_scan.cpp)
+void SimScanInit(void);
+void SimScanShutdown(void);
+void SimScanCancel(void);
 void DrawPanelDoppler(UIContext *ctx, AppConfig *cfg);
 void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
