@@ -86,6 +86,10 @@ void geodetic_to_ecef(double lat_deg, double lon_deg, double alt_m, double *ox, 
 void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, float obs_alt, double *az, double *el);
 void CalculatePasses(Satellite *sat, double start_epoch);
 void CalculatePassesFavorites(Satellite *selected, double start_epoch);
+
+void GetFullPassWindow(Satellite *sat, double aos_epoch, double los_epoch,
+                       double *out_aos, double *out_los);
+
 void epoch_to_time_str(double epoch, char *str);
 
 // local-time display preference (backend is UTC)

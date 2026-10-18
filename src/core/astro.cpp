@@ -904,6 +904,85 @@ void CalculatePassesFavorites(Satellite *selected, double start_epoch)
     LOG_INFO("Pass calculation complete: %d passes found", num_passes);
 }
 
+/* elevation (deg) of a satellite above the home location at a given epoch */
+static double PassElevationDeg(Satellite *sat, const Location *home, double epoch)
+{
+    double az, el;
+    get_az_el(calculate_position(sat, get_unix_from_epoch(epoch)), epoch_to_gmst(epoch),
+              home->lat, home->lon, home->alt, &az, &el);
+    return el;
+}
+
+void GetFullPassWindow(Satellite *sat, double aos_epoch, double los_epoch,
+                       double *out_aos, double *out_los)
+{
+    *out_aos = aos_epoch;
+    *out_los = los_epoch;
+    if (!sat || pass_min_elev <= 0.0f)
+        return; /* already horizon-to-horizon */
+
+    Location *home = GetHomeLocation();
+    if (!home)
+        return;
+
+    const double step = 1.0 / 1440.0; /* 1 minute */
+    const double max_span = 0.5;      /* cap the outward search at 12 hours */
+
+    /* walk backwards from AOS until the satellite drops below the horizon */
+    if (PassElevationDeg(sat, home, aos_epoch) > 0.0)
+    {
+        double t_hi = aos_epoch; /* el >= 0 */
+        double t = aos_epoch;
+        double limit = aos_epoch - max_span;
+        while (t > limit)
+        {
+            t -= step;
+            if (PassElevationDeg(sat, home, t) < 0.0)
+            {
+                double lo = t, hi = t_hi; /* lo: el<0, hi: el>=0 */
+                for (int b = 0; b < 20; b++)
+                {
+                    double mid = 0.5 * (lo + hi);
+                    if (PassElevationDeg(sat, home, mid) < 0.0)
+                        lo = mid;
+                    else
+                        hi = mid;
+                }
+                *out_aos = hi;
+                break;
+            }
+            t_hi = t;
+        }
+    }
+
+    /* walk forwards from LOS until the satellite drops below the horizon */
+    if (PassElevationDeg(sat, home, los_epoch) > 0.0)
+    {
+        double t_lo = los_epoch; /* el >= 0 */
+        double t = los_epoch;
+        double limit = los_epoch + max_span;
+        while (t < limit)
+        {
+            t += step;
+            if (PassElevationDeg(sat, home, t) < 0.0)
+            {
+                double lo = t_lo, hi = t; /* lo: el>=0, hi: el<0 */
+                for (int b = 0; b < 20; b++)
+                {
+                    double mid = 0.5 * (lo + hi);
+                    if (PassElevationDeg(sat, home, mid) < 0.0)
+                        hi = mid;
+                    else
+                        lo = mid;
+                }
+                *out_los = lo;
+                break;
+            }
+            t_lo = t;
+        }
+    }
+}
+
 /** formats the internal epoch into a HH:MM:SS string for quick glancing.
  *  Respects the local-time display preference; the underlying epoch stays UTC. */
 void epoch_to_time_str(double epoch, char *str)

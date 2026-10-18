@@ -560,7 +560,7 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
                     IM_COL32(text_col.r, text_col.g, text_col.b, 220), "Upcoming passes");
     }
 
-    if (s_list_expanded)
+    if (s_list_expanded && num_passes > 0)
     {
         ImGuiStyle &st = ImGui::GetStyle();
         float sidebar_h = ImGui::GetIO().DisplaySize.y - ImGui::GetFrameHeight();
@@ -703,6 +703,9 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
     }
     else
     {
+        
+        if (s_list_expanded)
+            ImGui::TextDisabled("No passes in the current window.");
         s_list_interacting = false;
     }
 
@@ -710,8 +713,14 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
 
     /* ---- polar plot ---- */
     ImGui::Separator();
-    float plot_size = fminf(avail_w, UIPx(240.0f));
-    float indent = (avail_w - plot_size) * 0.5f;
+    /* fit the polar grid to the panel width */
+    float plot_avail_w = ImGui::GetContentRegionAvail().x;
+    float plot_avail_h = ImGui::GetContentRegionAvail().y;
+    float plot_size = fminf(plot_avail_w, plot_avail_h);
+    float min_plot = UIPx(120.0f);
+    if (plot_size < min_plot)
+        plot_size = min_plot;
+    float indent = (plot_avail_w - plot_size) * 0.5f;
     if (indent > 0.0f)
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
 
@@ -743,10 +752,10 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
 
     if (!has_sel)
     {
-        const char *msg = "No pass selected";
+        const char *msg = "No transit selected";
         ImVec2 ms = ImGui::CalcTextSize(msg);
         Color dim = g_theme.ui.text_dim;
-        pdl->AddText(ImVec2(center.x - ms.x * 0.5f, center.y + radius - ms.y - UIPx(4.0f)),
+        pdl->AddText(ImVec2(center.x - ms.x * 0.5f, center.y - ms.y * 0.5f),
                      IM_COL32(dim.r, dim.g, dim.b, 170), msg);
     }
 

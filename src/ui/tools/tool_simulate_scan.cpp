@@ -66,6 +66,9 @@
 /* full-frame sensor long side, mm */
 #define SIMSCAN_SENSOR_LONG_MM 36.0f
 
+
+#define SIMSCAN_LINE_SWATH_PX 50
+
 /* aspect ratios (width, height) matching the combo order below */
 static const float s_aspect_rw[] = { 1.0f, 3.0f, 4.0f, 16.0f, 2.0f, 3.0f, 9.0f };
 static const float s_aspect_rh[] = { 1.0f, 2.0f, 3.0f, 9.0f, 3.0f, 4.0f, 16.0f };
@@ -760,6 +763,16 @@ struct StripDimsCache
     int W = 0, H = 0;
 };
 static StripDimsCache s_strip_dims;
+
+// cached full (horizon-to-horizon) pass window for the selected pass
+struct FullPassCache
+{
+    bool valid = false;
+    uint32_t norad = 0;
+    double aos = 0.0, los = 0.0;      // trimmed window (cache key)
+    double full_aos = 0.0, full_los = 0.0;
+};
+static FullPassCache s_full_pass;
 
 static std::thread             s_sim_thread;
 static std::mutex              s_sim_mtx;
@@ -1800,6 +1813,27 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         return;
     }
 
+    // always shows the full horizon-to-horizon pass
+    SatPass full_pass;
+    {
+        uint32_t norad = pass->sat->norad_id_num;
+        if (!s_full_pass.valid || s_full_pass.norad != norad ||
+            fabs(s_full_pass.aos - pass->aos_epoch) > 1e-6 ||
+            fabs(s_full_pass.los - pass->los_epoch) > 1e-6)
+        {
+            GetFullPassWindow(pass->sat, pass->aos_epoch, pass->los_epoch,
+                              &s_full_pass.full_aos, &s_full_pass.full_los);
+            s_full_pass.valid = true;
+            s_full_pass.norad = norad;
+            s_full_pass.aos = pass->aos_epoch;
+            s_full_pass.los = pass->los_epoch;
+        }
+        full_pass = *pass;
+        full_pass.aos_epoch = s_full_pass.full_aos;
+        full_pass.los_epoch = s_full_pass.full_los;
+        pass = &full_pass;
+    }
+
     // drain a completed async job and commit it on the UI thread
     SimScanResult done;
     if (SimScanPoll(&done))
@@ -1855,7 +1889,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
     if (!s_loaded)
     {
         s_mode = ToolSettingGetInt(cfg, SIMSCAN_KEY_MODE, 0);
-        s_textured = ToolSettingGetBool(cfg, SIMSCAN_KEY_TEXTURED, true);
+        s_textured = ToolSettingGetBool(cfg, SIMSCAN_KEY_TEXTURED, false);
         s_swath_deg = ToolSettingGetFloat(cfg, SIMSCAN_KEY_SWATH, 60.0f);
         s_time_frac = ToolSettingGetFloat(cfg, SIMSCAN_KEY_FRAC, 0.5f);
         s_aspect = ToolSettingGetInt(cfg, SIMSCAN_KEY_ASPECT, 1);
@@ -1954,6 +1988,8 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
     if (ImGui::Checkbox("Markers", &s_markers))
         ToolSettingSetBool(cfg, SIMSCAN_KEY_MARKERS, s_markers);
 
+    const int eff_swath_px = s_textured ? s_swath_px : SIMSCAN_LINE_SWATH_PX;
+
     const float cw = ImGui::GetContentRegionAvail().x;
 
     if (s_mode == 0)
@@ -1963,12 +1999,19 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         ImGui::SetNextItemWidth(cw);
         if (ImGui::SliderFloat("##swath_km", &s_swath_km, 1.0f, 5000.0f, "%.0f km"))
             ToolSettingSetFloat(cfg, SIMSCAN_KEY_SWATH_KM, s_swath_km);
-        ImGui::TextDisabled("Swath width (px)");
-        ImGui::SetNextItemWidth(cw);
-        if (ImGui::SliderInt("##swath_px", &s_swath_px, 64, 4096))
-            ToolSettingSetInt(cfg, SIMSCAN_KEY_SWATH_PX, s_swath_px);
+        if (s_textured)
+        {
+            ImGui::TextDisabled("Swath width (px)");
+            ImGui::SetNextItemWidth(cw);
+            if (ImGui::SliderInt("##swath_px", &s_swath_px, 64, 4096))
+                ToolSettingSetInt(cfg, SIMSCAN_KEY_SWATH_PX, s_swath_px);
+        }
+        else
+        {
+            ImGui::TextDisabled("Swath width (px): fixed at %d in line mode", SIMSCAN_LINE_SWATH_PX);
+        }
         ImGui::TextDisabled("FOV ~ %.1f deg   (GSD %.0f m/px)", s_fov.half_rad * 2.0f * RAD2DEG,
-                            1000.0f * s_swath_km / (float)s_swath_px);
+                            1000.0f * s_swath_km / (float)eff_swath_px);
         if (s_fov.capped)
             ImGui::TextDisabled("capped at limb (visible ~ %.0f km)", s_fov.visible_km);
 
@@ -2243,10 +2286,10 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
     else if (s_mode == 0)
     {
         /* ---- strip image ---- */
-        int W = s_swath_px;
+        int W = eff_swath_px;
         int H = 0;
         ComputeStripDimsCached(pass->sat, pass->sat ? pass->sat->norad_id_num : 0u,
-                               pass->aos_epoch, pass->los_epoch, s_swath_km, s_swath_px, &W, &H);
+                               pass->aos_epoch, pass->los_epoch, s_swath_km, eff_swath_px, &W, &H);
 
         float disp_w = avail.x;
         float disp_h = avail.x * ((float)H / (float)W);
@@ -2284,7 +2327,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             job.los = pass->los_epoch;
             job.sat_copy = *pass->sat; // private copy: deep-space sgp4 mutates satrec
             job.swath_km = s_swath_km;
-            job.swath_px = s_swath_px;
+            job.swath_px = eff_swath_px;
             job.geocorrect = s_geocorrect;
             job.half_rad = s_fov.half_rad;
             job.skew_rad = s_skew_deg * DEG2RAD;
