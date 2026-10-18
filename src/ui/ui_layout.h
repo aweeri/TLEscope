@@ -22,6 +22,9 @@
 
 /* -- Runtime layout state -------------------------------------------------- */
 
+/* a screen-space rectangle captured during the layout pass; valid=false when not drawn this frame */
+typedef struct { float x0, y0, x1, y1; bool valid; } UIRect;
+
 typedef struct
 {
     /* sidebar geometry */
@@ -43,6 +46,15 @@ typedef struct
 
     /* panel enabled (completely shown/hidden in sidebar) indexed by PanelId */
     bool panel_enabled[PANEL_COUNT];
+
+    /* screen-space rects captured each frame during the layout pass (valid=false when not drawn) */
+    UIRect panel_rect[PANEL_COUNT];         /* panel band (header top .. content bottom) */
+    UIRect panel_header_rect[PANEL_COUNT];  /* just the clickable title bar */
+    UIRect sidebar_rect[2];                 /* [0]=left, [1]=right inner sidebar rect */
+    UIRect notch_rect[2];                   /* [0]=left, [1]=right edge notch tab */
+    UIRect tools_btn_rect;                  /* top-bar "Tools" menu item */
+    UIRect settings_btn_rect;               /* top-bar "Settings" menu item */
+    UIRect view_toggle_rect;                /* top-bar 2D/3D view switch    */
 
     /* drag-reorder runtime state */
     int drag_panel;          /* PanelId currently dragged, -1 = none */
@@ -124,5 +136,16 @@ void LayoutSetSidebarVisible(SidebarSide side, bool visible);
 
 /* central canvas rect (logical screen coords); any out pointer may be NULL */
 void LayoutGetViewportRect(float *x, float *y, float *w, float *h);
+
+/* on-screen element rects captured during the layout pass (for coachmarks/hint system).
+ * Each returns out->valid and copies *out = {0} (valid=false) when the element was
+ * not drawn this frame. */
+bool LayoutGetPanelRect(PanelId id, UIRect *out);
+bool LayoutGetPanelHeaderRect(PanelId id, UIRect *out);
+bool LayoutGetSidebarRect(SidebarSide side, UIRect *out);
+bool LayoutGetNotchRect(SidebarSide side, UIRect *out);
+bool LayoutGetToolsButtonRect(UIRect *out);
+bool LayoutGetSettingsButtonRect(UIRect *out);
+bool LayoutGetViewToggleRect(UIRect *out);
 
 #endif /* UI_LAYOUT_H */

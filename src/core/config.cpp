@@ -41,6 +41,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_country_borders = true;  // default
     config->show_coast_lines = true;   // default
     config->show_first_run_dialog = false; // default
+    config->show_tutorial = false;   // default: first-boot tutorial not pending
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
     config->night_mode = false;      // default: full-screen red post-process off
@@ -192,6 +193,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_scattering = get_bool("show_scattering", config->show_scattering);
                     config->hint_vsync = get_bool("hint_vsync", config->hint_vsync);
                     config->show_first_run_dialog = get_bool("show_first_run_dialog", config->show_first_run_dialog);
+                    config->show_tutorial = get_bool("show_tutorial", config->show_tutorial);
                     config->use_local_time = get_bool("use_local_time", config->use_local_time);
                     config->night_mode = get_bool("night_mode", config->night_mode);
 
@@ -610,6 +612,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
             SetHomeLocation(home_idx);
 
         config->show_first_run_dialog = true;
+        config->show_tutorial = true;
 
         SaveAppConfig(filename, config);
     }
@@ -658,6 +661,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_coast_lines"] = config->show_coast_lines;
     root["hint_vsync"] = config->hint_vsync;
     root["show_first_run_dialog"] = config->show_first_run_dialog;
+    root["show_tutorial"] = config->show_tutorial;
     root["use_local_time"] = config->use_local_time;
     root["night_mode"] = config->night_mode;
     root["first_day_of_week"] = config->first_day_of_week;

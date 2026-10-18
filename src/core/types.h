@@ -361,6 +361,7 @@ typedef struct
     bool show_country_borders;
     bool show_coast_lines;
     bool show_first_run_dialog;
+    bool show_tutorial;   /* first-boot tutorial pending (default false) */
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)
     bool night_mode;       // full-screen monochrome-red post-process for dark adaptation

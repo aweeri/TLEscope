@@ -13,6 +13,7 @@
 #include "tools/tools_common.h"
 #include "tools/tools_settings.h"
 #include "notifications.h"
+#include "tutorial.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
@@ -292,6 +293,68 @@ bool LayoutIsPanelOpen(PanelId id)
     return (id >= 0 && id < PANEL_COUNT) ? g_layout.panel_open[id] : false;
 }
 
+/* -- Captured element rects (for coachmarks / the first-boot tutorial) ------ */
+
+bool LayoutGetPanelRect(PanelId id, UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    if (id < 0 || id >= PANEL_COUNT) return false;
+    *out = g_layout.panel_rect[id];
+    return out->valid;
+}
+
+bool LayoutGetPanelHeaderRect(PanelId id, UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    if (id < 0 || id >= PANEL_COUNT) return false;
+    *out = g_layout.panel_header_rect[id];
+    return out->valid;
+}
+
+bool LayoutGetSidebarRect(SidebarSide side, UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    if (side != SIDEBAR_LEFT && side != SIDEBAR_RIGHT) return false;
+    *out = g_layout.sidebar_rect[side == SIDEBAR_LEFT ? 0 : 1];
+    return out->valid;
+}
+
+bool LayoutGetNotchRect(SidebarSide side, UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    if (side != SIDEBAR_LEFT && side != SIDEBAR_RIGHT) return false;
+    *out = g_layout.notch_rect[side == SIDEBAR_LEFT ? 0 : 1];
+    return out->valid;
+}
+
+bool LayoutGetToolsButtonRect(UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    *out = g_layout.tools_btn_rect;
+    return out->valid;
+}
+
+bool LayoutGetSettingsButtonRect(UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    *out = g_layout.settings_btn_rect;
+    return out->valid;
+}
+
+bool LayoutGetViewToggleRect(UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    *out = g_layout.view_toggle_rect;
+    return out->valid;
+}
+
 /* -- Sidebar visibility helpers --------------------------------------------- */
 
 bool LayoutSidebarVisible(SidebarSide side)
@@ -374,6 +437,33 @@ typedef struct { PanelId id; float y0, y1; } HeaderSlot;
 static HeaderSlot s_left_headers[MAX_PANELS];
 static HeaderSlot s_right_headers[MAX_PANELS];
 static int s_left_hc = 0, s_right_hc = 0;
+
+/* Themed tooltip drawn into the foreground draw list so it is never occluded
+ * by the sidebars, panels, notches or modal dim. */
+static void NavTooltip(const char *text)
+{
+    if (!text || !text[0]) return;
+    ImGuiIO &io = ImGui::GetIO();
+    const float pad_x = UIPx(8.0f), pad_y = UIPx(5.0f), round = UIPx(4.0f);
+    const float off_x = UIPx(12.0f), off_y = UIPx(20.0f), max_w = UIPx(320.0f);
+
+    float wrap_w = max_w - 2.0f * pad_x;
+    ImVec2 ts = ImGui::CalcTextSize(text, NULL, false, wrap_w);
+    float w = ts.x + 2.0f * pad_x, h = ts.y + 2.0f * pad_y;
+
+    ImVec2 p(io.MousePos.x + off_x, io.MousePos.y + off_y);
+    p.x = fmaxf(UIPx(6.0f), fminf(p.x, io.DisplaySize.x - w - UIPx(6.0f)));
+    p.y = fmaxf(UIPx(6.0f), fminf(p.y, io.DisplaySize.y - h - UIPx(6.0f)));
+
+    ImU32 fill = IM_COL32(g_theme.ui.surface.r, g_theme.ui.surface.g, g_theme.ui.surface.b, 245);
+    ImU32 edge = IM_COL32(g_theme.ui.border.r,  g_theme.ui.border.g,  g_theme.ui.border.b,  200);
+    ImU32 col  = IM_COL32(g_theme.ui.text.r,    g_theme.ui.text.g,    g_theme.ui.text.b,    255);
+
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), fill, round);
+    dl->AddRect(p, ImVec2(p.x + w, p.y + h), edge, round, 0, UIPx(1.0f));
+    dl->AddText(NULL, 0.0f, ImVec2(p.x + pad_x, p.y + pad_y), col, text, NULL, wrap_w);
+}
 
 /* ========================================================================== */
 /*  Notch (show/hide tab)                                                     */
@@ -482,6 +572,9 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         ImVec2 p0 = ImVec2(tab_left, o.y);
         ImVec2 p1 = ImVec2(tab_right, o.y + notch_h);
 
+        /* capture the tab rect for the tutorial coachmark */
+        g_layout.notch_rect[is_left ? 0 : 1] = { p0.x, p0.y, p1.x, p1.y, true };
+
         if (sidebar_visible)
         {
             float clip_x = is_left ? UIPx(g_layout.left_width)
@@ -553,7 +646,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
         {
             const char *tt = sidebar_visible ? (is_left ? "Hide left sidebar" : "Hide right sidebar")
                                              : (is_left ? "Show left sidebar" : "Show right sidebar");
-            ImGui::SetTooltip("%s", tt);
+            NavTooltip(tt);
         }
     }
     ImGui::End();
@@ -657,6 +750,9 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     bool hovered = ImGui::IsItemHovered();
     ImVec2 p0 = ImGui::GetItemRectMin();
     ImVec2 p1 = ImGui::GetItemRectMax();
+
+    /* capture the clickable title bar for the tutorial coachmark */
+    g_layout.panel_header_rect[def->id] = { p0.x, p0.y, p1.x, p1.y, true };
 
     /* background (theme-aware) */
     Color hdr_bg   = g_theme.ui.surface;
@@ -926,6 +1022,9 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     float h = GetContentBottom(x0, x1) - y;
     if (h < UIPx(50.0f)) h = UIPx(50.0f);
 
+    /* capture the sidebar rect for the tutorial coachmark */
+    g_layout.sidebar_rect[is_left ? 0 : 1] = { x, y, x + width, y + h, true };
+
     ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(width, h), ImGuiCond_Always);
 
@@ -963,6 +1062,7 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
             if (def->hidden) continue;  /* retired panel: never shown */
             bool is_open = g_layout.panel_open[pid];
 
+            ImVec2 panel_top = ImGui::GetCursorScreenPos();
             DrawAccordionHeader(def, &g_layout.panel_open[pid], i, is_left);
 
             if (is_open)
@@ -974,6 +1074,12 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
                 ImGui::Unindent(UIPx(6.0f));
                 ImGui::PopStyleVar();
             }
+            ImVec2 panel_bot = ImGui::GetCursorScreenPos();
+
+            /* capture the full panel band for the tutorial coachmark */
+            UIRect &pr = g_layout.panel_rect[pid];
+            float px0 = x + UIPx(3.0f), px1 = x + width - UIPx(3.0f);
+            pr = { px0, panel_top.y, px1, panel_bot.y, true };
 
             if (i < max - 1)
                 ImGui::Spacing();
@@ -999,7 +1105,9 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
 
 void DrawNavBar(UIContext *ctx, AppConfig *cfg)
 {
-    (void)cfg;
+    g_layout.tools_btn_rect.valid = false;
+    g_layout.settings_btn_rect.valid = false;
+    g_layout.view_toggle_rect.valid = false;
 
     if (g_layout.clean_view)
         return; /* H key clean view: no menu bar */
@@ -1044,12 +1152,16 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
             LayoutOpenTools();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Manage tool panels");
+            NavTooltip("Manage tool panels");
+        /* capture the Tools menu item for the tutorial coachmark */
+        { ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+          g_layout.tools_btn_rect = { a.x, a.y, b.x, b.y, true }; }
 
         /* ---- Help menu --------------------------------------------------- */
         if (ImGui::BeginMenu(ICON_FA_CIRCLE_QUESTION "  Help"))
         {
             if (ImGui::MenuItem("Controls")) UIOpenHelp();
+            if (ImGui::MenuItem("Launch Tutorial")) TutorialLaunch(cfg);
             if (ImGui::MenuItem("GitHub Repository"))
                 OpenURL("https://github.com/aweeri/TLEscope");
             if (ImGui::MenuItem("About TLEscope")) UIOpenAbout();
@@ -1061,6 +1173,11 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
         {
             LayoutOpenSettings();
         }
+        if (ImGui::IsItemHovered())
+            NavTooltip("Preferences: theme, UI scale and your Home location");
+        /* capture the Settings menu item for the tutorial coachmark */
+        { ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+          g_layout.settings_btn_rect = { a.x, a.y, b.x, b.y, true }; }
 
         /* ---- 2D/3D view switch ------------------------------------------- */
         if (ctx->is_2d_view)
@@ -1074,7 +1191,10 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
                 LOG_INFO("View switched to %s", *ctx->is_2d_view ? "2D map" : "3D globe");
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Switch between the 2D map and the 3D globe (M)");
+                NavTooltip("Switch between the 2D map and the 3D globe (M)");
+            /* capture the view toggle for the tutorial coachmark */
+            { ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+              g_layout.view_toggle_rect = { a.x, a.y, b.x, b.y, true }; }
         }
 
         ImGui::EndMainMenuBar();
@@ -1400,6 +1520,14 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         /* ---- Buttons ----------------------------------------------------- */
         ImGui::Separator();
 
+        if (ImGui::Button("Launch Tutorial", ImVec2(UIPx(140.0f), 0)))
+        {
+            g_layout.settings_open = false;
+            ImGui::CloseCurrentPopup();
+            TutorialLaunch(cfg);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Replay the first-boot walkthrough");
+
         if (ImGui::Button("Save Settings", ImVec2(UIPx(140.0f), 0)))
         {
             NotifySaveSettings(cfg);
@@ -1541,6 +1669,18 @@ void DrawUILayout(UIContext *ctx, AppConfig *cfg)
 {
     s_left_hc = 0;
     s_right_hc = 0;
+
+    /* reset captured element rects */
+    for (int i = 0; i < PANEL_COUNT; i++)
+    {
+        g_layout.panel_rect[i].valid = false;
+        g_layout.panel_header_rect[i].valid = false;
+    }
+    for (int i = 0; i < 2; i++)
+    {
+        g_layout.sidebar_rect[i].valid = false;
+        g_layout.notch_rect[i].valid = false;
+    }
 
     DrawSidebar(true,  ctx, cfg);
     DrawSidebar(false, ctx, cfg);

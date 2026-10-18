@@ -13,6 +13,8 @@
 #include "labels.h"
 #include "tools/tools.h"
 #include "notifications.h"
+#include "hints.h"
+#include "tutorial.h"
 #include "core/astro.h"
 #include "core/config.h"
 #include "core/theme.h"
@@ -946,10 +948,14 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     DrawHelpModal(ctx, cfg);
     DrawAboutModal(ctx, cfg);
     DrawExitDialog(ctx, cfg);
+    DrawTutorialOverlay(ctx, cfg);
 
-    /* notification toasts: drawn last so they stack on top, top-right, non-blocking */
+    /* notification toasts: top-right, non-blocking */
     NotifyUpdate(ImGui::GetIO().DeltaTime);
     DrawNotifications();
+
+    /* hints: drawn last into the foreground draw list so they sit over everything */
+    DrawHints();
 
     /* end rlImGui frame */
     rlImGuiEnd();

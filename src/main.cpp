@@ -26,6 +26,7 @@
 #include "ui/ui_layout.h"
 #include "ui/notifications.h"
 #include "ui/touch_gesture.h"
+#include "ui/tutorial.h"
 #include "ui/tools/tools.h"
 #include "ui/tools/tools_common.h"
 #include "ui/tools/tools_scene.h"
@@ -894,6 +895,7 @@ int main(void)
 
         bool is_typing = IsUITyping();
         bool over_ui = IsMouseOverUI(&cfg);
+        const bool tutorial_up = TutorialActive(&cfg);
 
         float vp_x, vp_y, vp_w, vp_h;
         LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
@@ -917,7 +919,7 @@ int main(void)
         const float prev_ui_scale = cfg.ui_scale;
 
         /* input handling */
-        if (!is_typing)
+        if (!is_typing && !tutorial_up)
         {
             if (IsKeyPressed(KEY_SPACE))
             {
@@ -1424,7 +1426,7 @@ int main(void)
         }
 
         /* selection/double-click planet lock on release */
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active)
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !left_drag_active && !tutorial_up)
         {
             if (!over_ui)
             {
