@@ -337,6 +337,10 @@ typedef struct
     char theme[64];
     int window_width;
     int window_height;
+    int window_x;          // restored (un-maximized) window X position, monitor coords
+    int window_y;          // restored (un-maximized) window Y position, monitor coords
+    bool window_maximized; // last session maximized state (default true: open maximized)
+    bool has_window_placement; // true once a valid restored rect has been stored
     bool fullscreen;       // start in fullscreen mode (default false)
     int target_fps;
     float ui_scale;

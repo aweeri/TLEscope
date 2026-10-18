@@ -49,6 +49,10 @@ static AppConfig cfg = []() -> AppConfig {
     strcpy(c.theme, "default");
     c.window_width = 1280;
     c.window_height = 720;
+    c.window_x = 0;
+    c.window_y = 0;
+    c.window_maximized = true;      /* open maximized by default on first run */
+    c.has_window_placement = false; /* no saved restored rect yet */
     c.target_fps = 60;
     c.ui_scale = 1.0f;
     c.orbit_cache_drift_threshold_km = 50.0f;
@@ -503,6 +507,48 @@ static void StopTrackingLost(TargetLock *lock, Satellite **sat, uint32_t *norad,
         NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Tracking stopped");
 }
 
+#define WINDOW_MIN_W 480
+#define WINDOW_MIN_H 320
+
+static int MonitorForPoint(int x, int y)
+{
+    int count = GetMonitorCount();
+    for (int i = 0; i < count; i++)
+    {
+        Vector2 pos = GetMonitorPosition(i);
+        int mw = GetMonitorWidth(i);
+        int mh = GetMonitorHeight(i);
+        if (x >= (int)pos.x && x < (int)pos.x + mw &&
+            y >= (int)pos.y && y < (int)pos.y + mh)
+            return i;
+    }
+    return GetCurrentMonitor();
+}
+static void ClampWindowRectToMonitor(int &x, int &y, int &w, int &h)
+{
+    int monitor = MonitorForPoint(x + w / 2, y + h / 2);
+    Vector2 pos = GetMonitorPosition(monitor);
+    int mw = GetMonitorWidth(monitor);
+    int mh = GetMonitorHeight(monitor);
+
+    if (w < WINDOW_MIN_W) w = WINDOW_MIN_W;
+    if (h < WINDOW_MIN_H) h = WINDOW_MIN_H;
+    if (w > mw) w = mw;
+    if (h > mh) h = mh;
+
+    int minX = (int)pos.x;
+    int minY = (int)pos.y;
+    int maxX = (int)pos.x + mw - w;
+    int maxY = (int)pos.y + mh - h;
+
+    if (x < minX || x > maxX) x = minX + (mw - w) / 2;
+    if (y < minY || y > maxY) y = minY + (mh - h) / 2;
+    if (x < minX) x = minX;
+    if (y < minY) y = minY;
+    if (x > maxX) x = maxX;
+    if (y > maxY) y = maxY;
+}
+
 int main(void)
 {
     LogInit();
@@ -538,26 +584,38 @@ int main(void)
     TouchGestureInit();
     if (cfg.fullscreen) ToggleFullscreen();
 
-#ifndef __APPLE__
-    int monitor = GetCurrentMonitor();
-    int max_w = GetMonitorWidth(monitor);
-    int max_h = GetMonitorHeight(monitor);
-    int current_w = GetScreenWidth();
-    int current_h = GetScreenHeight();
-    Vector2 monitorPos = GetMonitorPosition(monitor);
+    /* Restore the persisted window placement. The restored (un-maximized)
+     * rectangle is applied before maximizing so that clicking Restore Down
+     * returns to a centered, fully on-screen geometry. */
+    if (!cfg.fullscreen)
+    {
+        if (!cfg.has_window_placement)
+        {
+            /* First run: pick a sensible centered restored rect on the current
+             * monitor. cfg.window_maximized defaults to true, so the window
+             * still opens maximized. */
+            int monitor = GetCurrentMonitor();
+            Vector2 pos = GetMonitorPosition(monitor);
+            int mw = GetMonitorWidth(monitor);
+            int mh = GetMonitorHeight(monitor);
 
-    if (current_w >= max_w || current_h >= max_h)
-    {
-        /* shrink and center the window a bit before maximizing so the restored state has a valid position */
-        SetWindowSize(max_w - 100, max_h - 100);
-        SetWindowPosition((int)monitorPos.x + 50, (int)monitorPos.y + 50);
-        SetWindowState(FLAG_WINDOW_MAXIMIZED);
+            if (cfg.window_width <= 0) cfg.window_width = 1280;
+            if (cfg.window_height <= 0) cfg.window_height = 720;
+            if (cfg.window_width > mw - 100) cfg.window_width = mw - 100;
+            if (cfg.window_height > mh - 100) cfg.window_height = mh - 100;
+            cfg.window_x = (int)pos.x + (mw - cfg.window_width) / 2;
+            cfg.window_y = (int)pos.y + (mh - cfg.window_height) / 2;
+        }
+
+        ClampWindowRectToMonitor(cfg.window_x, cfg.window_y, cfg.window_width, cfg.window_height);
+        SetWindowSize(cfg.window_width, cfg.window_height);
+        SetWindowPosition(cfg.window_x, cfg.window_y);
+
+        if (cfg.window_maximized)
+            SetWindowState(FLAG_WINDOW_MAXIMIZED);
+
+        cfg.has_window_placement = true;
     }
-    else
-    {
-        SetWindowPosition((int)monitorPos.x + (max_w - current_w) / 2, (int)monitorPos.y + (max_h - current_h) / 2);
-    }
-#endif
 
     SetExitKey(0);
 
@@ -822,6 +880,17 @@ int main(void)
     /* main loop */
     while (!WindowShouldClose() && !exit_app)
     {
+        if (!IsWindowFullscreen() && !IsWindowMaximized() && !IsWindowMinimized())
+        {
+            Vector2 wp = GetWindowPosition();
+            cfg.window_x = (int)wp.x;
+            cfg.window_y = (int)wp.y;
+            cfg.window_width = GetScreenWidth();
+            cfg.window_height = GetScreenHeight();
+            cfg.has_window_placement = true;
+        }
+        cfg.window_maximized = IsWindowMaximized();
+
         if (cfg.reload_theme)
         {
             cfg.reload_theme = false;

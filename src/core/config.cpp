@@ -163,6 +163,10 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     get_str("theme", "default", config->theme, sizeof(config->theme));
                     config->window_width = get_int("window_width", config->window_width);
                     config->window_height = get_int("window_height", config->window_height);
+                    config->window_x = get_int("window_x", config->window_x);
+                    config->window_y = get_int("window_y", config->window_y);
+                    config->window_maximized = get_bool("window_maximized", config->window_maximized);
+                    config->has_window_placement = get_bool("has_window_placement", config->has_window_placement);
                     config->fullscreen = get_bool("fullscreen", config->fullscreen);
                     config->target_fps = get_int("target_fps", config->target_fps);
                     config->ui_scale = get_float("ui_scale", config->ui_scale);
@@ -638,6 +642,10 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["theme"] = config->theme;
     root["window_width"] = config->window_width;
     root["window_height"] = config->window_height;
+    root["window_x"] = config->window_x;
+    root["window_y"] = config->window_y;
+    root["window_maximized"] = config->window_maximized;
+    root["has_window_placement"] = config->has_window_placement;
     root["fullscreen"] = config->fullscreen;
     root["target_fps"] = config->target_fps;
     root["ui_scale"] = config->ui_scale;
