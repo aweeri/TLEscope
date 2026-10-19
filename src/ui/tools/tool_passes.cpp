@@ -55,34 +55,10 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
     if (ImGui::SliderFloat("Time Span", &pass_time_span_hours, 1.0f, 72.0f, "%.0f h"))
         ToolSettingSetFloat(cfg, "passes.time_span_hours", pass_time_span_hours);
 
-    /* ---- 2.1: real-time recompute ----
-     * Recompute when the sim epoch advances past a small threshold, or when the
-     * mode / span / min-elev changed. This keeps the listing current as the
-     * simulation runs instead of only on a button press. */
+    /* shared with the Transit panel: recompute only when inputs change */
     double now = *ctx->current_epoch;
-    bool settings_changed = false;
-    static float s_last_min_elev = -1.0f;
-    static float s_last_span = -1.0f;
-    static int s_last_mode = -1;
-    if (s_last_min_elev != pass_min_elev || s_last_span != pass_time_span_hours ||
-        s_last_mode != s_mode)
-    {
-        s_last_min_elev = pass_min_elev;
-        s_last_span = pass_time_span_hours;
-        s_last_mode = s_mode;
-        settings_changed = true;
-    }
-    if (settings_changed || s_last_calc_epoch < 0.0 ||
-        fabs(now - s_last_calc_epoch) > 60.0 / 86400.0)
-    {
-        if (s_mode == 0 && *ctx->selected_sat)
-            CalculatePasses(*ctx->selected_sat, now);
-        else if (s_mode == 1)
-            CalculatePasses(NULL, now); /* all active satellites */
-        else
-            CalculatePassesFavorites(*ctx->selected_sat, now); /* favorites + selection */
+    if (EnsurePassesUpToDate((unsigned int)s_mode, *ctx->selected_sat, now))
         s_last_calc_epoch = now;
-    }
 
     ImGui::Separator();
 

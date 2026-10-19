@@ -843,10 +843,15 @@ void CalculatePasses(Satellite *sat, double start_epoch)
 {
     num_passes = 0;
     last_pass_calc_sat = sat;
-    LOG_INFO("Calculating passes for %s starting at epoch %.2f",
-             sat ? sat->name : "ALL satellites", start_epoch);
+    LOG_DEBUG("Calculating passes for %s starting at epoch %.2f",
+              sat ? sat->name : "ALL satellites", start_epoch);
 
-    int target_count = sat ? 1 : sat_count;
+    /* cap all-active to avoid an SGP4 blowup on large catalogs */
+    const int MAX_ALL_ACTIVE_PASS_SATS = 100;
+    int target_count = sat ? 1
+                           : (sat_count > MAX_ALL_ACTIVE_PASS_SATS
+                                  ? MAX_ALL_ACTIVE_PASS_SATS
+                                  : sat_count);
     double coarse_step = sat ? (1.0 / 1440.0) : (4.0 / 1440.0);
 
     for (int s = 0; s < target_count; s++)
@@ -857,7 +862,7 @@ void CalculatePasses(Satellite *sat, double start_epoch)
 
     /* sort passes chronologically so the list actually makes sense */
     qsort(passes, num_passes, sizeof(SatPass), compare_passes);
-    LOG_INFO("Pass calculation complete: %d passes found", num_passes);
+    LOG_DEBUG("Pass calculation complete: %d passes found", num_passes);
 }
 
 /** predict passes for every favorite satellite (plus the selected one) and append them to the list */
@@ -865,7 +870,7 @@ void CalculatePassesFavorites(Satellite *selected, double start_epoch)
 {
     num_passes = 0;
     last_pass_calc_sat = NULL;
-    LOG_INFO("Calculating passes for all favorites + selection starting at epoch %.2f", start_epoch);
+    LOG_DEBUG("Calculating passes for all favorites + selection starting at epoch %.2f", start_epoch);
 
     uint32_t fav_ids[MAX_SATELLITES];
     const int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
@@ -901,7 +906,69 @@ void CalculatePassesFavorites(Satellite *selected, double start_epoch)
 
     /* sort passes chronologically so the list actually makes sense */
     qsort(passes, num_passes, sizeof(SatPass), compare_passes);
-    LOG_INFO("Pass calculation complete: %d passes found", num_passes);
+    LOG_DEBUG("Pass calculation complete: %d passes found", num_passes);
+}
+
+bool EnsurePassesUpToDate(unsigned int mode, Satellite *selected,
+                          double start_epoch, bool force)
+{
+    /* hash the inputs that change the pass list (FNV-1a) */
+    unsigned int h = 2166136261u;
+    auto mix = [&h](unsigned int v) {
+        h ^= v;
+        h *= 16777619u;
+    };
+    auto mix64 = [&mix](uint64_t v) {
+        mix((unsigned int)(v & 0xffffffffu));
+        mix((unsigned int)(v >> 32));
+    };
+
+    mix(mode);
+    mix((unsigned int)(int)pass_min_elev);
+    mix((unsigned int)(int)pass_time_span_hours);
+
+    /* coarse 10-minute epoch bucket: lets the list drift without per-frame runs */
+    mix64((uint64_t)(start_epoch * 144.0));
+
+    Location *home = GetHomeLocation();
+    if (home) {
+        mix((unsigned int)(int)(home->lat * 1e4f));
+        mix((unsigned int)(int)(home->lon * 1e4f));
+        mix((unsigned int)(int)(home->alt * 1e2f));
+    }
+
+    if (selected) {
+        mix64((uint64_t)selected->norad_id_num);
+        mix64((uint64_t)(selected->epoch_unix));
+    } else {
+        mix64(0);
+    }
+
+    /* mode 0 with no selection: nothing to do (NULL would mean all-active) */
+    if (mode == 0 && selected == NULL)
+        return false;
+
+    static unsigned int s_last_h = 0;
+    static bool s_have_h = false;
+
+    if (!force && s_have_h && h == s_last_h)
+        return false;
+
+    switch (mode) {
+        case 0: /* selected satellite */
+            CalculatePasses(selected, start_epoch);
+            break;
+        case 1: /* all active */
+            CalculatePasses(NULL, start_epoch);
+            break;
+        default: /* favorites + selection */
+            CalculatePassesFavorites(selected, start_epoch);
+            break;
+    }
+
+    s_last_h = h;
+    s_have_h = true;
+    return true;
 }
 
 /* elevation (deg) of a satellite above the home location at a given epoch */

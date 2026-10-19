@@ -87,6 +87,10 @@ void get_az_el(Vector3 eci_pos, double gmst_deg, float obs_lat, float obs_lon, f
 void CalculatePasses(Satellite *sat, double start_epoch);
 void CalculatePassesFavorites(Satellite *selected, double start_epoch);
 
+/* recompute passes only when the cache key changes; returns true if recomputed */
+bool EnsurePassesUpToDate(unsigned int mode, Satellite *selected,
+                          double start_epoch, bool force = false);
+
 void GetFullPassWindow(Satellite *sat, double aos_epoch, double los_epoch,
                        double *out_aos, double *out_los);
 

@@ -181,6 +181,97 @@ static Mesh GenEarthMesh(float radius, int slices, int rings)
     return mesh;
 }
 
+/* Future ground-track sample cache: 2D tracks re-propagate every point each
+ * frame (~6000 SGP4 calls), so results are cached and rebuilt only on a miss. */
+struct FutureTrackCacheEntry {
+    Satellite *sat = NULL;
+    double sat_epoch = 0.0;   /* invalidates the track on a TLE reload */
+    int segments = 0;
+    float span = 0.0f;
+    float map_w = 0.0f;
+    float map_h = 0.0f;
+    float earth_offset = 0.0f;
+    bool want_sunlit = false;
+    double epoch_bucket = 0.0;
+    std::vector<Vector2> pts;
+    std::vector<double> times;
+    std::vector<bool> sunlit;
+    bool valid = false;
+};
+
+#define FUTURE_TRACK_CACHE_MAX 64
+static std::vector<FutureTrackCacheEntry> g_future_track_cache;
+
+/* coarse 10-minute sim-time bucket: refresh without per-frame propagation */
+static double FutureTrackEpochBucket(double epoch)
+{
+    return floor(epoch * 144.0);
+}
+
+/** return cached ground-track samples for one satellite, rebuilding on a miss */
+static const FutureTrackCacheEntry *GetFutureTrackSamples(
+    Satellite *sat, int segments, float span, double epoch,
+    float earth_offset, float map_w, float map_h, bool want_sunlit, Vector3 sun_dir)
+{
+    const double bucket = FutureTrackEpochBucket(epoch);
+
+    for (const FutureTrackCacheEntry &e : g_future_track_cache)
+    {
+        if (e.valid && e.sat == sat && e.sat_epoch == sat->epoch_unix &&
+            e.segments == segments && e.span == span &&
+            e.map_w == map_w && e.map_h == map_h && e.earth_offset == earth_offset &&
+            e.want_sunlit == want_sunlit && e.epoch_bucket == bucket)
+            return &e;
+    }
+
+    if ((int)g_future_track_cache.size() >= FUTURE_TRACK_CACHE_MAX)
+        g_future_track_cache.clear();
+
+    /* reuse a slot for this sat/resolution to keep vector capacity */
+    FutureTrackCacheEntry *slot = NULL;
+    for (FutureTrackCacheEntry &e : g_future_track_cache)
+    {
+        if (e.sat == sat && e.segments == segments && e.span == span)
+        {
+            slot = &e;
+            break;
+        }
+    }
+    if (!slot)
+    {
+        g_future_track_cache.push_back(FutureTrackCacheEntry{});
+        slot = &g_future_track_cache.back();
+    }
+
+    slot->sat = sat;
+    slot->sat_epoch = sat->epoch_unix;
+    slot->segments = segments;
+    slot->span = span;
+    slot->map_w = map_w;
+    slot->map_h = map_h;
+    slot->earth_offset = earth_offset;
+    slot->want_sunlit = want_sunlit;
+    slot->epoch_bucket = bucket;
+    slot->pts.resize((size_t)segments + 1);
+    slot->times.resize((size_t)segments + 1);
+    if (want_sunlit)
+        slot->sunlit.resize((size_t)segments + 1);
+
+    orbit_adaptive_sample_times(sat, epoch, segments + 1, span, slot->times.data());
+    for (int j = 0; j <= segments; j++)
+    {
+        double t = slot->times[j];
+        double t_unix = get_unix_from_epoch(t);
+        Vector3 raw_pos = calculate_position(sat, t_unix);
+        get_map_coordinates(raw_pos, epoch_to_gmst(t), earth_offset, map_w, map_h,
+                            &slot->pts[j].x, &slot->pts[j].y);
+        if (want_sunlit)
+            slot->sunlit[j] = !is_sat_eclipsed(raw_pos, sun_dir);
+    }
+    slot->valid = true;
+    return slot;
+}
+
 /** Pick a theme-defined color for an additional 2D future ground track. */
 static Color MultiGroundTrackColor(int index)
 {
@@ -2282,21 +2373,17 @@ int main(void)
                             if (!(period_days > 0.0))
                                 period_days = 1.0 / 1440.0;
 
-                            /* adaptive sampling: denser near perigee keeps high-eccentricity tracks smooth */
-                            orbit_adaptive_sample_times(&satellites[i], current_epoch, segments + 1,
-                                                        future_orbit_span, track_times);
+                            const bool want_sunlit = cfg.highlight_sunlit && apply_sunlit;
+                            const FutureTrackCacheEntry *ftc = GetFutureTrackSamples(
+                                &satellites[i], segments, future_orbit_span, current_epoch,
+                                cfg.earth_rotation_offset, map_w, map_h, want_sunlit, future_sun_dir);
 
                             for (int j = 0; j <= segments; j++)
                             {
-                                double t = track_times[j];
-                                double t_unix = get_unix_from_epoch(t);
-                                Vector3 raw_pos = calculate_position(&satellites[i], t_unix);
-                                get_map_coordinates(raw_pos, epoch_to_gmst(t), cfg.earth_rotation_offset, map_w, map_h, &track_pts[j].x, &track_pts[j].y);
-
-                                if (cfg.highlight_sunlit && apply_sunlit)
-                                {
-                                    is_sunlit_arr[j] = !is_sat_eclipsed(raw_pos, future_sun_dir);
-                                }
+                                track_pts[j] = ftc->pts[j];
+                                track_times[j] = ftc->times[j];
+                                if (want_sunlit)
+                                    is_sunlit_arr[j] = ftc->sunlit[j];
                             }
 
                             for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)

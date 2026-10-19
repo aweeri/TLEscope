@@ -244,7 +244,9 @@ static void TransitEnsurePasses(UIContext *ctx, AppConfig *cfg)
     {
         pass_min_elev = ToolSettingGetFloat(cfg, "passes.min_elev", 0.0f);
         pass_time_span_hours = ToolSettingGetFloat(cfg, "passes.time_span_hours", 24.0f);
-        s_mode = ToolSettingGetInt(cfg, "passes.mode", 0);
+        s_mode = ToolSettingGetInt(cfg, "passes.mode", 0); /* default: selected sat */
+        if (s_mode < 0 || s_mode > 2)
+            s_mode = 0;
         s_list_expanded = ToolSettingGetBool(cfg, "transit.list_expanded", true);
         s_show_deep_space = ToolSettingGetBool(cfg, "transit.show_deep_space", false);
         s_loaded = true;
@@ -256,34 +258,10 @@ static void TransitEnsurePasses(UIContext *ctx, AppConfig *cfg)
         return;
 
     double now = *ctx->current_epoch;
-    double wall = ImGui::GetTime();
-    static double s_last_wall_calc = -1.0;
-    static float s_last_min_elev = -1.0f;
-    static float s_last_span = -1.0f;
-    static int   s_last_mode = -1;
-    bool settings_changed = false;
-    if (s_last_min_elev != pass_min_elev || s_last_span != pass_time_span_hours ||
-        s_last_mode != s_mode)
-    {
-        s_last_min_elev = pass_min_elev;
-        s_last_span = pass_time_span_hours;
-        s_last_mode = s_mode;
-        settings_changed = true;
-    }
 
-    // wall-clock cadence keeps timewarp from thrashing the list every frame
-    bool wall_due = (s_last_wall_calc < 0.0) || (wall - s_last_wall_calc >= 0.5);
-    if (settings_changed || wall_due)
-    {
-        if (s_mode == 0 && *ctx->selected_sat)
-            CalculatePasses(*ctx->selected_sat, now);
-        else if (s_mode == 1)
-            CalculatePasses(NULL, now);
-        else
-            CalculatePassesFavorites(*ctx->selected_sat, now);
+    /* recompute only when the pass-list inputs change, not on a timer */
+    if (EnsurePassesUpToDate((unsigned int)s_mode, *ctx->selected_sat, now))
         s_last_calc_epoch = now;
-        s_last_wall_calc = wall;
-    }
 
     TransitSyncSelection();
 }
