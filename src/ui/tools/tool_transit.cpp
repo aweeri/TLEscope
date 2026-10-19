@@ -58,6 +58,7 @@ static bool   s_list_expanded = true;
 static bool   s_list_scroll_reset = true; /* scroll the child to the top on next draw */
 static bool   s_list_interacting = false; /* true while the user presses/drags the list */
 static int    s_last_num_passes = -1;     /* list size last draw (detect refreshes) */
+static bool   s_show_deep_space = false;  /* include deep-space/GEO/HEO sats in the list */
 
 /* stable selection identity: survives list recomputes while timewarping */
 static bool     s_sel_key_valid = false;
@@ -149,6 +150,23 @@ static void TransitEtaString(double now, const SatPass *p, char *out, size_t out
         snprintf(out, out_sz, "%ds", eta_sec);
 }
 
+static double SatPeriodMinutes(const Satellite *s)
+{
+    if (!s || s->mean_motion <= 0.0)
+        return 0.0;
+    const double two_pi = 6.28318530717958647692;
+    return (two_pi / s->mean_motion) / 60.0;
+}
+
+static bool SatIsDeepSpace(const Satellite *s)
+{
+    if (!s)
+        return false;
+    if (s->prop.valid)
+        return s->prop.is_deep_space;
+    return SatPeriodMinutes(s) > 225.0;
+}
+
 /** record the selected pass and its stable key (norad + AOS) */
 static void TransitSelectIndex(int i)
 {
@@ -228,6 +246,7 @@ static void TransitEnsurePasses(UIContext *ctx, AppConfig *cfg)
         pass_time_span_hours = ToolSettingGetFloat(cfg, "passes.time_span_hours", 24.0f);
         s_mode = ToolSettingGetInt(cfg, "passes.mode", 0);
         s_list_expanded = ToolSettingGetBool(cfg, "transit.list_expanded", true);
+        s_show_deep_space = ToolSettingGetBool(cfg, "transit.show_deep_space", false);
         s_loaded = true;
     }
 
@@ -345,6 +364,14 @@ static void TransitDrawFilterRow(AppConfig *cfg, const char *id, float avail_w)
             ToolSettingSetFloat(cfg, "passes.time_span_hours", pass_time_span_hours);
         ImGui::EndPopup();
     }
+
+    /* deep-space (>225 min period) inclusion toggle */
+    char deep_id[64];
+    snprintf(deep_id, sizeof(deep_id), "Show deep-space##%s_deep", id);
+    if (ImGui::Checkbox(deep_id, &s_show_deep_space))
+        ToolSettingSetBool(cfg, "transit.show_deep_space", s_show_deep_space);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Include geostationary / high-orbit sats (period > 225 min)");
 }
 
 /** hover-reveal skip button shared by the panel and overview rows; returns the slide offset */
@@ -568,7 +595,12 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
         float lh = ImGui::GetTextLineHeight();
         float row_h = lh * 3.0f + UIPx(12.0f);   /* three text lines per row */
         float per_row_h = row_h + st.ItemSpacing.y;
-        float content_h = num_passes * per_row_h + st.ItemSpacing.y;
+        /* count visible rows (deep-space hidden when the toggle is off) */
+        int visible_rows = 0;
+        for (int i = 0; i < num_passes; i++)
+            if (s_show_deep_space || !SatIsDeepSpace(passes[i].sat))
+                visible_rows++;
+        float content_h = visible_rows * per_row_h + st.ItemSpacing.y;
         float min_list_h = row_h + st.WindowPadding.y * 2.0f;
         float avail_h = ImGui::GetContentRegionAvail().y;
         float list_h = fminf(fminf(content_h, max_list_h), avail_h);
@@ -593,6 +625,10 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
         for (int i = 0; i < num_passes; i++)
         {
             SatPass *p = &passes[i];
+            bool deep = SatIsDeepSpace(p->sat);
+            /* deep-space sats hidden unless the toggle is on */
+            if (deep && !s_show_deep_space)
+                continue;
             const char *name = p->sat ? p->sat->name : "Unknown";
             const char *norad = (p->sat && p->sat->norad_id[0]) ? p->sat->norad_id : "sat";
 
@@ -651,24 +687,45 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
             snprintf(line1, sizeof(line1), "%s  #%s", name, norad);
             dl->AddText(ImVec2(tx, ty), IM_COL32(text.r, text.g, text.b, 235), line1);
 
-            char aos_str[64];
-            epoch_to_time_str(p->aos_epoch, aos_str);
-            char line2[160];
-            snprintf(line2, sizeof(line2), "AOS %s   Max El %.1f°", aos_str, p->max_el);
-            dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
+            if (deep)
+            {
+                /* deep-space / GEO / HEO: not a transiting pass, no AOS/LOS applies */
+                char line2[192];
+                snprintf(line2, sizeof(line2), "Deep-space / GEO / HEO   %s",
+                         (p->sat && p->sat->is_active) ? "always in view" : "inactive");
+                dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
 
-            char eta_str[32];
-            TransitEtaString(*ctx->current_epoch, p, eta_str, sizeof(eta_str));
-            double span = p->los_epoch - p->aos_epoch;
-            bool ongoing = (span > 0.0 && *ctx->current_epoch >= p->aos_epoch &&
-                            *ctx->current_epoch <= p->los_epoch);
-            double dur_s = span * 86400.0;
-            int dur_m = (int)(dur_s / 60.0);
-            int dur_sec = (int)(dur_s - dur_m * 60.0);
-            char line3[160];
-            snprintf(line3, sizeof(line3), "%s%s   %dm %02ds",
-                     ongoing ? "T-" : "in ", eta_str, dur_m, dur_sec);
-            dl->AddText(ImVec2(tx, ty + step * 2.0f), IM_COL32(warn.r, warn.g, warn.b, 220), line3);
+                double period_min = SatPeriodMinutes(p->sat);
+                char line3[192];
+                if (period_min > 0.0)
+                    snprintf(line3, sizeof(line3),
+                             "Period %.0f min   Longitude drifts slowly", period_min);
+                else
+                    snprintf(line3, sizeof(line3), "Longitude drifts slowly");
+                dl->AddText(ImVec2(tx, ty + step * 2.0f),
+                            IM_COL32(warn.r, warn.g, warn.b, 220), line3);
+            }
+            else
+            {
+                char aos_str[64];
+                epoch_to_time_str(p->aos_epoch, aos_str);
+                char line2[160];
+                snprintf(line2, sizeof(line2), "AOS %s   Max El %.1f°", aos_str, p->max_el);
+                dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
+
+                char eta_str[32];
+                TransitEtaString(*ctx->current_epoch, p, eta_str, sizeof(eta_str));
+                double span = p->los_epoch - p->aos_epoch;
+                bool ongoing = (span > 0.0 && *ctx->current_epoch >= p->aos_epoch &&
+                                *ctx->current_epoch <= p->los_epoch);
+                double dur_s = span * 86400.0;
+                int dur_m = (int)(dur_s / 60.0);
+                int dur_sec = (int)(dur_s - dur_m * 60.0);
+                char line3[160];
+                snprintf(line3, sizeof(line3), "%s%s   %dm %02ds",
+                         ongoing ? "T-" : "in ", eta_str, dur_m, dur_sec);
+                dl->AddText(ImVec2(tx, ty + step * 2.0f), IM_COL32(warn.r, warn.g, warn.b, 220), line3);
+            }
 
             dl->PopClipRect();
 
@@ -785,6 +842,10 @@ static void DrawTransitOverviewList(UIContext *ctx, AppConfig *cfg)
     for (int i = 0; i < num_passes; i++)
     {
         SatPass *p = &passes[i];
+        bool deep = SatIsDeepSpace(p->sat);
+        /* deep-space sats hidden unless the toggle is on */
+        if (deep && !s_show_deep_space)
+            continue;
         const char *name = p->sat ? p->sat->name : "Unknown";
         const char *norad = (p->sat && p->sat->norad_id[0]) ? p->sat->norad_id : "sat";
 
@@ -850,35 +911,61 @@ static void DrawTransitOverviewList(UIContext *ctx, AppConfig *cfg)
         snprintf(line1, sizeof(line1), "%s  #%s", name, norad);
         dl->AddText(ImVec2(tx, ty), IM_COL32(text.r, text.g, text.b, 235), line1);
 
-        char aos_str[64], los_str[64];
-        epoch_to_datetime_str(p->aos_epoch, aos_str);
-        epoch_to_datetime_str(p->los_epoch, los_str);
-        char line2[160];
-        snprintf(line2, sizeof(line2), "AOS %s", aos_str);
-        dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
-        char line3[160];
-        snprintf(line3, sizeof(line3), "LOS %s", los_str);
-        dl->AddText(ImVec2(tx, ty + step * 2.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line3);
+        if (deep)
+        {
+            /* deep-space / GEO / HEO: no discrete AOS/LOS exists for these */
+            char line2[160];
+            snprintf(line2, sizeof(line2), "Deep-space / GEO / HEO   always in view");
+            dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
 
-        double dur_s = (p->los_epoch - p->aos_epoch) * 86400.0;
-        int dur_m = (int)(dur_s / 60.0);
-        int dur_sec = (int)(dur_s - dur_m * 60.0);
-        char eta_str[32];
-        TransitEtaString(now, p, eta_str, sizeof(eta_str));
-        char line4[192];
-        snprintf(line4, sizeof(line4), "Max El %.1f°   %dm %02ds   in %s",
-                 p->max_el, dur_m, dur_sec, eta_str);
-        dl->AddText(ImVec2(tx, ty + step * 3.0f), IM_COL32(warn.r, warn.g, warn.b, 220), line4);
+            double period_min = SatPeriodMinutes(p->sat);
+            char line3[160];
+            if (period_min > 0.0)
+                snprintf(line3, sizeof(line3), "Period %.0f min   no AOS/LOS", period_min);
+            else
+                snprintf(line3, sizeof(line3), "no AOS/LOS");
+            dl->AddText(ImVec2(tx, ty + step * 2.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line3);
 
-        double aos_az = (p->num_pts > 0) ? p->path_pts[0].x : 0.0;
-        double peak_az = aos_az;
-        int peak = 0;
-        for (int k = 1; k < p->num_pts; k++)
-            if (p->path_pts[k].y > p->path_pts[peak].y) peak = k;
-        if (p->num_pts > 0) peak_az = p->path_pts[peak].x;
-        char line5[192];
-        snprintf(line5, sizeof(line5), "AOS Az %.1f°   Peak Az %.1f°", aos_az, peak_az);
-        dl->AddText(ImVec2(tx, ty + step * 4.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line5);
+            char line4[192];
+            snprintf(line4, sizeof(line4), "Longitude drifts slowly");
+            dl->AddText(ImVec2(tx, ty + step * 3.0f), IM_COL32(warn.r, warn.g, warn.b, 220), line4);
+
+            char line5[192];
+            snprintf(line5, sizeof(line5), "Not a transiting pass");
+            dl->AddText(ImVec2(tx, ty + step * 4.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line5);
+        }
+        else
+        {
+            char aos_str[64], los_str[64];
+            epoch_to_datetime_str(p->aos_epoch, aos_str);
+            epoch_to_datetime_str(p->los_epoch, los_str);
+            char line2[160];
+            snprintf(line2, sizeof(line2), "AOS %s", aos_str);
+            dl->AddText(ImVec2(tx, ty + step), IM_COL32(dim.r, dim.g, dim.b, 220), line2);
+            char line3[160];
+            snprintf(line3, sizeof(line3), "LOS %s", los_str);
+            dl->AddText(ImVec2(tx, ty + step * 2.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line3);
+
+            double dur_s = (p->los_epoch - p->aos_epoch) * 86400.0;
+            int dur_m = (int)(dur_s / 60.0);
+            int dur_sec = (int)(dur_s - dur_m * 60.0);
+            char eta_str[32];
+            TransitEtaString(now, p, eta_str, sizeof(eta_str));
+            char line4[192];
+            snprintf(line4, sizeof(line4), "Max El %.1f°   %dm %02ds   in %s",
+                     p->max_el, dur_m, dur_sec, eta_str);
+            dl->AddText(ImVec2(tx, ty + step * 3.0f), IM_COL32(warn.r, warn.g, warn.b, 220), line4);
+
+            double aos_az = (p->num_pts > 0) ? p->path_pts[0].x : 0.0;
+            double peak_az = aos_az;
+            int peak = 0;
+            for (int k = 1; k < p->num_pts; k++)
+                if (p->path_pts[k].y > p->path_pts[peak].y) peak = k;
+            if (p->num_pts > 0) peak_az = p->path_pts[peak].x;
+            char line5[192];
+            snprintf(line5, sizeof(line5), "AOS Az %.1f°   Peak Az %.1f°", aos_az, peak_az);
+            dl->AddText(ImVec2(tx, ty + step * 4.0f), IM_COL32(dim.r, dim.g, dim.b, 220), line5);
+        }
 
         char line6[192];
         if (p->sat && home)
@@ -904,9 +991,9 @@ static void DrawTransitOverviewList(UIContext *ctx, AppConfig *cfg)
         dl->AddText(ImVec2(now_x, ty), IM_COL32(dim.r, dim.g, dim.b, 200), line6);
 
         double span = p->los_epoch - p->aos_epoch;
-        if (span > 0.0 && now >= p->aos_epoch && now <= p->los_epoch)
+        if (deep || (span > 0.0 && now >= p->aos_epoch && now <= p->los_epoch))
         {
-            float progress = (float)((now - p->aos_epoch) / span);
+            float progress = deep ? 1.0f : (float)((now - p->aos_epoch) / span);
             float bar_h = UIPx(4.0f);
             ImVec2 bar0 = ImVec2(tx, row_start.y + row_h - bar_h - UIPx(6.0f));
             float bar_right = content_right - UIPx(6.0f) + shift;
