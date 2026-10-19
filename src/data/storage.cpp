@@ -1,5 +1,6 @@
 #include "storage.h"
 #include "core/types.h"
+#include "core/astro.h"
 #include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -306,7 +307,7 @@ bool LoadSourceState(const char *filename, DataSourceState *sources, int *count,
 // In-memory set of favorite NORAD catalog numbers, loaded/saved as a JSON
 // array of numeric ids (mirrors SaveSourceState/LoadSourceState style).
 
-static uint32_t s_fav_ids[MAX_SATELLITES];
+static uint32_t s_fav_ids[MAX_SATELLITES_HARD_CAP];
 static int s_fav_count = 0;
 
 int LoadFavorites(const char *filename)
@@ -337,7 +338,7 @@ int LoadFavorites(const char *filename)
     if (favs == root.end() || !favs->is_array())
         return 0;
 
-    for (size_t i = 0; i < favs->size() && s_fav_count < MAX_SATELLITES; i++)
+    for (size_t i = 0; i < favs->size() && s_fav_count < GetMaxSatellites(); i++)
     {
         if (favs->at(i).is_number_unsigned())
             s_fav_ids[s_fav_count++] = (uint32_t)favs->at(i).get<uint64_t>();
@@ -399,7 +400,7 @@ void SetFavorite(uint32_t norad_id, bool fav)
             return;
         }
     }
-    if (fav && s_fav_count < MAX_SATELLITES)
+    if (fav && s_fav_count < GetMaxSatellites())
         s_fav_ids[s_fav_count++] = norad_id;
 }
 

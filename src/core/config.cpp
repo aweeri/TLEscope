@@ -1,5 +1,6 @@
 #include "config.h"
 #include "types.h"
+#include "astro.h"
 #include "theme.h"
 #include "location.h"
 #include "util/log.h"
@@ -52,6 +53,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
     config->network_timeout_seconds = 45;
+    config->max_satellites = DEFAULT_MAX_SATELLITES;
     config->prop_use_short_period = true;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
@@ -176,6 +178,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->network_timeout_seconds = get_int("network_timeout_seconds", config->network_timeout_seconds);
                     if (config->network_timeout_seconds < 15) config->network_timeout_seconds = 15;
                     if (config->network_timeout_seconds > 300) config->network_timeout_seconds = 300;
+                    config->max_satellites = get_int("max_satellites", config->max_satellites);
+                    if (config->max_satellites < MIN_MAX_SATELLITES) config->max_satellites = MIN_MAX_SATELLITES;
+                    if (config->max_satellites > MAX_MAX_SATELLITES) config->max_satellites = MAX_MAX_SATELLITES;
                     config->first_day_of_week = get_int("first_day_of_week", config->first_day_of_week);
                     config->prop_use_short_period = get_bool("prop_use_short_period", config->prop_use_short_period);
 
@@ -560,7 +565,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                         if (as != root.end() && as->is_array())
                         {
                             config->has_saved_selection = true;
-                            for (size_t i = 0; i < as->size() && config->active_sat_count < MAX_SATELLITES; i++)
+                            for (size_t i = 0; i < as->size() && config->active_sat_count < config->max_satellites; i++)
                             {
                                 if (as->at(i).is_number_unsigned())
                                     config->active_sat_ids[config->active_sat_count++] = (uint32_t)as->at(i).get<uint64_t>();
@@ -608,6 +613,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->show_coast_lines = true;
         config->hint_vsync = true;
         config->night_mode = false;
+        config->max_satellites = DEFAULT_MAX_SATELLITES;
         config->prop_use_short_period = true;
         // first run: a single default home location, no forced example marker
         location_count = 0;
@@ -624,6 +630,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     /* persist the one-time width-unit migration so it never runs twice */
     if (layout_migrated)
         SaveAppConfig(filename, config);
+
+    /* apply the persisted runtime satellite limit before any data loading */
+    SetMaxSatellites(config->max_satellites);
 
     TLEscopeSetCurlTimeoutSeconds(config->network_timeout_seconds);
 
@@ -675,6 +684,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["first_day_of_week"] = config->first_day_of_week;
     root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
     root["network_timeout_seconds"] = config->network_timeout_seconds;
+    root["max_satellites"] = config->max_satellites;
     root["prop_use_short_period"] = config->prop_use_short_period;
 
     if (config->custom_data_source_count > 0)

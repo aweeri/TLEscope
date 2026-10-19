@@ -1328,6 +1328,31 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 ImGui::TextDisabled("Unlimited FPS");
         }
 
+        /* ---- Satellites section ------------------------------------------ */
+        if (ImGui::CollapsingHeader("Satellites"))
+        {
+            int max_sats = cfg->max_satellites;
+            if (max_sats < MIN_MAX_SATELLITES) max_sats = MIN_MAX_SATELLITES;
+            if (max_sats > MAX_MAX_SATELLITES) max_sats = MAX_MAX_SATELLITES;
+
+            ImGui::Text("Maximum satellites:");
+            /* logarithmic scaling makes the wide 1000-100000 range usable */
+            if (ImGui::SliderInt("##max_satellites", &max_sats,
+                                 MIN_MAX_SATELLITES, MAX_MAX_SATELLITES,
+                                 "%d", ImGuiSliderFlags_Logarithmic))
+            {
+                cfg->max_satellites = max_sats;
+                SetMaxSatellites(max_sats);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Maximum number of satellites fetched and kept in memory.\n"
+                                  "Higher values use more memory. Takes effect on the next fetch/merge.");
+            if (ImGui::IsItemDeactivatedAfterEdit())
+                SaveAppConfig("settings.json", cfg);
+
+            ImGui::TextDisabled("Default: 50000. Range: 1000-100000. Higher values use more memory.");
+        }
+
         /* ---- Locations section (single source of truth for markers + home) */
         if (ImGui::CollapsingHeader("Locations"))
         {

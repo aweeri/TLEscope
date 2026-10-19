@@ -42,8 +42,23 @@ static void eci_to_ecef(Vector3 eci, double gmst_deg, double *ox, double *oy, do
     *oz = eci.y;
 }
 
-Satellite satellites[MAX_SATELLITES];
+Satellite satellites[MAX_SATELLITES_HARD_CAP];
 int sat_count = 0;
+
+/* runtime-configurable satellite limit (see astro.h) */
+static int s_max_satellites = DEFAULT_MAX_SATELLITES;
+
+int GetMaxSatellites(void)
+{
+    return s_max_satellites;
+}
+
+void SetMaxSatellites(int value)
+{
+    if (value < MIN_MAX_SATELLITES) value = MIN_MAX_SATELLITES;
+    if (value > MAX_SATELLITES_HARD_CAP) value = MAX_SATELLITES_HARD_CAP;
+    s_max_satellites = value;
+}
 
 SatPass passes[MAX_PASSES];
 int num_passes = 0;
@@ -179,8 +194,8 @@ bool add_satellite_from_tle_to(Satellite *sats, int *count,
                                const char* line0, const char* line1, const char* line2, OrbitalDataMeta *meta)
 {
     if (!sats || !count) return false;
-    if (*count >= MAX_SATELLITES) {
-        LOG_WARN("Cannot add satellite - MAX_SATELLITES (%d) reached", MAX_SATELLITES);
+    if (*count >= GetMaxSatellites()) {
+        LOG_WARN("Cannot add satellite - max satellites (%d) reached", GetMaxSatellites());
         return false;
     }
     Satellite *sat = &sats[*count];
@@ -273,8 +288,8 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
                                         double bstar, OrbitalDataMeta *meta)
 {
     if (!sats || !count) return false;
-    if (*count >= MAX_SATELLITES) {
-        LOG_WARN("Cannot add OMM satellite %s - MAX_SATELLITES (%d) reached", name, MAX_SATELLITES);
+    if (*count >= GetMaxSatellites()) {
+        LOG_WARN("Cannot add OMM satellite %s - max satellites (%d) reached", name, GetMaxSatellites());
         return false;
     }
     Satellite *sat = &sats[*count];
@@ -326,7 +341,7 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
 void load_orbital_data(const char *filename)
 {
     // try loading from the new structured storage first
-    if (LoadOrbitalData(filename, satellites, &sat_count, MAX_SATELLITES))
+    if (LoadOrbitalData(filename, satellites, &sat_count, GetMaxSatellites()))
     {
         LOG_INFO("Loaded %d satellites from %s", sat_count, filename);
 
@@ -355,7 +370,7 @@ void load_orbital_data(const char *filename)
 /** bulk loading of orbital data from an in-memory JSON string (no disk access) */
 void load_orbital_data_from_string(const char *json)
 {
-    if (LoadOrbitalDataFromString(json, satellites, &sat_count, MAX_SATELLITES))
+    if (LoadOrbitalDataFromString(json, satellites, &sat_count, GetMaxSatellites()))
     {
         LOG_INFO("Loaded %d satellites from in-memory orbital data", sat_count);
 
@@ -872,8 +887,9 @@ void CalculatePassesFavorites(Satellite *selected, double start_epoch)
     last_pass_calc_sat = NULL;
     LOG_DEBUG("Calculating passes for all favorites + selection starting at epoch %.2f", start_epoch);
 
-    uint32_t fav_ids[MAX_SATELLITES];
-    const int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
+    /* static: keeps this large buffer off the stack */
+    static uint32_t fav_ids[MAX_SATELLITES_HARD_CAP];
+    const int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES_HARD_CAP);
     const double coarse_step = 4.0 / 1440.0;
 
     /* the currently selected satellite is included even if it is not a favorite */

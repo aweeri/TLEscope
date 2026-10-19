@@ -28,6 +28,11 @@ extern Satellite *last_pass_calc_sat;
 extern float pass_min_elev;        /* minimum elevation (deg) for a pass to count */
 extern float pass_time_span_hours; /* prediction window in hours (default 24) */
 
+/* configurable runtime satellite limit (defaults to DEFAULT_MAX_SATELLITES).
+ * SetMaxSatellites() clamps to [MIN_MAX_SATELLITES, MAX_SATELLITES_HARD_CAP]. */
+int GetMaxSatellites(void);
+void SetMaxSatellites(int value);
+
 double get_current_real_time_epoch(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char *buffer);

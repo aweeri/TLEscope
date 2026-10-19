@@ -234,6 +234,7 @@ void UIRequestExit(void);
 /* shared helpers */
 Color ApplyAlpha(Color c, float alpha);
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color);
+double ClampTimeMultiplier(double v);
 double StepTimeMultiplier(double current, bool increase);
 bool IsOccludedByEarth(Vector3 camPos, Vector3 targetPos, float earthRadius);
 bool IsOrbitSegmentOccluded(Vector3 camPos, Vector3 a, Vector3 b, float earthRadius);

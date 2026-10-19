@@ -481,7 +481,7 @@ static void UpdateAutoWarpState(bool *is_auto_warping, double *auto_warp_target,
         double eased_speed = fmin(base_speed, fabs(diff_sec) * 3.0);
         if (eased_speed < 1.0)
             eased_speed = 1.0;
-        *time_multiplier = eased_speed * warp_dir;
+        *time_multiplier = ClampTimeMultiplier(eased_speed * warp_dir);
 
         if (fabs(diff_sec) <= fabs(*time_multiplier) * GetFrameTime())
         {
@@ -2174,9 +2174,10 @@ int main(void)
 
                         if (gc_mode == LAYERS_GC_MODE_ALL || gc_mode == LAYERS_GC_MODE_FAV)
                         {
-                            uint32_t fav_ids[MAX_SATELLITES];
+                            /* static: keeps this large buffer off the stack */
+                            static uint32_t fav_ids[MAX_SATELLITES_HARD_CAP];
                             int fav_count = (gc_mode == LAYERS_GC_MODE_FAV)
-                                ? GetFavoriteIds(fav_ids, MAX_SATELLITES) : 0;
+                                ? GetFavoriteIds(fav_ids, MAX_SATELLITES_HARD_CAP) : 0;
 
                             BeginShaderMode(g_coverage_shaders.shader2D);
                             rlBegin(RL_TRIANGLES);
@@ -2648,7 +2649,8 @@ int main(void)
                 SetShaderValue(g_coverage_shaders.shader3D, g_coverage_shaders.cameraPosLoc,
                                &Camera3DParams.position, SHADER_UNIFORM_VEC3);
                 
-                Satellite *visible_sats[MAX_SATELLITES];
+                /* static: keeps this large buffer off the stack */
+                static Satellite *visible_sats[MAX_SATELLITES_HARD_CAP];
                 int visible_count = 0;
                 
                 if (gc_mode == LAYERS_GC_MODE_ALL)
@@ -2665,8 +2667,9 @@ int main(void)
                 }
                 else if (gc_mode == LAYERS_GC_MODE_FAV)
                 {
-                    uint32_t fav_ids[MAX_SATELLITES];
-                    int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES);
+                    /* static: keeps this large buffer off the stack */
+                    static uint32_t fav_ids[MAX_SATELLITES_HARD_CAP];
+                    int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES_HARD_CAP);
                     for (int i = 0; i < sat_count; i++)
                     {
                         if (!satellites[i].is_active)
@@ -2786,8 +2789,9 @@ int main(void)
             const bool orbits_fav_colored = ToolSettingGetBool(&cfg, LAYERS_KEY_FAV_ORBITS_3D, false);
             const int sunlit_scope = ToolSettingGetInt(&cfg, LAYERS_KEY_ORBITS_SUNLIT_SCOPE, LAYERS_ORBITS_SUNLIT_SELECTED);
 
-            uint32_t fav_ids[MAX_SATELLITES];
-            int fav_count = orbits_fav_colored ? GetFavoriteIds(fav_ids, MAX_SATELLITES) : 0;
+            /* static: keeps this large buffer off the stack */
+            static uint32_t fav_ids[MAX_SATELLITES_HARD_CAP];
+            int fav_count = orbits_fav_colored ? GetFavoriteIds(fav_ids, MAX_SATELLITES_HARD_CAP) : 0;
 
             /* one orbit style per satellite: sunlit > highlight > fav-color > dimmed */
             if (orbits_enabled)

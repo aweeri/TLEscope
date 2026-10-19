@@ -62,52 +62,55 @@ void DrawUIText(Font font, const char *text, float x, float y, float size, Color
     DrawTextEx(font, text, pos, size, 1, color);
 }
 
+/* clamp a time multiplier to the symmetric magnitude limit, preserving sign */
+double ClampTimeMultiplier(double v)
+{
+    if (v > MAX_TIME_MULTIPLIER)
+        return MAX_TIME_MULTIPLIER;
+    if (v < -MAX_TIME_MULTIPLIER)
+        return -MAX_TIME_MULTIPLIER;
+    return v;
+}
+
 double StepTimeMultiplier(double current, bool increase)
 {
-    /* doubling/halving time multiplier with a zero-crossing snap at 0.25 (0.5 -> 0, 0 -> -0.5) */
+    /* snap to zero at 0.25 so the step sequence crosses 0 without stalling */
     const double eps = 1e-9;
     const double snap_threshold = 0.25;
+    double next;
 
     if (increase)
     {
-        /* forward: speed up */
         if (fabs(current) < eps)
-            return 0.5;               /* 0 -> 0.5 */
-
-        if (current < 0.0)
+            next = 0.5;
+        else if (current < 0.0)
         {
-            /* negative side, moving toward zero: halve magnitude */
-            double next = current / 2.0;
-            if (fabs(next) <= snap_threshold)  /* -0.5/2=-0.25, snap to 0 */
-                return 0.0;
-            return next;
+            next = current / 2.0;
+            if (fabs(next) <= snap_threshold)
+                next = 0.0;
         }
         else
         {
-            /* positive side: double */
-            return current * 2.0;
+            next = current * 2.0;
         }
     }
     else
     {
-        /* backward: slow down */
         if (fabs(current) < eps)
-            return -0.5;              /* 0 -> -0.5 */
-
-        if (current > 0.0)
+            next = -0.5;
+        else if (current > 0.0)
         {
-            /* positive side, moving toward zero: halve */
-            double next = current / 2.0;
-            if (next <= snap_threshold)        /* 0.5/2=0.25, snap to 0 */
-                return 0.0;
-            return next;
+            next = current / 2.0;
+            if (next <= snap_threshold)
+                next = 0.0;
         }
         else
         {
-            /* negative side: double magnitude in reverse */
-            return current * 2.0;
+            next = current * 2.0;
         }
     }
+
+    return ClampTimeMultiplier(next);
 }
 
 /* -- Modal state (static to this file) ------------------------------------- */
@@ -969,7 +972,7 @@ void SaveSatSelection(AppConfig *cfg)
     if (!cfg) return;
 
     cfg->active_sat_count = 0;
-    for (int i = 0; i < sat_count && cfg->active_sat_count < MAX_SATELLITES; i++)
+    for (int i = 0; i < sat_count && cfg->active_sat_count < GetMaxSatellites(); i++)
     {
         if (satellites[i].is_active)
             cfg->active_sat_ids[cfg->active_sat_count++] = satellites[i].norad_id_num;

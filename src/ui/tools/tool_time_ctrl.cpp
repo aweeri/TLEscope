@@ -18,7 +18,14 @@ void DrawPanelTimeCtrl(UIContext *ctx, AppConfig *cfg)
 
     ImGui::Text("Current: %s", ctx->datetime_str);
     ImGui::SetNextItemWidth(avail_w);
-    { double v_min = 0.0, v_max = 3600.0; ImGui::SliderScalar("Speed", ImGuiDataType_Double, ctx->time_multiplier, &v_min, &v_max, "%.1fx"); }
+    {
+        /* symmetric range crossing zero, so the log slider covers reverse..forward */
+        double v_min = -MAX_TIME_MULTIPLIER, v_max = MAX_TIME_MULTIPLIER;
+        ImGui::SliderScalar("Speed", ImGuiDataType_Double, ctx->time_multiplier,
+                            &v_min, &v_max, "%.1fx", ImGuiSliderFlags_Logarithmic);
+        /* defense in depth: never allow the widget to escape the cap */
+        *ctx->time_multiplier = ClampTimeMultiplier(*ctx->time_multiplier);
+    }
 
     float btn_w = (avail_w - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
     if (ImGui::Button("Pause/Resume", ImVec2(btn_w, 0)))

@@ -76,12 +76,21 @@
 #include <time.h>
 
 // basic limits and math constants
-#define MAX_SATELLITES 15000
+
+// compile-time fixed-array capacity; runtime limit is GetMaxSatellites()
+#define MAX_SATELLITES_HARD_CAP 100000
+#define DEFAULT_MAX_SATELLITES  50000
+#define MIN_MAX_SATELLITES      1000
+#define MAX_MAX_SATELLITES      MAX_SATELLITES_HARD_CAP
+
 #define MAX_LOCATIONS 256
 #define EARTH_RADIUS_KM 6371.0f
 #define MOON_RADIUS_KM 1737.4f
 #define MU 398600.4418f
 #define DRAW_SCALE 3000.0f
+
+/* symmetric timewarp magnitude limit: 524288 == 2^19 */
+#define MAX_TIME_MULTIPLIER 524288.0
 
 #define ORBIT_CACHE_SIZE 361
 #define MAX_CUSTOM_DATA_SOURCES 20
@@ -276,7 +285,7 @@ typedef struct {
     bool panel_enabled[MAX_PANELS];
 } UILayoutPersist;
 
-extern Satellite satellites[MAX_SATELLITES];
+extern Satellite satellites[MAX_SATELLITES_HARD_CAP];
 extern int sat_count;
 
 extern Location locations[MAX_LOCATIONS];
@@ -376,7 +385,7 @@ typedef struct
     RotatorSettings rotator_settings;  // persisted rotator connection config
 
     /* persisted active satellite selection (NORAD ids) */
-    uint32_t active_sat_ids[MAX_SATELLITES];
+    uint32_t active_sat_ids[MAX_SATELLITES_HARD_CAP];
     int active_sat_count;
     bool has_saved_selection;  // true once a selection has been persisted
 
@@ -395,6 +404,7 @@ typedef struct
 
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
     int network_timeout_seconds;       // HTTP request timeout, 15-300 seconds (default 45)
+    int max_satellites;                // runtime limit, MIN_MAX_SATELLITES..MAX_MAX_SATELLITES
 
     UILayoutPersist ui_layout;  // sidebar/panel layout persistence
 

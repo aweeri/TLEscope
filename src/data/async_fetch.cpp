@@ -195,10 +195,11 @@ static void worker_main(void)
         AsyncFetchResult res;
         memset(&res, 0, sizeof(res));
         res.job = job;
-        res.parsed = (Satellite*)malloc(MAX_SATELLITES * sizeof(Satellite));
+        res.parsed = (Satellite*)malloc(MAX_SATELLITES_HARD_CAP * sizeof(Satellite));
         if (res.parsed)
         {
-            res.parsed_count = parse_payload(&job, NULL, 0, res.parsed, MAX_SATELLITES);
+            /* never parse more than the runtime-configurable limit */
+            res.parsed_count = parse_payload(&job, NULL, 0, res.parsed, GetMaxSatellites());
             res.success = (res.parsed_count > 0);
         }
 
@@ -304,7 +305,8 @@ void AsyncFetchApplyResults(void)
         }
 
         // copy into the global array (UI thread only - safe with the render loop)
-        int room = MAX_SATELLITES - sat_count;
+        int room = GetMaxSatellites() - sat_count;
+        if (room < 0) room = 0; /* guard when the limit was lowered below the loaded count */
         int to_copy = (res.parsed_count < room) ? res.parsed_count : room;
         if (to_copy > 0)
         {
@@ -315,7 +317,7 @@ void AsyncFetchApplyResults(void)
         }
         else
         {
-            LOG_WARN("MAX_SATELLITES reached - dropped %d satellites from %s",
+            LOG_WARN("Max satellites limit reached - dropped %d satellites from %s",
                      res.parsed_count, res.job.name);
         }
 
