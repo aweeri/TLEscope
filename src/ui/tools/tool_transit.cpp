@@ -748,10 +748,8 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
 
     /* ---- polar plot ---- */
     ImGui::Separator();
-    /* fit the polar grid to the panel width */
     float plot_avail_w = ImGui::GetContentRegionAvail().x;
-    float plot_avail_h = ImGui::GetContentRegionAvail().y;
-    float plot_size = fminf(plot_avail_w, plot_avail_h);
+    float plot_size = plot_avail_w;
     float min_plot = UIPx(120.0f);
     if (plot_size < min_plot)
         plot_size = min_plot;
@@ -1005,8 +1003,7 @@ static void DrawTransitPolarTab(UIContext *ctx, AppConfig *cfg)
     bool has_sel = (TransitSelectedPass() != NULL);
 
     float avail_w = ImGui::GetContentRegionAvail().x;
-    float avail_h = ImGui::GetContentRegionAvail().y;
-    float size = fminf(avail_w, avail_h);
+    float size = avail_w;
     if (size < UIPx(120.0f)) size = UIPx(120.0f);
 
     float indent = (avail_w - size) * 0.5f;

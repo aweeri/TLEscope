@@ -6,6 +6,7 @@
 #include "tools_common.h"
 #include "tools_registry.h"
 #include "ui/ui_layout.h"
+#include "ui/imgui_theme.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
@@ -169,6 +170,9 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     const ImU32 dim = ImGui::GetColorU32(ThemeColor(g_theme.ui.text_dim));
     const ImU32 fav_yellow = ImGui::GetColorU32(ImVec4(1.0f, 0.85f, 0.1f, 1.0f));
 
+    static uint32_t fav_ids[MAX_SATELLITES_HARD_CAP];
+    int fav_count = GetFavoriteIds(fav_ids, MAX_SATELLITES_HARD_CAP);
+
     ImGuiListClipper clipper;
     clipper.Begin((int)order.size(), row_h);
     while (clipper.Step())
@@ -181,16 +185,33 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 
             ImGui::PushID(i);
 
+            bool selected = (*ctx->selected_sat == &satellites[i]);
+
             /* always show the favorite control so it is discoverable */
             ImVec2 p = ImGui::GetCursorScreenPos();
             ImVec2 frame = ImVec2(20.0f, 20.0f);
             ImVec2 star_center = ImVec2(p.x + frame.x * 0.5f, p.y + frame.y * 0.5f);
 
             ImDrawList *dl = ImGui::GetWindowDrawList();
+
+            ImU32 fav_col = fav_yellow;
             if (fav)
-                DrawStarFilled(dl, star_center, 7.0f, fav_yellow);
+            {
+                for (int k = 0; k < fav_count; k++)
+                {
+                    if (satellites[i].norad_id_num == fav_ids[k])
+                    {
+                        Color c = g_theme.ground_tracks.palette[k % GROUND_TRACK_PALETTE_SIZE];
+                        fav_col = IM_COL32(c.r, c.g, c.b, 255);
+                        break;
+                    }
+                }
+                DrawStarFilled(dl, star_center, 7.0f, fav_col);
+            }
             else
+            {
                 DrawStarHollow(dl, star_center, 7.0f, dim);
+            }
 
             ImGui::InvisibleButton("##fav", frame);
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
@@ -210,6 +231,9 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
                 SaveSatSelection(cfg);
                 SaveAppConfig("settings.json", cfg);
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(satellites[i].is_active ? "Deactivate satellite"
+                                                          : "Activate satellite");
             ImGui::SameLine();
 
             if (!active)
@@ -222,7 +246,7 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
 
             float row_avail = ImGui::GetContentRegionAvail().x;
             ImVec2 selectable_size = ImVec2(row_avail, 20);
-            if (ImGui::Selectable(label, *ctx->selected_sat == &satellites[i],
+            if (ImGui::Selectable(label, selected,
                                   ImGuiSelectableFlags_None, selectable_size))
             {
                 /* clicking the already-selected row toggles the selection off */
@@ -231,6 +255,19 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 LayoutOpenPanel(PANEL_SAT_INFO);
+            }
+
+            // BROKEN TODO
+            if (selected)
+            {
+                Color accent = g_theme.ui.accent;
+                ImVec2 rect_min = ImGui::GetItemRectMin();
+                ImVec2 rect_max = ImGui::GetItemRectMax();
+                ImU32 accent_u32 = IM_COL32(accent.r, accent.g, accent.b, 255);
+
+                /* right tab, flush to the row's right edge, full row height */
+                dl->AddRectFilled(ImVec2(rect_max.x - UIPx(3.0f), rect_min.y),
+                                  ImVec2(rect_max.x, rect_max.y), accent_u32);
             }
 
             if (!active)
