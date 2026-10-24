@@ -861,18 +861,29 @@ void CalculatePasses(Satellite *sat, double start_epoch)
     LOG_DEBUG("Calculating passes for %s starting at epoch %.2f",
               sat ? sat->name : "ALL satellites", start_epoch);
 
-    /* cap all-active to avoid an SGP4 blowup on large catalogs */
-    const int MAX_ALL_ACTIVE_PASS_SATS = 100;
-    int target_count = sat ? 1
-                           : (sat_count > MAX_ALL_ACTIVE_PASS_SATS
-                                  ? MAX_ALL_ACTIVE_PASS_SATS
-                                  : sat_count);
     double coarse_step = sat ? (1.0 / 1440.0) : (4.0 / 1440.0);
 
-    for (int s = 0; s < target_count; s++)
+    if (sat)
     {
-        Satellite *current_sat = sat ? sat : &satellites[s];
-        CalculatePassesForSat(current_sat, start_epoch, coarse_step);
+        CalculatePassesForSat(sat, start_epoch, coarse_step);
+    }
+    else
+    {
+        /* cap all-active to avoid an SGP4 blowup on large catalogs */
+        const int MAX_ALL_ACTIVE_PASS_SATS = 100;
+
+        int active_processed = 0;
+
+        for (int s = 0; s < sat_count && active_processed < MAX_ALL_ACTIVE_PASS_SATS; s++)
+        {
+            Satellite *current_sat = &satellites[s];
+
+            if (!current_sat->is_active)
+                continue;
+
+            CalculatePassesForSat(current_sat, start_epoch, coarse_step);
+            active_processed++;
+        }
     }
 
     /* sort passes chronologically so the list actually makes sense */
