@@ -231,6 +231,9 @@ void UIOpenHelp(void);
 void UIOpenAbout(void);
 void UIRequestExit(void);
 
+bool UIModalAnyOpen(void);
+void UICloseTopModal(AppConfig *cfg);
+
 /* shared helpers */
 Color ApplyAlpha(Color c, float alpha);
 void DrawUIText(Font font, const char *text, float x, float y, float size, Color color);

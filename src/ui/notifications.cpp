@@ -75,6 +75,10 @@ void NotifySaveSettings(AppConfig *cfg)
 }
 
 bool NotifyEnabled(void) { return g_enabled; }
+
+int NotifyCount(void) { return g_notif_count; }
+
+void NotifyClearAll(void) { g_notif_count = 0; }
 bool NotifyCategoryEnabled(NotifyLevel level)
 {
     if (level < 0 || level >= NOTIFY_LEVEL_COUNT) return false;

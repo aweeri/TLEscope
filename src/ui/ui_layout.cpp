@@ -112,6 +112,7 @@ void LayoutInitDefaults(void)
     g_layout.show_bottom_bar = true;
     g_layout.drag_panel = -1;
     g_layout.drag_target = -1;
+    g_layout.last_active_panel = -1;
 
     int li = 0, ri = 0;
     for (int i = 0; i < PANEL_COUNT; i++)
@@ -227,13 +228,22 @@ void LayoutTogglePanel(PanelId id)
 {
     if (id < 0 || id >= PANEL_COUNT) return;
     g_layout.panel_open[id] = !g_layout.panel_open[id];
-    if (g_layout.panel_open[id]) EnsureSidebar(g_panel_defs[id].default_side);
+    if (g_layout.panel_open[id])
+    {
+        g_layout.last_active_panel = id;
+        EnsureSidebar(g_panel_defs[id].default_side);
+    }
+    else if (g_layout.last_active_panel == id)
+    {
+        g_layout.last_active_panel = -1;
+    }
 }
 
 void LayoutOpenPanel(PanelId id)
 {
     if (id < 0 || id >= PANEL_COUNT) return;
     g_layout.panel_open[id] = true;
+    g_layout.last_active_panel = id;
     EnsureSidebar(g_panel_defs[id].default_side);
 }
 
@@ -291,6 +301,33 @@ SidebarSide LayoutPanelCurrentSide(PanelId id)
 bool LayoutIsPanelOpen(PanelId id)
 {
     return (id >= 0 && id < PANEL_COUNT) ? g_layout.panel_open[id] : false;
+}
+
+int LayoutGetActivePanel(void)
+{
+    return g_layout.last_active_panel;
+}
+
+bool LayoutCloseActivePanel(void)
+{
+    int pid = g_layout.last_active_panel;
+    if (pid >= 0 && pid < PANEL_COUNT && g_layout.panel_open[pid])
+    {
+        g_layout.panel_open[pid] = false;
+        g_layout.last_active_panel = -1;
+        return true;
+    }
+    /* fall back to the first open panel when nothing is tracked */
+    for (int i = 0; i < PANEL_COUNT; i++)
+    {
+        if (g_layout.panel_open[i])
+        {
+            g_layout.panel_open[i] = false;
+            g_layout.last_active_panel = -1;
+            return true;
+        }
+    }
+    return false;
 }
 
 /* -- Captured element rects (for coachmarks / the first-boot tutorial) ------ */
@@ -1065,6 +1102,14 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
             ImVec2 panel_top = ImGui::GetCursorScreenPos();
             DrawAccordionHeader(def, &g_layout.panel_open[pid], i, is_left);
 
+            if (g_layout.panel_open[pid] != is_open)
+            {
+                if (g_layout.panel_open[pid])
+                    g_layout.last_active_panel = pid;
+                else if (g_layout.last_active_panel == pid)
+                    g_layout.last_active_panel = -1;
+            }
+
             if (is_open)
             {
                 ImGui::Separator();
@@ -1207,9 +1252,8 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
 
 void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 {
-    if (!g_layout.settings_open) return;
-
-    ImGui::OpenPopup("Settings");
+    if (g_layout.settings_open)
+        ImGui::OpenPopup("Settings");
     /* fixed width + auto height so expanding sections never widen the modal */
     ImGui::SetNextWindowSize(ImVec2(UIPx(420.0f), 0), ImGuiCond_Always);
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
@@ -1626,9 +1670,8 @@ static void DrawToolRow(const PanelDef *def, AppConfig *cfg)
 void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
-    if (!g_layout.tools_open) return;
-
-    ImGui::OpenPopup("Manage Tools");
+    if (g_layout.tools_open)
+        ImGui::OpenPopup("Manage Tools");
     ImGui::SetNextWindowSize(ImVec2(UIPx(460.0f), 0), ImGuiCond_Always);
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));

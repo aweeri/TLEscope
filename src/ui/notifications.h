@@ -56,6 +56,10 @@ void NotifySaveSettings(AppConfig *cfg);
 /** master switch: when false, no toasts are pushed or drawn */
 bool NotifyEnabled(void);
 
+int NotifyCount(void);
+
+void NotifyClearAll(void);
+
 /** per-category switch for a given level */
 bool NotifyCategoryEnabled(NotifyLevel level);
 

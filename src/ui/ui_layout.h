@@ -67,6 +67,9 @@ typedef struct
     /* tools modal */
     bool tools_open;
 
+    /* most-recently-activated tool panel; -1 = none */
+    int last_active_panel;
+
     /* H key clean view: every chrome element hidden (sidebars, bottom bar, nav bar, edge notches) */
     bool clean_view;
 
@@ -111,6 +114,10 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg);
 void LayoutTogglePanel(PanelId id);
 void LayoutOpenPanel(PanelId id);
 bool LayoutIsPanelOpen(PanelId id);
+
+bool LayoutCloseActivePanel(void);
+
+int LayoutGetActivePanel(void);
 void LayoutSetPanelSide(PanelId id, SidebarSide side);
 SidebarSide LayoutPanelCurrentSide(PanelId id);
 

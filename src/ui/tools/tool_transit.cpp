@@ -1330,16 +1330,18 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
     static bool s_tab_restored = false;
     static int  s_pending_tab = -1;
 
+    /* Keep BeginPopupModal reachable even when closed so an externally-cleared
+       flag (global Escape router) actually closes the popup via p_open. */
     if (!g_ui.transit_overview_open)
     {
         s_tab_restored = false;
         SimScanCancel();
-        return;
     }
-
-    TransitEnsurePasses(ctx, cfg);
-
-    ImGui::OpenPopup("Transit Overview");
+    else
+    {
+        TransitEnsurePasses(ctx, cfg);
+        ImGui::OpenPopup("Transit Overview");
+    }
 
     ImVec2 screen = ImGui::GetIO().DisplaySize;
     ImVec2 size = ImVec2(screen.x * 0.8f, screen.y * 0.8f);

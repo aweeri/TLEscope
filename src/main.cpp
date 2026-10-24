@@ -1245,18 +1245,6 @@ int main(void)
             if (IsKeyPressed(KEY_TWO))
                 LayoutSetSidebarVisible(SIDEBAR_RIGHT, !LayoutSidebarVisible(SIDEBAR_RIGHT));
 
-            /* cancel home-location picking without changing the location */
-            if (IsKeyPressed(KEY_ESCAPE) && picking_home)
-            {
-                picking_home = false;
-                pick_location_index = -1;
-                LOG_INFO("Home location picking cancelled");
-            }
-            /* Esc clears the satellite selection (skipped while cancelling home picking) */
-            else if (IsKeyPressed(KEY_ESCAPE))
-            {
-                selected_sat = NULL;
-            }
         }
 
         if (cfg.ui_scale < 0.5f)

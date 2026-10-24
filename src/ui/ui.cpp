@@ -10,6 +10,7 @@
 
 #include "ui.h"
 #include "ui_layout.h"
+#include "ui_input.h"
 #include "labels.h"
 #include "tools/tools.h"
 #include "notifications.h"
@@ -37,6 +38,7 @@
 #include <raymath.h>
 
 #include "imgui.h"
+#include "imgui_internal.h"   /* GetTopMostPopupModal() for the Escape router */
 #include "rlImGui.h"
 #include "IconsFontAwesome6.h"
 
@@ -126,6 +128,42 @@ void UIOpenSettings(void) { LayoutOpenSettings(); }
 void UIOpenHelp(void) { show_help = true; }
 void UIOpenAbout(void) { show_about = true; }
 void UIRequestExit(void) { show_exit_dialog = true; }
+
+bool UIModalAnyOpen(void)
+{
+    return show_help || show_about || show_tle_warning || show_exit_dialog ||
+           g_ui.update_available || g_ui.transit_overview_open ||
+           LayoutSettingsOpen() || LayoutToolsOpen();
+}
+
+void UICloseTopModal(AppConfig *cfg)
+{
+    ImGuiWindow *top = ImGui::GetTopMostPopupModal();
+    if (!top || !top->Name)
+        return;
+
+    /* popup name must match the string passed to BeginPopupModal()/OpenPopup() */
+    struct { const char *name; bool *flag; } kModalFlags[] = {
+        { "Exit?",                &show_exit_dialog          },
+        { "Help",                 &show_help                 },
+        { "About TLEscope",       &show_about                },
+        { "Orbital Data Warning", &show_tle_warning          },
+        { "Update Available",     &g_ui.update_available     },
+        { "Transit Overview",     &g_ui.transit_overview_open },
+        { "Settings",             &g_layout.settings_open    },
+        { "Manage Tools",         &g_layout.tools_open       },
+        { "Welcome to TLEscope",  cfg ? &cfg->show_first_run_dialog : nullptr },
+    };
+
+    for (const auto &entry : kModalFlags)
+    {
+        if (strcmp(top->Name, entry.name) == 0)
+        {
+            *entry.flag = false;
+            return;
+        }
+    }
+}
 
 /* -- Time-control helpers -------------------------------------------------- */
 
@@ -549,10 +587,10 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
     (void)cfg;
-    if (!show_help) return;
+    if (show_help)
+        ImGui::OpenPopup("Help");
 
-    ImGui::OpenPopup("Help");
-    if (ImGui::BeginPopupModal("Help", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Help", &show_help, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("TLEscope v%s", TLESCOPE_VERSION);
         ImGui::Separator();
@@ -574,7 +612,6 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine();
         if (ImGui::Button("Close"))
         {
-            show_help = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -587,10 +624,10 @@ static void DrawAboutModal(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
     (void)cfg;
-    if (!show_about) return;
+    if (show_about)
+        ImGui::OpenPopup("About TLEscope");
 
-    ImGui::OpenPopup("About TLEscope");
-    if (ImGui::BeginPopupModal("About TLEscope", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("About TLEscope", &show_about, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("TLEscope v%s", TLESCOPE_VERSION);
         ImGui::Separator();
@@ -604,7 +641,6 @@ static void DrawAboutModal(UIContext *ctx, AppConfig *cfg)
         ImGui::SameLine();
         if (ImGui::Button("Close"))
         {
-            show_about = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -616,30 +652,25 @@ static void DrawAboutModal(UIContext *ctx, AppConfig *cfg)
 static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
-    if (!show_tle_warning) return;
 
-    /* check if any satellite data is older than the configured threshold */
-    time_t now = time(NULL);
     bool data_is_old = false;
-    for (int i = 0; i < sat_count; i++)
+    if (show_tle_warning)
     {
-        if (satellites[i].data_meta.fetch_time > 0 &&
-            (now - satellites[i].data_meta.fetch_time) > cfg->data_stale_threshold_seconds)
+        /* check if any satellite data is older than the configured threshold */
+        time_t now = time(NULL);
+        for (int i = 0; i < sat_count; i++)
         {
-            data_is_old = true;
-            break;
+            if (satellites[i].data_meta.fetch_time > 0 &&
+                (now - satellites[i].data_meta.fetch_time) > cfg->data_stale_threshold_seconds)
+            {
+                data_is_old = true;
+                break;
+            }
         }
-    }
 
-    if (!data_is_old)
-    {
-        show_tle_warning = false;
-        return;
+        if (!data_is_old)
+            show_tle_warning = false;
     }
-
-    /* surface the staleness as a toast as well (ROADMAP section 8.1) */
-    NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
-               "Orbital data is older than the configured threshold");
 
     int threshold_secs = cfg->data_stale_threshold_seconds;
     const char *threshold_str = "2 days";
@@ -651,22 +682,27 @@ static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
     else if (threshold_secs <= STALE_THRESHOLD_5D) threshold_str = "5 days";
     else threshold_str = "7 days";
 
-    ImGui::OpenPopup("Orbital Data Warning");
-    if (ImGui::BeginPopupModal("Orbital Data Warning", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (show_tle_warning)
+    {
+        /* surface the staleness as a toast as well (ROADMAP section 8.1) */
+        NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Orbital data is older than the configured threshold");
+        ImGui::OpenPopup("Orbital Data Warning");
+    }
+
+    if (ImGui::BeginPopupModal("Orbital Data Warning", &show_tle_warning, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Your orbital data is older than %s.", threshold_str);
         ImGui::Text("Would you like to update it now?");
 
         if (ImGui::Button("Update", ImVec2(120, 0)))
         {
-            show_tle_warning = false;
             LayoutOpenPanel(PANEL_DATA_SOURCES);
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button("Don't Update", ImVec2(120, 0)))
         {
-            show_tle_warning = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -678,12 +714,12 @@ static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
 static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
-    if (!cfg->show_first_run_dialog) return;
+    if (cfg->show_first_run_dialog)
+        ImGui::OpenPopup("Welcome to TLEscope");
 
-    ImGui::OpenPopup("Welcome to TLEscope");
     /* minimum content width so the button pair has symmetric breathing room */
     ImGui::SetNextWindowContentSize(ImVec2(UIPx(360.0f), 0));
-    if (ImGui::BeginPopupModal("Welcome to TLEscope", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Welcome to TLEscope", &cfg->show_first_run_dialog, ImGuiWindowFlags_AlwaysAutoResize))
     {
         /* centered heading */
         const char *title = ICON_FA_SATELLITE "  Welcome to TLEscope";
@@ -716,7 +752,6 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             cfg->night_mode = false;
             cfg->show_earth_texture = false;
 
-            cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);
             ImGui::CloseCurrentPopup();
@@ -733,7 +768,6 @@ static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
             /* textured Earth body; map overlays keep their configured defaults */
             cfg->show_earth_texture = true;
 
-            cfg->show_first_run_dialog = false;
             LayoutFillPersist(&cfg->ui_layout);
             SaveAppConfig("settings.json", cfg);
             ImGui::CloseCurrentPopup();
@@ -754,32 +788,29 @@ static void DrawUpdateCheck(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
     (void)cfg;
-    if (!g_ui.update_available) return;
 
     static double popup_start = 0.0;
-    if (popup_start == 0.0) popup_start = GetTime();
+    if (g_ui.update_available && popup_start == 0.0) popup_start = GetTime();
 
-    if (GetTime() - popup_start < 10.0)
-    {
+    if (g_ui.update_available && GetTime() - popup_start < 10.0)
         ImGui::OpenPopup("Update Available");
-        if (ImGui::BeginPopupModal("Update Available", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::Text("A new version of TLEscope is available!");
-            ImGui::Text("%s", g_ui.latest_version_str);
 
-            if (ImGui::Button("Download", ImVec2(120, 0)))
-            {
-                OpenURL("https://github.com/aweeri/TLEscope/releases/latest");
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Dismiss", ImVec2(120, 0)))
-            {
-                g_ui.update_available = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
+    if (ImGui::BeginPopupModal("Update Available", &g_ui.update_available, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("A new version of TLEscope is available!");
+        ImGui::Text("%s", g_ui.latest_version_str);
+
+        if (ImGui::Button("Download", ImVec2(120, 0)))
+        {
+            OpenURL("https://github.com/aweeri/TLEscope/releases/latest");
+            ImGui::CloseCurrentPopup();
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Dismiss", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }
 
@@ -788,28 +819,69 @@ static void DrawUpdateCheck(UIContext *ctx, AppConfig *cfg)
 static void DrawExitDialog(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
-    if (!show_exit_dialog) return;
+    if (show_exit_dialog)
+        ImGui::OpenPopup("Exit?");
 
-    ImGui::OpenPopup("Exit?");
-    if (ImGui::BeginPopupModal("Exit?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    const char *title = ICON_FA_DOOR_OPEN "  Exit TLEscope?";
+    const char *message = "Are you sure you want to close TLEscope?";
+
+    const float pad = UIPx(16.0f);
+    const float btn_w = UIPx(140.0f);
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float buttons_w = btn_w * 2.0f + spacing;
+
+    const float title_w = ImGui::CalcTextSize(title).x;
+    const float msg_w = ImGui::CalcTextSize(message).x;
+
+    float content_w = title_w;
+    if (msg_w > content_w) content_w = msg_w;
+    if (buttons_w > content_w) content_w = buttons_w;
+    const float dialog_w = content_w + pad * 2.0f;
+
+    ImGui::SetNextWindowSize(ImVec2(dialog_w, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+
+    /* p_open wired to show_exit_dialog so the Escape router can close it */
+    if (ImGui::BeginPopupModal("Exit?", &show_exit_dialog, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Are you sure you want to exit?");
-        ImGui::Separator();
+        const float win_w = ImGui::GetWindowWidth();
 
-        if (ImGui::Button("Yes", ImVec2(120, 0)))
+        ImGui::SetCursorPosX((win_w - title_w) * 0.5f);
+        ImGui::TextColored(ThemeColor(g_theme.ui.warning), "%s", title);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::SetCursorPosX((win_w - msg_w) * 0.5f);
+        ImGui::TextUnformatted(message);
+
+        ImGui::Spacing();
+
+        ImGui::SetCursorPosX((win_w - buttons_w) * 0.5f);
+
+        if (ImGui::Button("Cancel", ImVec2(btn_w, 0.0f)))
         {
-            *ctx->exit_app = true;
-            show_exit_dialog = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("No", ImVec2(120, 0)))
+        ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColor(g_theme.ui.error));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColor(ThemeHoverOf(g_theme.ui.error, g_theme.ui.text)));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColor(ThemeActiveOf(g_theme.ui.error, g_theme.ui.text)));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColor(g_theme.ui.bg));
+        if (ImGui::Button("Exit", ImVec2(btn_w, 0.0f)))
         {
-            show_exit_dialog = false;
+            *ctx->exit_app = true;
             ImGui::CloseCurrentPopup();
         }
+        ImGui::PopStyleColor(4);
         ImGui::EndPopup();
     }
+
+    ImGui::PopStyleVar();
 }
 
 /* -- Main DrawGUI ---------------------------------------------------------- */
@@ -899,6 +971,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     if (GetScreenWidth() > 0 && GetScreenHeight() > 0)
         io.DisplaySize = ImVec2((float)GetScreenWidth(), (float)GetScreenHeight());
     io.DisplayFramebufferScale = ImVec2(dpi_scale, dpi_scale);
+
+    UIHandleGlobalEscape(ctx, cfg);
 
     /* map grid value labels, drawn first so satellite/marker labels win */
     DrawMapGridLabels(ctx, cfg);
