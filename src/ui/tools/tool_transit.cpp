@@ -960,11 +960,13 @@ static void DrawTransitOverviewList(UIContext *ctx, AppConfig *cfg)
         {
             snprintf(line6, sizeof(line6), "No live position");
         }
-        /* top-right, on the first-line baseline, clear of the object name */
+        // top-right, on the first-line baseline, clear of the object name
+        // Draw only if it fits without colliding with line1
         ImVec2 now_sz = ImGui::CalcTextSize(line6);
+        ImVec2 name_sz = ImGui::CalcTextSize(line1);
         float now_x = content_right - UIPx(6.0f) - now_sz.x + shift;
-        if (now_x < tx) now_x = tx;
-        dl->AddText(ImVec2(now_x, ty), IM_COL32(dim.r, dim.g, dim.b, 200), line6);
+        if (now_x >= tx + name_sz.x + UIPx(12.0f))
+            dl->AddText(ImVec2(now_x, ty), IM_COL32(dim.r, dim.g, dim.b, 200), line6);
 
         double span = p->los_epoch - p->aos_epoch;
         if (deep || (span > 0.0 && now >= p->aos_epoch && now <= p->los_epoch))
@@ -1002,8 +1004,9 @@ static void DrawTransitPolarTab(UIContext *ctx, AppConfig *cfg)
     (void)cfg;
     bool has_sel = (TransitSelectedPass() != NULL);
 
-    float avail_w = ImGui::GetContentRegionAvail().x;
-    float size = avail_w;
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    float avail_w = avail.x;
+    float size = (avail.x < avail.y) ? avail.x : avail.y;
     if (size < UIPx(120.0f)) size = UIPx(120.0f);
 
     float indent = (avail_w - size) * 0.5f;
@@ -1345,9 +1348,11 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
 
     ImVec2 screen = ImGui::GetIO().DisplaySize;
     ImVec2 size = ImVec2(screen.x * 0.8f, screen.y * 0.8f);
-    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 300.0f),
+                                        ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::SetNextWindowSize(size, ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                            ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
     bool *p_open = &g_ui.transit_overview_open;
     if (ImGui::BeginPopupModal("Transit Overview", p_open, ImGuiWindowFlags_NoCollapse))
