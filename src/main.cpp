@@ -2375,6 +2375,27 @@ int main(void)
                                     is_sunlit_arr[j] = ftc->sunlit[j];
                             }
 
+                            /* per-sample thingy, pain */
+                            bool in_transit[4001] = {false};
+                            if (num_passes > 0)
+                            {
+                                for (int j = 0; j <= segments; j++)
+                                {
+                                    const double te = track_times[j];
+                                    for (int pi = 0; pi < num_passes; pi++)
+                                    {
+                                        const SatPass &sp = passes[pi];
+                                        if (sp.sat != &satellites[i])
+                                            continue;
+                                        if (sp.los_epoch > sp.aos_epoch && te >= sp.aos_epoch && te <= sp.los_epoch)
+                                        {
+                                            in_transit[j] = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
                             for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
                             {
                                 float x_off = offset_i * map_w;
@@ -2399,6 +2420,9 @@ int main(void)
                                             /* keep the 2D trail thin: damp the width ramp the 3D-style width uses */
                                             track_w *= 1.0f + (OrbitDirectionWidthScale(trail_phase, dir_floor) - 1.0f) * 0.2f;
                                         }
+                                        /* transit accent wins over all other segment coloring */
+                                        if (in_transit[j - 1] || in_transit[j])
+                                            drawCol = g_theme.ui.accent;
                                         track_w /= Camera2DParams.zoom;
                                         DrawLineEx((Vector2){track_pts[j - 1].x + x_off, track_pts[j - 1].y}, (Vector2){track_pts[j].x + x_off, track_pts[j].y}, track_w, drawCol);
                                     }

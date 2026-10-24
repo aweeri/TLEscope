@@ -17,6 +17,7 @@
 #include "ui/ui_layout.h"
 #include "ui/ui.h"
 #include "ui/imgui_theme.h"
+#include "render/map_view.h"
 #include "core/astro.h"
 #include "core/config.h"
 #include "core/theme.h"
@@ -425,7 +426,7 @@ static float TransitRowReveal(UIContext *ctx, int i, SatPass *p, bool selected,
 }
 
 /* ========================================================================== */
-/*  Scene hook: AOS/LOS ticks (migrated from DrawScenePolarPlot)              */
+/*  Scene hook: accent-colored line along the transit portion of the orbit    */
 /* ========================================================================== */
 
 void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg)
@@ -438,7 +439,11 @@ void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg)
     double aos_epoch = pass->aos_epoch;
     double los_epoch = pass->los_epoch;
 
-    Color notch_col = g_theme.ui.warning;
+    /* nothing to draw */
+    if (los_epoch <= aos_epoch)
+        return;
+
+    const int TRANSIT_LINE_SAMPLES = 128;
 
     /* helper to compute the satellite's draw-space position at an epoch */
     auto pos_at = [&](double epoch) -> Vector3 {
@@ -446,67 +451,55 @@ void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg)
         return Vector3Scale(calculate_position(pass->sat, unix), 1.0f / DRAW_SCALE);
     };
 
-    Vector3 aos_pos = pos_at(aos_epoch);
-    Vector3 los_pos = pos_at(los_epoch);
-
     if (sctx->is_2d_view)
     {
         /* ---- 2D map ---- */
         float map_w = sctx->map_w, map_h = sctx->map_h;
-        float tick_len = 14.0f / sctx->camera2d->zoom;
-        double dt = 30.0 / 86400.0; /* 30 s sample for the tangent */
 
-        auto map_at = [&](double epoch, float *x, float *y) {
-            Vector3 p = pos_at(epoch);
-            get_map_coordinates(Vector3Scale(p, DRAW_SCALE), sctx->gmst_deg,
-                                sctx->earth_rotation_offset, map_w, map_h, x, y);
-        };
+        /* project every sample to map space once, then stamp it across copies */
+        Vector2 pts[TRANSIT_LINE_SAMPLES + 1];
+        for (int i = 0; i <= TRANSIT_LINE_SAMPLES; i++)
+        {
+            double t = aos_epoch + (los_epoch - aos_epoch) * ((double)i / TRANSIT_LINE_SAMPLES);
+            Vector3 p = pos_at(t);
+            /* per-sample GMST */
+            double gmst_t = epoch_to_gmst(t);
+            get_map_coordinates(Vector3Scale(p, DRAW_SCALE), gmst_t,
+                                sctx->earth_rotation_offset, map_w, map_h, &pts[i].x, &pts[i].y);
+        }
 
-        auto draw_tick = [&](double epoch) {
-            float x, y, x1, y1, x2, y2;
-            map_at(epoch, &x, &y);
-            map_at(epoch - dt, &x1, &y1);
-            map_at(epoch + dt, &x2, &y2);
-            float tx = x2 - x1, ty = y2 - y1;
-            float len = sqrtf(tx * tx + ty * ty);
-            if (len < 0.001f)
-                return;
-            float px = -ty / len, py = tx / len; /* perpendicular unit */
-            for (int off = -1; off <= 1; off++)
+        int first_copy = 0, last_copy = 0;
+        MapVisibleCopyRange(*sctx->camera2d, map_w, &first_copy, &last_copy);
+
+        float line_w = 2.0f / sctx->camera2d->zoom;
+        for (int offset_i = first_copy; offset_i <= last_copy; offset_i++)
+        {
+            float x_off = offset_i * map_w;
+            for (int i = 1; i <= TRANSIT_LINE_SAMPLES; i++)
             {
-                float x_off = off * map_w;
-                DrawLineEx((Vector2){x + x_off - px * tick_len, y - py * tick_len},
-                           (Vector2){x + x_off + px * tick_len, y + py * tick_len},
-                           3.0f / sctx->camera2d->zoom, notch_col);
+                /* skip the seam so the segment doesn't nyoom across */
+                if (fabs(pts[i].x - pts[i - 1].x) < map_w * 0.6f)
+                {
+                    DrawLineEx((Vector2){pts[i - 1].x + x_off, pts[i - 1].y},
+                               (Vector2){pts[i].x + x_off, pts[i].y}, line_w, g_theme.ui.accent);
+                }
             }
-        };
-
-        draw_tick(aos_epoch);
-        draw_tick(los_epoch);
+        }
     }
     else
     {
         /* ---- 3D globe ---- */
-        float tick_len = 0.05f; /* ~150 km at DRAW_SCALE, clearly visible */
-        double dt = 30.0 / 86400.0; /* ~30 s sample for the tangent */
-
-        auto tangent_at = [&](double epoch) -> Vector3 {
-            double unix = get_unix_from_epoch(epoch);
-            return Vector3Normalize(calculate_velocity(pass->sat, unix));
-        };
-
-        auto draw_tick = [&](Vector3 pos, Vector3 tangent) {
-            Vector3 to_cam = Vector3Normalize(Vector3Subtract(sctx->camera3d->position, pos));
-            Vector3 perp = Vector3Normalize(Vector3CrossProduct(tangent, to_cam));
-            if (Vector3LengthSqr(perp) < 0.001f)
-                perp = Vector3Normalize(Vector3CrossProduct(tangent, (Vector3){0, 1, 0}));
-            DrawLine3D(Vector3Add(pos, Vector3Scale(perp, tick_len)),
-                       Vector3Add(pos, Vector3Scale(perp, -tick_len)),
-                       notch_col);
-        };
-
-        draw_tick(aos_pos, tangent_at(aos_epoch));
-        draw_tick(los_pos, tangent_at(los_epoch));
+        rlSetLineWidth(3.0f);
+        Vector3 prev = pos_at(aos_epoch);
+        for (int i = 1; i <= TRANSIT_LINE_SAMPLES; i++)
+        {
+            double t = aos_epoch + (los_epoch - aos_epoch) * ((double)i / TRANSIT_LINE_SAMPLES);
+            Vector3 cur = pos_at(t);
+            if (!IsOrbitSegmentOccluded(sctx->camera3d->position, prev, cur, EARTH_RADIUS_KM / DRAW_SCALE))
+                DrawLine3D(prev, cur, g_theme.ui.accent);
+            prev = cur;
+        }
+        rlSetLineWidth(1.0f);
     }
 }
 
