@@ -23,7 +23,7 @@ bool UIHandleGlobalEscape(UIContext *ctx, AppConfig *cfg)
     if (!ImGui::IsKeyPressed(ImGuiKey_Escape))
         return false;
 
-    if (ImGui::IsPopupOpen((ImGuiID)0,
+    if (ImGui::IsPopupOpen("",
                            ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
     {
         UICloseTopModal(cfg);
