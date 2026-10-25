@@ -1323,10 +1323,8 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             ImGui::Checkbox("Limit Map Zoom-Out", &cfg->limit_map_zoomout);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Keep the 2D map filling the viewport by capping how far it can zoom out");
-            ImGui::Checkbox("VSync", &cfg->hint_vsync);
 
             /* predicted (future) orbit steps per ground track in 2D mode; 0.25-orbit grid, default 2.0 */
-            ImGui::Separator();
             float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
                                                      LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);
             orbits_steps = roundf(orbits_steps * 4.0f) / 4.0f; /* snap to 0.25 grid */
@@ -1359,6 +1357,13 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 SaveAppConfig("settings.json", cfg);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("First day of the week shown in the date-picker calendar");
+
+            /* compact time overlay shown while the UI is hidden (H) */
+            bool time_when_hidden = ToolSettingGetBool(cfg, "view.time_when_hidden", false);
+            if (ImGui::Checkbox("Show Time When UI Hidden", &time_when_hidden))
+                ToolSettingSetBool(cfg, "view.time_when_hidden", time_when_hidden);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Display the current time in the lower-left corner when the UI is hidden (H)");
         }
 
         /* ---- Performance section ----------------------------------------- */
@@ -1370,11 +1375,11 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 cfg->target_fps = (fps >= 240) ? 0 : fps;
             if (cfg->target_fps == 0)
                 ImGui::TextDisabled("Unlimited FPS");
-        }
 
-        /* ---- Satellites section ------------------------------------------ */
-        if (ImGui::CollapsingHeader("Satellites"))
-        {
+            ImGui::Checkbox("VSync", &cfg->hint_vsync);
+
+            ImGui::Separator();
+
             int max_sats = cfg->max_satellites;
             if (max_sats < MIN_MAX_SATELLITES) max_sats = MIN_MAX_SATELLITES;
             if (max_sats > MAX_MAX_SATELLITES) max_sats = MAX_MAX_SATELLITES;
@@ -1395,6 +1400,54 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 SaveAppConfig("settings.json", cfg);
 
             ImGui::TextDisabled("Default: 50000. Range: 1000-100000. Higher values use more memory.");
+        }
+
+        /* ---- Data & Network section -------------------------------------- */
+        if (ImGui::CollapsingHeader("Data & Network"))
+        {
+            /* data staleness */
+            const char* stale_options[] = {
+                "6 hours", "12 hours", "1 day", "2 days (default)",
+                "3 days", "5 days", "7 days"
+            };
+            int stale_values[] = {
+                STALE_THRESHOLD_6H, STALE_THRESHOLD_12H, STALE_THRESHOLD_1D,
+                STALE_THRESHOLD_2D, STALE_THRESHOLD_3D, STALE_THRESHOLD_5D,
+                STALE_THRESHOLD_7D
+            };
+            int current_stale_idx = 3;
+            for (int i = 0; i < 7; i++)
+            {
+                if (cfg->data_stale_threshold_seconds == stale_values[i])
+                {
+                    current_stale_idx = i;
+                    break;
+                }
+            }
+
+            ImGui::Text("Consider data outdated after:");
+            if (ImGui::Combo("##stale_threshold", &current_stale_idx, stale_options, 7))
+            {
+                cfg->data_stale_threshold_seconds = stale_values[current_stale_idx];
+            }
+
+            ImGui::Separator();
+
+            /* network */
+            if (cfg->network_timeout_seconds < 15) cfg->network_timeout_seconds = 15;
+            if (cfg->network_timeout_seconds > 300) cfg->network_timeout_seconds = 300;
+
+            int timeout_seconds = cfg->network_timeout_seconds;
+            ImGui::Text("HTTP request timeout:");
+            if (ImGui::SliderInt("##network_timeout", &timeout_seconds, 15, 300, "%d s"))
+            {
+                cfg->network_timeout_seconds = timeout_seconds;
+                TLEscopeSetCurlTimeoutSeconds(timeout_seconds);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Maximum time for a network request. Default: 45 seconds. Connection timeout remains 15 seconds.");
+
+            ImGui::TextDisabled("Default: 45 s. Range: 15-300 s.");
         }
 
         /* ---- Locations section (single source of truth for markers + home) */
@@ -1499,54 +1552,6 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* ---- Data section ------------------------------------------------ */
-        if (ImGui::CollapsingHeader("Data"))
-        {
-            const char* stale_options[] = {
-                "6 hours", "12 hours", "1 day", "2 days (default)",
-                "3 days", "5 days", "7 days"
-            };
-            int stale_values[] = {
-                STALE_THRESHOLD_6H, STALE_THRESHOLD_12H, STALE_THRESHOLD_1D,
-                STALE_THRESHOLD_2D, STALE_THRESHOLD_3D, STALE_THRESHOLD_5D,
-                STALE_THRESHOLD_7D
-            };
-            int current_stale_idx = 3;
-            for (int i = 0; i < 7; i++)
-            {
-                if (cfg->data_stale_threshold_seconds == stale_values[i])
-                {
-                    current_stale_idx = i;
-                    break;
-                }
-            }
-
-            ImGui::Text("Consider data outdated after:");
-            if (ImGui::Combo("##stale_threshold", &current_stale_idx, stale_options, 7))
-            {
-                cfg->data_stale_threshold_seconds = stale_values[current_stale_idx];
-            }
-        }
-
-        /* ---- Network section --------------------------------------------- */
-        if (ImGui::CollapsingHeader("Network"))
-        {
-            if (cfg->network_timeout_seconds < 15) cfg->network_timeout_seconds = 15;
-            if (cfg->network_timeout_seconds > 300) cfg->network_timeout_seconds = 300;
-
-            int timeout_seconds = cfg->network_timeout_seconds;
-            ImGui::Text("HTTP request timeout:");
-            if (ImGui::SliderInt("##network_timeout", &timeout_seconds, 15, 300, "%d s"))
-            {
-                cfg->network_timeout_seconds = timeout_seconds;
-                TLEscopeSetCurlTimeoutSeconds(timeout_seconds);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Maximum time for a network request. Default: 45 seconds. Connection timeout remains 15 seconds.");
-
-            ImGui::TextDisabled("Default: 45 s. Range: 15-300 s.");
-        }
-
         /* ---- Notifications section (ROADMAP section 8.1) ---------------- */
         if (ImGui::CollapsingHeader("Notifications"))
         {
@@ -1574,9 +1579,12 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
                 NotifySetCategoryEnabled(NOTIFY_ERROR, cat_err);
         }
 
-        /* ---- Expo Mode section ------------------------------------------- */
-        if (ImGui::CollapsingHeader("Expo Mode"))
+        /* ---- Advanced section (niche / experimental options) ------------- */
+        if (ImGui::CollapsingHeader("Advanced"))
         {
+            /* Expo Mode sub-group */
+            ImGui::TextDisabled("Expo Mode");
+
             bool en = ExpoModeEnabled(cfg);
             if (ImGui::Checkbox("Enable Expo Mode", &en)) { ExpoModeSetEnabled(cfg, en); SaveAppConfig("settings.json", cfg); }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the TLEscope + 'available on GitHub' overlay in the bottom-right corner.");

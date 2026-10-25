@@ -580,6 +580,44 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
     ImGui::End();
 }
 
+static void DrawHiddenClockOverlay(UIContext *ctx, AppConfig *cfg)
+{
+    if (!g_layout.clean_view) return;
+    if (!ToolSettingGetBool(cfg, "view.time_when_hidden", false)) return;
+    if (!ctx || !ctx->current_epoch) return;
+
+    char time_str[32];
+    epoch_to_time_str(*ctx->current_epoch, time_str);
+
+    /* date is the first 10 chars ("YYYY-MM-DD") of the full datetime string */
+    char datetime_str[64];
+    char date_str[16];
+    epoch_to_datetime_str(*ctx->current_epoch, datetime_str);
+    snprintf(date_str, sizeof(date_str), "%.10s", datetime_str);
+
+    /* lower-left of the viewport, hugging the edge */
+    float vp_x, vp_y, vp_w, vp_h;
+    LayoutGetViewportRect(&vp_x, &vp_y, &vp_w, &vp_h);
+    const float margin = 8.0f;
+
+    /* pivot (0,1) anchors the window's bottom-left corner to the target point */
+    ImGui::SetNextWindowPos(ImVec2(vp_x + margin, vp_y + vp_h - margin),
+                            ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.0f);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs |
+                             ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize;
+    if (ImGui::Begin("##hidden_clock", NULL, flags))
+    {
+        ImVec4 col = ThemeColor(g_theme.ui.text_dim);
+        ImGui::TextColored(col, "%s", time_str);
+        ImGui::TextColored(col, "%s", date_str);
+    }
+    ImGui::End();
+}
+
 /* -- Help Modal ------------------------------------------------------------ */
 
 static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
@@ -958,6 +996,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* hints: drawn last into the foreground draw list so they sit over everything */
     DrawHints();
+
+    /* when the UI is hidden (H), show just the simulated time in the lower-left */
+    DrawHiddenClockOverlay(ctx, cfg);
 
     /* end rlImGui frame */
     rlImGuiEnd();
