@@ -33,6 +33,35 @@ Color ThemeAlpha(Color c, float a)
     return c;
 }
 
+Color ThemeEarthColor(void)
+{
+    /* derive the textureless globe's base color from the world background,
+     * lifted toward the text color (no dedicated surface field exists) */
+    Color bg = g_theme.world.bg;
+    Color lift = g_theme.ui.text;
+
+    if (lift.r == 0 && lift.g == 0 && lift.b == 0)
+        lift = (Color){255, 255, 255, 255};
+
+    /* small lift, then clamp dark themes up to a readable luminance */
+    const float liftRatio = 0.20f;
+    const float minLuma = 34.0f;
+
+    Color c = ThemeMix(bg, lift, liftRatio);
+
+    float luma = 0.2126f * (float)c.r + 0.7152f * (float)c.g + 0.0722f * (float)c.b;
+    if (luma < minLuma)
+    {
+        float t = (luma < 1.0f) ? 1.0f : (minLuma / luma);
+        c.r = (unsigned char)(c.r * t < 255.0f ? c.r * t : 255.0f);
+        c.g = (unsigned char)(c.g * t < 255.0f ? c.g * t : 255.0f);
+        c.b = (unsigned char)(c.b * t < 255.0f ? c.b * t : 255.0f);
+    }
+
+    c.a = bg.a; /* keep the world background's alpha */
+    return c;
+}
+
 // ------------------------------------------------------------------
 // parsing helpers
 // ------------------------------------------------------------------

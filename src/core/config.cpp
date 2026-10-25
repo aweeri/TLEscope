@@ -5,6 +5,7 @@
 #include "location.h"
 #include "util/log.h"
 #include "ui/tools/tools_settings.h"
+#include "ui/tools/tools_common.h" /* ApplyLayerPreset (first-boot defaults) */
 #include "ui/tools/tools_registry.h"
 #include "data/curl_diagnostics.h"
 
@@ -32,7 +33,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->limit_map_zoomout = true;  // default: cap 2D map zoom-out at the viewport fill level
     config->highlight_sunlit = false; // default
     config->show_slant_range = false; // default
-    config->show_scattering = false;  // default
+    config->show_scattering = true;   // default (Aesthetic profile)
     config->show_skybox = true;       // default
     config->show_ecliptic_frame = false; // default
     config->show_ground_coverage = true; // default
@@ -41,7 +42,6 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_latlon_grid = true;    // default
     config->show_country_borders = true;  // default
     config->show_coast_lines = true;   // default
-    config->show_first_run_dialog = false; // default
     config->show_tutorial = false;   // default: first-boot tutorial not pending
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
@@ -201,7 +201,6 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_coast_lines = get_bool("show_coast_lines", config->show_coast_lines);
                     config->show_scattering = get_bool("show_scattering", config->show_scattering);
                     config->hint_vsync = get_bool("hint_vsync", config->hint_vsync);
-                    config->show_first_run_dialog = get_bool("show_first_run_dialog", config->show_first_run_dialog);
                     config->show_tutorial = get_bool("show_tutorial", config->show_tutorial);
                     config->use_local_time = get_bool("use_local_time", config->use_local_time);
                     config->night_mode = get_bool("night_mode", config->night_mode);
@@ -595,22 +594,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->ui_scale = 1.15;
         config->earth_rotation_offset = 0.00;
         config->orbits_to_draw = 3.00;
-        config->show_clouds = true;
-        config->show_night_lights = true;
-        config->show_markers = true;
         config->show_statistics = false;
         config->limit_map_zoomout = true;
-        config->highlight_sunlit = false;
-        config->show_slant_range = false;
-        config->show_scattering = false;
-        config->show_skybox = true;
-        config->show_ecliptic_frame = false;
-        config->show_ground_coverage = true;
-        config->show_apsides = true;
-        config->show_earth_texture = true;
-        config->show_latlon_grid = true;
-        config->show_country_borders = true;
-        config->show_coast_lines = true;
         config->hint_vsync = true;
         config->night_mode = false;
         config->max_satellites = DEFAULT_MAX_SATELLITES;
@@ -621,7 +606,9 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         if (home_idx >= 0)
             SetHomeLocation(home_idx);
 
-        config->show_first_run_dialog = true;
+        /* first boot only: default layer state = the Visual preset */
+        ApplyLayerPreset(config, LAYER_PRESET_VISUAL);
+
         config->show_tutorial = true;
 
         SaveAppConfig(filename, config);
@@ -677,7 +664,6 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_country_borders"] = config->show_country_borders;
     root["show_coast_lines"] = config->show_coast_lines;
     root["hint_vsync"] = config->hint_vsync;
-    root["show_first_run_dialog"] = config->show_first_run_dialog;
     root["show_tutorial"] = config->show_tutorial;
     root["use_local_time"] = config->use_local_time;
     root["night_mode"] = config->night_mode;

@@ -773,6 +773,11 @@ int main(void)
     int advScatLoc3D = GetShaderLocation(shader3D, "advancedScatter");
     int showCloudsLoc3D = GetShaderLocation(shader3D, "showClouds");
 
+    /* shaded solid-body shader for the textureless Earth */
+    Shader earthSolidShader = LoadShaderFromMemory(NULL, Shaders::fsEarthSolid3D);
+    int earthSolidSunLoc = GetShaderLocation(earthSolidShader, "sunDir");
+    int earthSolidBaseLoc = GetShaderLocation(earthSolidShader, "baseColor");
+
     Shader shader2D = LoadShaderFromMemory(NULL, Shaders::fs2D);
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
     int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
@@ -1919,7 +1924,7 @@ int main(void)
         float m_size_2d = 24.0f * cfg.ui_scale / Camera2DParams.zoom;
         float mark_size_2d = 32.0f * cfg.ui_scale / Camera2DParams.zoom;
 
-        /* universal Earth texture toggle (Layers panel); off = plain black body */
+        /* Earth Texture toggle (Layers panel); off = theme-colored solid body */
         const bool show_earth = cfg.show_earth_texture;
 
         /* 2d projection rendering */
@@ -1953,9 +1958,10 @@ int main(void)
             }
             else
             {
-                /* earth texture disabled: plain black body underneath the overlays */
+                /* texture off: theme-colored map surface */
                 for (int k = first_copy; k <= last_copy; k++)
-                    DrawRectangle((int)(k * map_w - map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h, BLACK);
+                    DrawRectangle((int)(k * map_w - map_w / 2.0f), (int)(-map_h / 2.0f), (int)map_w, (int)map_h,
+                                  ThemeEarthColor());
             }
 
             /* Horizontal wrapping fills the scene viewport; vertically the map
@@ -2590,9 +2596,28 @@ int main(void)
             earthModel.materials[0].shader = defaultEarthShader;
         }
 
-        /* black tint when the Earth texture layer is off, so the globe becomes a
-         * plain black body (the shader multiplies its output by the tint color) */
-        DrawModel(earthModel, Vector3Zero(), 1.0f, show_earth ? WHITE : BLACK);
+        if (show_earth)
+        {
+            /* textured Earth (shader selected above) */
+            DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
+        }
+        else
+        {
+            /* textureless Earth: shaded, theme-derived solid body */
+            Color earth_base = ThemeEarthColor();
+            Vector4 earth_base_v = {
+                earth_base.r / 255.0f,
+                earth_base.g / 255.0f,
+                earth_base.b / 255.0f,
+                earth_base.a / 255.0f
+            };
+            earthModel.materials[0].shader = earthSolidShader;
+            SetShaderValue(earthSolidShader, earthSolidSunLoc, &sunEcef, SHADER_UNIFORM_VEC3);
+            SetShaderValue(earthSolidShader, earthSolidBaseLoc, &earth_base_v, SHADER_UNIFORM_VEC4);
+            DrawModel(earthModel, Vector3Zero(), 1.0f, WHITE);
+            /* restore default shader for later draw paths */
+            earthModel.materials[0].shader = defaultEarthShader;
+        }
 
         /* atmosphere/cloud layer */
         if (cfg.show_clouds)
@@ -3285,6 +3310,7 @@ int main(void)
     UnloadModel(earthModel);
     UnloadShader(shader3D);
     UnloadShader(shader2D);
+    UnloadShader(earthSolidShader);
     UnloadShader(shaderNight);
     if (nightTex.id != 0)
         UnloadTexture(nightTex);

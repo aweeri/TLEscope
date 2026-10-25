@@ -150,6 +150,9 @@ Color ThemeMix(Color a, Color b, float t);
 /** return `c` with its alpha replaced by `a` (a clamped to [0,1]) */
 Color ThemeAlpha(Color c, float a);
 
+/** base color for the textureless Earth (derived from the active theme) */
+Color ThemeEarthColor(void);
+
 /** hover state of `base`: mixed toward the text color (works on dark & light) */
 static inline Color ThemeHoverOf(Color base, Color text)
 {

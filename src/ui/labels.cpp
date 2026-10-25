@@ -294,7 +294,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         {
             LabelCandidate c;
             snprintf(c.text, sizeof(c.text), "%s", home->name);
-            c.color = ToImU32(WHITE);
+            c.color = ToImU32(g_theme.ui.text);
             c.priority = 2;
             c.size = size;
             c.marker_half = icon_half;
@@ -335,7 +335,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             if (locations[i].is_home) continue;
             LabelCandidate c;
             snprintf(c.text, sizeof(c.text), "%s", locations[i].name);
-            c.color = ToImU32(WHITE);
+            c.color = ToImU32(g_theme.ui.text);
             c.priority = 1;
             c.size = size;
             c.marker_half = icon_half;

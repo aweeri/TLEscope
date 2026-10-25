@@ -58,7 +58,7 @@ static bool s_running = false; /* tutorial sequence currently driven */
 
 bool TutorialActive(const AppConfig *cfg)
 {
-    return cfg && cfg->show_tutorial && !cfg->show_first_run_dialog;
+    return cfg && cfg->show_tutorial;
 }
 
 void TutorialLaunch(AppConfig *cfg)

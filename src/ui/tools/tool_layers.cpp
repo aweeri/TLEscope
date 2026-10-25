@@ -45,10 +45,242 @@ static int GridSpacingIndex(AppConfig *cfg)
     return GRID_SPACING_DEFAULT;
 }
 
+/* -- Layer visibility presets ---------------------------------------------- */
+/* A preset names desired values for the primary + secondary layer toggles;
+ * "Custom" shows when the live state matches no preset. */
+
+/* order of the primary (master visibility) toggles covered by presets */
+enum LayerToggleId
+{
+    LAYER_TOGGLE_ORBITS = 0,
+    LAYER_TOGGLE_ORBITS_DIMMED,
+    LAYER_TOGGLE_LABELS,
+    LAYER_TOGGLE_LOS,
+    LAYER_TOGGLE_APSIDES,
+    LAYER_TOGGLE_SUNLIT,
+    LAYER_TOGGLE_DIRECTION,
+    LAYER_TOGGLE_SLANT_RANGE,
+    LAYER_TOGGLE_COAST_LINES,
+    LAYER_TOGGLE_COUNTRY_BORDERS,
+    LAYER_TOGGLE_GRID,
+    LAYER_TOGGLE_MARKERS,
+    LAYER_TOGGLE_EARTH_TEXTURE,
+    LAYER_TOGGLE_SUNLIGHT,
+    LAYER_TOGGLE_SCATTERING,
+    LAYER_TOGGLE_CLOUDS,
+    LAYER_TOGGLE_SKYBOX,
+    LAYER_TOGGLE_ECLIPTIC,
+    LAYER_TOGGLE_MOON_ORBIT,
+    LAYER_TOGGLE_COUNT
+};
+
+/* secondary (sub/scope) options covered by presets; stored as int (scope
+ * combos use 0/1/2, on/off sub-toggles use 0/1) */
+enum LayerSubToggleId
+{
+    LAYER_SUB_LABELS_MODE = 0,      /* Labels Sel/All/Fav      (LABELS_KEY_MODE)      */
+    LAYER_SUB_GC_MODE,              /* LOS scope Sel/All/Fav   (LAYERS_KEY_GC_MODE)   */
+    LAYER_SUB_SUNLIT_SCOPE,         /* Sunlit scope Sel/All/Fav(LAYERS_KEY_ORBITS_SUNLIT_SCOPE) */
+    LAYER_SUB_DIRECTION_ANIM,       /* Direction animate pulse (LAYERS_KEY_ORBIT_DIRECTION_ANIM) */
+    LAYER_SUB_FAV_ORBITS_COLOR,     /* coloured starred orbits (LAYERS_KEY_FAV_ORBITS_3D) */
+    LAYER_SUB_COUNT
+};
+
+static const char *LAYER_PRESET_LABELS[LAYER_PRESET_COUNT] = { "Visual", "Simplified", "Minimal" };
+
+/* primary toggle values for one preset; LayerPresetSubValues() fills the rest */
+static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
+{
+    switch (preset)
+    {
+    case LAYER_PRESET_VISUAL:
+        out[LAYER_TOGGLE_ORBITS] = true;
+        out[LAYER_TOGGLE_ORBITS_DIMMED] = true;
+        out[LAYER_TOGGLE_LABELS] = true;
+        out[LAYER_TOGGLE_LOS] = true;
+        out[LAYER_TOGGLE_APSIDES] = true;
+        out[LAYER_TOGGLE_SUNLIT] = false;
+        out[LAYER_TOGGLE_DIRECTION] = true;
+        out[LAYER_TOGGLE_SLANT_RANGE] = false;
+        out[LAYER_TOGGLE_COAST_LINES] = true;
+        out[LAYER_TOGGLE_COUNTRY_BORDERS] = true;
+        out[LAYER_TOGGLE_GRID] = true;
+        out[LAYER_TOGGLE_MARKERS] = true;
+        out[LAYER_TOGGLE_EARTH_TEXTURE] = true;
+        out[LAYER_TOGGLE_SUNLIGHT] = true;
+        out[LAYER_TOGGLE_SCATTERING] = true;
+        out[LAYER_TOGGLE_CLOUDS] = true;
+        out[LAYER_TOGGLE_SKYBOX] = true;
+        out[LAYER_TOGGLE_ECLIPTIC] = false;
+        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        break;
+
+    case LAYER_PRESET_SIMPLIFIED:
+        out[LAYER_TOGGLE_ORBITS] = true;
+        out[LAYER_TOGGLE_ORBITS_DIMMED] = true;
+        out[LAYER_TOGGLE_LABELS] = true;
+        out[LAYER_TOGGLE_LOS] = true;
+        out[LAYER_TOGGLE_APSIDES] = true;
+        out[LAYER_TOGGLE_SUNLIT] = false;
+        out[LAYER_TOGGLE_DIRECTION] = true;
+        out[LAYER_TOGGLE_SLANT_RANGE] = false;
+        out[LAYER_TOGGLE_COAST_LINES] = true;
+        out[LAYER_TOGGLE_COUNTRY_BORDERS] = true;
+        out[LAYER_TOGGLE_GRID] = true;
+        out[LAYER_TOGGLE_MARKERS] = true;
+        out[LAYER_TOGGLE_EARTH_TEXTURE] = true;
+        out[LAYER_TOGGLE_SUNLIGHT] = false;
+        out[LAYER_TOGGLE_SCATTERING] = false;
+        out[LAYER_TOGGLE_CLOUDS] = false;
+        out[LAYER_TOGGLE_SKYBOX] = false;
+        out[LAYER_TOGGLE_ECLIPTIC] = false;
+        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        break;
+
+    case LAYER_PRESET_MINIMAL:
+    default:
+        out[LAYER_TOGGLE_ORBITS] = true;
+        out[LAYER_TOGGLE_ORBITS_DIMMED] = true;
+        out[LAYER_TOGGLE_LABELS] = true;
+        out[LAYER_TOGGLE_LOS] = true;
+        out[LAYER_TOGGLE_APSIDES] = true;
+        out[LAYER_TOGGLE_SUNLIT] = false;
+        out[LAYER_TOGGLE_DIRECTION] = true;
+        out[LAYER_TOGGLE_SLANT_RANGE] = false;
+        out[LAYER_TOGGLE_COAST_LINES] = true;
+        out[LAYER_TOGGLE_COUNTRY_BORDERS] = true;
+        out[LAYER_TOGGLE_GRID] = true;
+        out[LAYER_TOGGLE_MARKERS] = true;
+        out[LAYER_TOGGLE_EARTH_TEXTURE] = false;
+        out[LAYER_TOGGLE_SUNLIGHT] = false;
+        out[LAYER_TOGGLE_SCATTERING] = false;
+        out[LAYER_TOGGLE_CLOUDS] = false;
+        out[LAYER_TOGGLE_SKYBOX] = false;
+        out[LAYER_TOGGLE_ECLIPTIC] = false;
+        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        break;
+    }
+}
+
+/* secondary toggle values for one preset (Simplified and Minimal share these) */
+static void LayerPresetSubValues(int preset, int out[LAYER_SUB_COUNT])
+{
+    /* Simplified and Minimal deliberately share identical secondary values */
+    switch (preset)
+    {
+    case LAYER_PRESET_VISUAL:
+        out[LAYER_SUB_LABELS_MODE] = LABELS_MODE_FAV;
+        out[LAYER_SUB_GC_MODE] = LAYERS_GC_MODE_SELECTED;
+        out[LAYER_SUB_SUNLIT_SCOPE] = LAYERS_ORBITS_SUNLIT_SELECTED;
+        out[LAYER_SUB_DIRECTION_ANIM] = 0;
+        out[LAYER_SUB_FAV_ORBITS_COLOR] = 1; /* coloured starred satellites: on */
+        break;
+
+    case LAYER_PRESET_SIMPLIFIED:
+    case LAYER_PRESET_MINIMAL:
+    default:
+        out[LAYER_SUB_LABELS_MODE] = LABELS_MODE_FAV;
+        out[LAYER_SUB_GC_MODE] = LAYERS_GC_MODE_SELECTED;
+        out[LAYER_SUB_SUNLIT_SCOPE] = LAYERS_ORBITS_SUNLIT_SELECTED;
+        out[LAYER_SUB_DIRECTION_ANIM] = 0; /* direction animate: off */
+        out[LAYER_SUB_FAV_ORBITS_COLOR] = 0;
+        break;
+    }
+}
+
+/** read the live value of every preset-managed layer into cur[] */
+static void ReadLayerState(UIContext *ctx, AppConfig *cfg, bool cur[LAYER_TOGGLE_COUNT], int sub[LAYER_SUB_COUNT])
+{
+    cur[LAYER_TOGGLE_ORBITS] = ToolSettingGetBool(cfg, LAYERS_KEY_ORBITS, true);
+    cur[LAYER_TOGGLE_ORBITS_DIMMED] = ToolSettingGetBool(cfg, LAYERS_KEY_ORBITS_DIMMED, true);
+    cur[LAYER_TOGGLE_LABELS] = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
+    cur[LAYER_TOGGLE_LOS] = cfg->show_ground_coverage;
+    cur[LAYER_TOGGLE_APSIDES] = cfg->show_apsides;
+    cur[LAYER_TOGGLE_SUNLIT] = cfg->highlight_sunlit;
+    cur[LAYER_TOGGLE_DIRECTION] = ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION, true);
+    cur[LAYER_TOGGLE_SLANT_RANGE] = cfg->show_slant_range;
+    cur[LAYER_TOGGLE_COAST_LINES] = cfg->show_coast_lines;
+    cur[LAYER_TOGGLE_COUNTRY_BORDERS] = cfg->show_country_borders;
+    cur[LAYER_TOGGLE_GRID] = cfg->show_latlon_grid;
+    cur[LAYER_TOGGLE_MARKERS] = cfg->show_markers;
+    cur[LAYER_TOGGLE_EARTH_TEXTURE] = cfg->show_earth_texture;
+    cur[LAYER_TOGGLE_SUNLIGHT] = cfg->show_night_lights;
+    cur[LAYER_TOGGLE_SCATTERING] = cfg->show_scattering;
+    cur[LAYER_TOGGLE_CLOUDS] = cfg->show_clouds;
+    cur[LAYER_TOGGLE_SKYBOX] = cfg->show_skybox;
+    cur[LAYER_TOGGLE_ECLIPTIC] = *ctx->is_ecliptic_frame;
+    cur[LAYER_TOGGLE_MOON_ORBIT] = ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true);
+
+    sub[LAYER_SUB_LABELS_MODE] = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
+    sub[LAYER_SUB_GC_MODE] = ToolSettingGetInt(cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
+    sub[LAYER_SUB_SUNLIT_SCOPE] = ToolSettingGetInt(cfg, LAYERS_KEY_ORBITS_SUNLIT_SCOPE, LAYERS_ORBITS_SUNLIT_SELECTED);
+    sub[LAYER_SUB_DIRECTION_ANIM] = ToolSettingGetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, false) ? 1 : 0;
+    sub[LAYER_SUB_FAV_ORBITS_COLOR] = ToolSettingGetBool(cfg, LAYERS_KEY_FAV_ORBITS_3D, false) ? 1 : 0;
+}
+
+/** true when cur[]/sub[] exactly match every desired value of the given preset */
+static bool LayerStateMatchesPreset(int preset, const bool cur[LAYER_TOGGLE_COUNT], const int sub[LAYER_SUB_COUNT])
+{
+    bool want[LAYER_TOGGLE_COUNT];
+    LayerPresetValues(preset, want);
+    for (int i = 0; i < LAYER_TOGGLE_COUNT; i++)
+        if (cur[i] != want[i])
+            return false;
+
+    int want_sub[LAYER_SUB_COUNT];
+    LayerPresetSubValues(preset, want_sub);
+    for (int i = 0; i < LAYER_SUB_COUNT; i++)
+        if (sub[i] != want_sub[i])
+            return false;
+    return true;
+}
+
+/** apply every layer toggle to the preset's values and persist the selection */
+void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame)
+{
+    if (preset < 0 || preset >= LAYER_PRESET_COUNT)
+        return;
+
+    bool want[LAYER_TOGGLE_COUNT];
+    LayerPresetValues(preset, want);
+    int want_sub[LAYER_SUB_COUNT];
+    LayerPresetSubValues(preset, want_sub);
+
+    ToolSettingSetBool(cfg, LAYERS_KEY_ORBITS, want[LAYER_TOGGLE_ORBITS]);
+    ToolSettingSetBool(cfg, LAYERS_KEY_ORBITS_DIMMED, want[LAYER_TOGGLE_ORBITS_DIMMED]);
+    ToolSettingSetBool(cfg, LABELS_KEY_ENABLED, want[LAYER_TOGGLE_LABELS]);
+    cfg->show_ground_coverage = want[LAYER_TOGGLE_LOS];
+    cfg->show_apsides = want[LAYER_TOGGLE_APSIDES];
+    cfg->highlight_sunlit = want[LAYER_TOGGLE_SUNLIT];
+    ToolSettingSetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION, want[LAYER_TOGGLE_DIRECTION]);
+    cfg->show_slant_range = want[LAYER_TOGGLE_SLANT_RANGE];
+    cfg->show_coast_lines = want[LAYER_TOGGLE_COAST_LINES];
+    cfg->show_country_borders = want[LAYER_TOGGLE_COUNTRY_BORDERS];
+    cfg->show_latlon_grid = want[LAYER_TOGGLE_GRID];
+    cfg->show_markers = want[LAYER_TOGGLE_MARKERS];
+    cfg->show_earth_texture = want[LAYER_TOGGLE_EARTH_TEXTURE];
+    cfg->show_night_lights = want[LAYER_TOGGLE_SUNLIGHT];
+    cfg->show_scattering = want[LAYER_TOGGLE_SCATTERING];
+    cfg->show_clouds = want[LAYER_TOGGLE_CLOUDS];
+    cfg->show_skybox = want[LAYER_TOGGLE_SKYBOX];
+    cfg->show_ecliptic_frame = want[LAYER_TOGGLE_ECLIPTIC];
+    if (is_ecliptic_frame)
+        *is_ecliptic_frame = want[LAYER_TOGGLE_ECLIPTIC];
+    ToolSettingSetBool(cfg, LAYERS_KEY_MOON_ORBIT, want[LAYER_TOGGLE_MOON_ORBIT]);
+
+    /* secondary/sub toggles (scope combos + sub-switches) */
+    ToolSettingSetInt(cfg, LABELS_KEY_MODE, want_sub[LAYER_SUB_LABELS_MODE]);
+    ToolSettingSetInt(cfg, LAYERS_KEY_GC_MODE, want_sub[LAYER_SUB_GC_MODE]);
+    ToolSettingSetInt(cfg, LAYERS_KEY_ORBITS_SUNLIT_SCOPE, want_sub[LAYER_SUB_SUNLIT_SCOPE]);
+    ToolSettingSetBool(cfg, LAYERS_KEY_ORBIT_DIRECTION_ANIM, want_sub[LAYER_SUB_DIRECTION_ANIM] != 0);
+    ToolSettingSetBool(cfg, LAYERS_KEY_FAV_ORBITS_3D, want_sub[LAYER_SUB_FAV_ORBITS_COLOR] != 0);
+
+    /* remember the last explicitly applied preset (-1 == Custom) */
+    ToolSettingSetInt(cfg, LAYERS_KEY_PRESET, preset);
+}
+
 void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
 {
-    (void)ctx;
-
     ImGui::PushTextWrapPos(0.0f);
 
     /* fixed icon width so all checkboxes align vertically */
@@ -84,6 +316,43 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("%s", tooltip);
         ImGui::EndDisabled();
     };
+
+    /* -- Preset -------------------------------------------------------------- */
+    {
+        bool cur[LAYER_TOGGLE_COUNT];
+        int sub[LAYER_SUB_COUNT];
+        ReadLayerState(ctx, cfg, cur, sub);
+
+        int matched = LAYERS_PRESET_CUSTOM;
+        for (int i = 0; i < LAYER_PRESET_COUNT; i++)
+        {
+            if (LayerStateMatchesPreset(i, cur, sub))
+            {
+                matched = i;
+                break;
+            }
+        }
+
+        const char *items[LAYER_PRESET_COUNT + 1];
+        for (int i = 0; i < LAYER_PRESET_COUNT; i++)
+            items[i] = LAYER_PRESET_LABELS[i];
+        items[LAYER_PRESET_COUNT] = "Custom";
+
+        int display = (matched >= 0) ? matched : LAYER_PRESET_COUNT;
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Preset:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        if (ImGui::Combo("##layers_preset", &display, items, LAYER_PRESET_COUNT + 1))
+        {
+            /* "Custom" is a status, not an action: leave the layers untouched */
+            if (display >= 0 && display < LAYER_PRESET_COUNT)
+                ApplyLayerPreset(cfg, display, ctx->is_ecliptic_frame);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Apply a predefined layer visibility profile.\nShows \"Custom\" once any layer is changed manually.");
+    }
 
     /* -- Satellites ---------------------------------------------------------- */
     if (ImGui::CollapsingHeader("Satellites", ImGuiTreeNodeFlags_DefaultOpen))
@@ -269,13 +538,13 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
     {
         ImGui::Indent();
 
-        /* Earth Texture (master), off = plain black body */
+        /* Earth Texture (master), off = theme-colored solid body */
         bool earth_texture_on = cfg->show_earth_texture;
         {
             bool val = earth_texture_on;
             bool prev = val;
             DrawLayerCheckbox("Earth Texture", &val, ICON_FA_GLOBE,
-                              "Show the Earth surface texture (off = plain black).\n2D and 3D.");
+                              "Show the Earth surface texture (off = a shaded theme-colored globe).\n2D and 3D.");
             if (val != prev)
             {
                 earth_texture_on = val;
@@ -283,7 +552,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* sub-controls for the earth texture (not indented; disabled and forced off while the master is off) */
+        /* earth-texture sub-controls (disabled while the master is off) */
         ImGui::BeginDisabled(!earth_texture_on);
 
         /* Sunlight: toggles night-side lights + the visible sun disc */

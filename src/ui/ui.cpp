@@ -152,7 +152,6 @@ void UICloseTopModal(AppConfig *cfg)
         { "Transit Overview",     &g_ui.transit_overview_open },
         { "Settings",             &g_layout.settings_open    },
         { "Manage Tools",         &g_layout.tools_open       },
-        { "Welcome to TLEscope",  cfg ? &cfg->show_first_run_dialog : nullptr },
     };
 
     for (const auto &entry : kModalFlags)
@@ -709,79 +708,6 @@ static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
     }
 }
 
-/* -- First Run Dialog ------------------------------------------------------ */
-
-static void DrawFirstRunDialog(UIContext *ctx, AppConfig *cfg)
-{
-    (void)ctx;
-    if (cfg->show_first_run_dialog)
-        ImGui::OpenPopup("Welcome to TLEscope");
-
-    /* minimum content width so the button pair has symmetric breathing room */
-    ImGui::SetNextWindowContentSize(ImVec2(UIPx(360.0f), 0));
-    if (ImGui::BeginPopupModal("Welcome to TLEscope", &cfg->show_first_run_dialog, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        /* centered heading */
-        const char *title = ICON_FA_SATELLITE "  Welcome to TLEscope";
-        float title_w = ImGui::CalcTextSize(title).x;
-        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - title_w) * 0.5f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s", title);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ImGui::TextWrapped("Pick a graphics profile to get started. You can change these settings later from the Settings menu.");
-        ImGui::Spacing();
-
-        /* two equally-sized, aligned buttons */
-        float btn_w = UIPx(150.0f);
-        float btn_h = UIPx(60.0f);
-        float avail = ImGui::GetContentRegionAvail().x;
-        float spacing = ImGui::GetStyle().ItemSpacing.x;
-        float total = btn_w * 2.0f + spacing;
-        ImGui::SetCursorPosX((avail - total) * 0.5f);
-
-        if (ImGui::Button("Performance", ImVec2(btn_w, btn_h)))
-        {
-            /* disable the expensive graphics effects for a lighter draw */
-            cfg->show_clouds = false;
-            cfg->show_night_lights = false;
-            cfg->show_scattering = false;
-            cfg->show_skybox = false;
-            cfg->night_mode = false;
-            cfg->show_earth_texture = false;
-
-            LayoutFillPersist(&cfg->ui_layout);
-            SaveAppConfig("settings.json", cfg);
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Aesthetic", ImVec2(btn_w, btn_h)))
-        {
-            cfg->show_clouds = true;
-            cfg->show_night_lights = true;
-            cfg->show_scattering = true;
-            cfg->show_skybox = true;
-            cfg->night_mode = false;
-
-            /* textured Earth body; map overlays keep their configured defaults */
-            cfg->show_earth_texture = true;
-
-            LayoutFillPersist(&cfg->ui_layout);
-            SaveAppConfig("settings.json", cfg);
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ImGui::TextWrapped("Performance disables clouds, night lights, atmospheric scattering and the skybox. Aesthetic enables all of them.");
-        ImGui::EndPopup();
-    }
-}
-
 /* -- Update Check Notification ---------------------------------------------- */
 
 static void DrawUpdateCheck(UIContext *ctx, AppConfig *cfg)
@@ -1019,7 +945,6 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     }
 
     /* modals */
-    DrawFirstRunDialog(ctx, cfg);
     DrawDataWarning(ctx, cfg);
     DrawUpdateCheck(ctx, cfg);
     DrawHelpModal(ctx, cfg);

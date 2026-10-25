@@ -50,6 +50,29 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 #define LAYERS_GC_MODE_ALL       1
 #define LAYERS_GC_MODE_FAV       2
 
+/* layer visibility preset selected in the Layers panel (int, -1 = Custom) */
+#define LAYERS_KEY_PRESET "layers.preset"
+#define LAYERS_PRESET_CUSTOM (-1)
+
+/* -- Layer visibility presets (see tool_layers.cpp) ------------------------ */
+
+/* named presets managed by the Layers panel "Preset:" combo, in combo order */
+typedef enum
+{
+    LAYER_PRESET_VISUAL = 0,
+    LAYER_PRESET_SIMPLIFIED,
+    LAYER_PRESET_MINIMAL,
+    LAYER_PRESET_COUNT
+} LayerPresetId;
+
+/**
+ * Apply a named layer preset (a LayerPresetId) and persist the selection.
+ *
+ * @param is_ecliptic_frame  optional live ecliptic flag; the panel passes its
+ *                           UI pointer, first-boot callers pass NULL.
+ */
+void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame = nullptr);
+
 /* -- Shared UI helpers ----------------------------------------------------- */
 
 /** convert a raylib Color to an ImGui ImVec4 */

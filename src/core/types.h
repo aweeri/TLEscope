@@ -373,7 +373,6 @@ typedef struct
     bool show_latlon_grid;
     bool show_country_borders;
     bool show_coast_lines;
-    bool show_first_run_dialog;
     bool show_tutorial;   /* first-boot tutorial pending (default false) */
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)

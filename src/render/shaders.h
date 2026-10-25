@@ -216,6 +216,26 @@ void main() {
 }
 )GLSL";
 
+/* shaded solid-body shader for the textureless Earth (Earth Texture off) */
+inline constexpr const char *fsEarthSolid3D = R"GLSL(#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+uniform vec3 sunDir;
+uniform vec4 baseColor;
+void main() {
+    float theta = (fragTexCoord.x - 0.5) * 6.28318530718;
+    float phi = fragTexCoord.y * 3.14159265359;
+    vec3 normal = normalize(vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi)));
+
+    /* wrap the terminator slightly so the night side is never a black void */
+    float intensity = dot(normal, sunDir);
+    float light = mix(0.18, 1.0, smoothstep(-0.25, 0.25, intensity));
+
+    finalColor = vec4(baseColor.rgb * light, baseColor.a) * fragColor;
+}
+)GLSL";
+
 /**
  * @brief atmospheric scattering glow shader.
  */
