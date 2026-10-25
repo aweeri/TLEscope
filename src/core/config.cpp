@@ -35,6 +35,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_slant_range = false; // default
     config->show_scattering = true;   // default (Aesthetic profile)
     config->show_skybox = true;       // default
+    config->show_sun = true;          // default
+    config->show_sun_flare = true;    // default
     config->show_ecliptic_frame = false; // default
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
@@ -192,6 +194,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->highlight_sunlit = get_bool("highlight_sunlit", config->highlight_sunlit);
                     config->show_slant_range = get_bool("show_slant_range", config->show_slant_range);
                     config->show_skybox = get_bool("show_skybox", config->show_skybox);
+                    config->show_sun = get_bool("show_sun", config->show_sun);
+                    config->show_sun_flare = get_bool("show_sun_flare", config->show_sun_flare);
                     config->show_ecliptic_frame = get_bool("show_ecliptic_frame", config->show_ecliptic_frame);
                     config->show_ground_coverage = get_bool("show_ground_coverage", config->show_ground_coverage);
                     config->show_apsides = get_bool("show_apsides", config->show_apsides);
@@ -656,6 +660,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_slant_range"] = config->show_slant_range;
     root["show_scattering"] = config->show_scattering;
     root["show_skybox"] = config->show_skybox;
+    root["show_sun"] = config->show_sun;
+    root["show_sun_flare"] = config->show_sun_flare;
     root["show_ecliptic_frame"] = config->show_ecliptic_frame;
     root["show_ground_coverage"] = config->show_ground_coverage;
     root["show_apsides"] = config->show_apsides;

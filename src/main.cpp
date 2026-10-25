@@ -640,6 +640,158 @@ static void ClampWindowRectToMonitor(int &x, int &y, int &w, int &h)
     if (y > maxY) y = maxY;
 }
 
+static Texture2D g_sunGlowTex = {0};
+
+static Texture2D SunEnsureGlowTexture(void)
+{
+    if (g_sunGlowTex.id == 0)
+    {
+        const int SZ = 128;
+        Image img = GenImageColor(SZ, SZ, BLANK);
+        float c = (float)SZ * 0.5f;
+        float maxR = c;
+
+        for (int y = 0; y < SZ; y++)
+        {
+            for (int x = 0; x < SZ; x++)
+            {
+                float dx = (float)x - c;
+                float dy = (float)y - c;
+                float r = sqrtf(dx * dx + dy * dy) / maxR;
+                if (r >= 1.0f)
+                    continue;
+
+                float halo = powf(1.0f - r, 2.4f);
+                float core = powf(1.0f - r, 14.0f);
+
+                unsigned char R = (unsigned char)(255.0f);
+                unsigned char G = (unsigned char)((215.0f + (255.0f - 215.0f) * core) + 0.5f);
+                unsigned char B = (unsigned char)((140.0f + (245.0f - 140.0f) * core) + 0.5f);
+                unsigned char A = (unsigned char)(Clamp(halo, 0.0f, 1.0f) * 255.0f + 0.5f);
+                ImageDrawPixel(&img, x, y, (Color){R, G, B, A});
+            }
+        }
+
+        g_sunGlowTex = LoadTextureFromImage(img);
+        SetTextureFilter(g_sunGlowTex, TEXTURE_FILTER_BILINEAR);
+        UnloadImage(img);
+    }
+    return g_sunGlowTex;
+}
+
+static void DrawSunOverlay(Vector3 sunDirWorld, Vector3 camForward, Camera cam, const AppConfig &cfg)
+{
+    if (!cfg.show_sun)
+        return;
+    if (g_view3d_w <= 0.0f || g_view3d_h <= 0.0f)
+        return;
+
+    if (Vector3DotProduct(sunDirWorld, camForward) <= 0.0f)
+        return;
+
+    const float sunDist = 1200.0f;
+    Vector3 sunWorld = Vector3Add(cam.position, Vector3Scale(sunDirWorld, sunDist));
+    Vector2 sp = WorldToScreenViewport3D(sunWorld, cam);
+
+    float margin_x = g_view3d_w * 0.6f;
+    float margin_y = g_view3d_h * 0.6f;
+    if (sp.x < g_view3d_x - margin_x || sp.x > g_view3d_x + g_view3d_w + margin_x ||
+        sp.y < g_view3d_y - margin_y || sp.y > g_view3d_y + g_view3d_h + margin_y)
+        return;
+
+    const float rEarth = EARTH_RADIUS_KM / DRAW_SCALE;
+    const float rAtmo  = (EARTH_RADIUS_KM + 80.0f) / DRAW_SCALE;
+    float occlusion = 1.0f;
+    {
+        Vector3 o = cam.position;
+        float od = Vector3DotProduct(o, sunDirWorld);
+        float b2 = Vector3DotProduct(o, o) - od * od;
+        float b  = sqrtf(fmaxf(b2, 0.0f));
+        bool  in_front = (-od) > 0.0f;
+        if (in_front)
+        {
+            if (b <= rEarth)
+                occlusion = 0.0f;
+            else if (b <= rAtmo)
+                occlusion = (b - rEarth) / (rAtmo - rEarth);
+        }
+    }
+    if (occlusion <= 0.0f)
+        return;
+
+    Vector2 center = { g_view3d_x + g_view3d_w * 0.5f, g_view3d_y + g_view3d_h * 0.5f };
+    float short_side = fminf((float)GetScreenWidth(), (float)GetScreenHeight());
+    if (short_side <= 0.0f)
+        short_side = fminf(g_view3d_w, g_view3d_h);
+
+    float disk = short_side * 0.045f;
+    if (disk < 8.0f)
+        disk = 8.0f;
+    float glowR = disk * 6.0f;
+
+    Vector2 d = { (sp.x - center.x) / (g_view3d_w * 0.5f), (sp.y - center.y) / (g_view3d_h * 0.5f) };
+    float centreDist = sqrtf(d.x * d.x + d.y * d.y);
+    float centreness = Clamp(1.0f - centreDist, 0.0f, 1.0f);
+
+    Texture2D glow = SunEnsureGlowTexture();
+    Rectangle src = { 0.0f, 0.0f, (float)glow.width, (float)glow.height };
+
+    rlDrawRenderBatchActive();
+    rlDisableDepthTest();
+    rlDisableDepthMask();
+
+    BeginScissorMode((int)g_view3d_x, (int)g_view3d_y, (int)g_view3d_w, (int)g_view3d_h);
+
+    BeginBlendMode(BLEND_ADDITIVE);
+
+    DrawTexturePro(glow, src, (Rectangle){ sp.x, sp.y, glowR * 2.0f, glowR * 2.0f },
+                   (Vector2){ glowR, glowR }, 0.0f,
+                   (Color){ 255, 220, 150, (unsigned char)(200.0f * occlusion) });
+    DrawTexturePro(glow, src, (Rectangle){ sp.x, sp.y, disk * 2.0f, disk * 2.0f },
+                   (Vector2){ disk, disk }, 0.0f,
+                   (Color){ 255, 255, 245, (unsigned char)(255.0f * occlusion) });
+
+    if (cfg.show_sun_flare)
+    {
+        float flare = centreness * occlusion;
+        if (flare > 0.001f)
+        {
+            const float ts[7] = { -0.5f, 0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f };
+            const float sizes[7] = { 0.18f, 0.10f, 0.14f, 0.08f, 0.12f, 0.07f, 0.16f };
+            const Color tints[7] = {
+                { 255, 200, 140, 255 }, { 255, 170, 120, 255 }, { 180, 210, 255, 255 },
+                { 255, 160, 200, 255 }, { 200, 230, 255, 255 }, { 255, 180, 120, 255 },
+                { 255, 200, 140, 255 }
+            };
+
+            for (int i = 0; i < 7; i++)
+            {
+                float t = ts[i];
+                Vector2 gpos = { center.x + (sp.x - center.x) * t, center.y + (sp.y - center.y) * t };
+                float gr = short_side * sizes[i] * (0.7f + 0.3f * centreness);
+                if (gr < 2.0f)
+                    continue;
+                unsigned char a = (unsigned char)(tints[i].a * flare * 0.55f);
+                DrawTexturePro(glow, src, (Rectangle){ gpos.x, gpos.y, gr * 2.0f, gr * 2.0f },
+                               (Vector2){ gr, gr }, 0.0f, (Color){ tints[i].r, tints[i].g, tints[i].b, a });
+            }
+
+            float streak_len = glowR * 7.0f;
+            float streak_h = disk * 0.6f;
+            unsigned char sa = (unsigned char)(140.0f * flare);
+            DrawTexturePro(glow, src, (Rectangle){ sp.x, sp.y, streak_len, streak_h * 2.0f },
+                           (Vector2){ streak_len * 0.5f, streak_h }, 0.0f, (Color){ 180, 210, 255, sa });
+        }
+    }
+
+    EndBlendMode();
+    EndScissorMode();
+
+    rlDrawRenderBatchActive();
+    rlDisableDepthTest();
+    rlEnableDepthMask();
+}
+
 int main(void)
 {
     LogInit();
@@ -2668,18 +2820,6 @@ int main(void)
 
             DrawModel(moonModel, draw_moon_pos, 1.0f, WHITE);
 
-            /* draw the sun on the skybox; the visible disc follows the Sunlight
-             * layer toggle (which also drives the night-side city lights) */
-            if (cfg.show_night_lights)
-            {
-                float sun_dist = 1200.0f;
-                float sun_radius = sun_dist * tanf((0.15f / 2.0f) * DEG2RAD);
-                Vector3 sun_pos_3d = Vector3Add(Camera3DParams.position, Vector3Scale(sunDirWorld, sun_dist));
-
-                DrawSphere(sun_pos_3d, sun_radius * 3.0f, ApplyAlpha((Color){ 255, 240, 200, 255 }, 0.25f));
-                DrawSphere(sun_pos_3d, sun_radius * 1.5f, (Color){ 255, 255, 220, 255 });
-            }
-
             /* Shader-based ground coverage rendering (3D) */
             if (cfg.show_ground_coverage && !(is_pov_mode && selected_sat != NULL))
             {
@@ -3017,6 +3157,8 @@ int main(void)
 
             Vector3 camForward = Vector3Normalize(Vector3Subtract(Camera3DParams.target, Camera3DParams.position));
 
+            DrawSunOverlay(sunDirWorld, camForward, Camera3DParams, cfg);
+
             bool hide_apsis = (is_pov_mode && selected_sat != NULL && active_sat == selected_sat);
             if (cfg.show_apsides && active_sat && active_sat->is_active && !hide_apsis)
             {
@@ -3306,6 +3448,8 @@ int main(void)
     UnloadTexture(earthTexture);
     UnloadTexture(earthNightTexture);
     UnloadTexture(skyboxTexture);
+    if (g_sunGlowTex.id != 0)
+        UnloadTexture(g_sunGlowTex);
     UnloadModel(skyboxModel);
     UnloadModel(earthModel);
     UnloadShader(shader3D);

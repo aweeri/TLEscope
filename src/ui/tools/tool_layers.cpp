@@ -71,6 +71,8 @@ enum LayerToggleId
     LAYER_TOGGLE_SKYBOX,
     LAYER_TOGGLE_ECLIPTIC,
     LAYER_TOGGLE_MOON_ORBIT,
+    LAYER_TOGGLE_SUN,
+    LAYER_TOGGLE_SUN_FLARE,
     LAYER_TOGGLE_COUNT
 };
 
@@ -113,6 +115,8 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_SKYBOX] = true;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
         out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_SUN] = true;
+        out[LAYER_TOGGLE_SUN_FLARE] = true;
         break;
 
     case LAYER_PRESET_SIMPLIFIED:
@@ -135,6 +139,8 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_SKYBOX] = false;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
         out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_SUN] = true;
+        out[LAYER_TOGGLE_SUN_FLARE] = false;
         break;
 
     case LAYER_PRESET_MINIMAL:
@@ -158,6 +164,8 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_SKYBOX] = false;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
         out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_SUN] = false;
+        out[LAYER_TOGGLE_SUN_FLARE] = false;
         break;
     }
 }
@@ -210,6 +218,9 @@ static void ReadLayerState(UIContext *ctx, AppConfig *cfg, bool cur[LAYER_TOGGLE
     cur[LAYER_TOGGLE_SKYBOX] = cfg->show_skybox;
     cur[LAYER_TOGGLE_ECLIPTIC] = *ctx->is_ecliptic_frame;
     cur[LAYER_TOGGLE_MOON_ORBIT] = ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true);
+    cur[LAYER_TOGGLE_SUN] = cfg->show_sun;
+    /* the flare is only meaningful while the sun is visible, so mirror that gating */
+    cur[LAYER_TOGGLE_SUN_FLARE] = cfg->show_sun && cfg->show_sun_flare;
 
     sub[LAYER_SUB_LABELS_MODE] = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
     sub[LAYER_SUB_GC_MODE] = ToolSettingGetInt(cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
@@ -267,6 +278,8 @@ void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame)
     if (is_ecliptic_frame)
         *is_ecliptic_frame = want[LAYER_TOGGLE_ECLIPTIC];
     ToolSettingSetBool(cfg, LAYERS_KEY_MOON_ORBIT, want[LAYER_TOGGLE_MOON_ORBIT]);
+    cfg->show_sun = want[LAYER_TOGGLE_SUN];
+    cfg->show_sun_flare = want[LAYER_TOGGLE_SUN_FLARE];
 
     /* secondary/sub toggles (scope combos + sub-switches) */
     ToolSettingSetInt(cfg, LABELS_KEY_MODE, want_sub[LAYER_SUB_LABELS_MODE]);
@@ -610,6 +623,28 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
                               "Show the starfield skybox.\n3D only.");
             if (val != prev)
                 cfg->show_skybox = val;
+        }
+
+        /* Sun (3D only) + inline sun-flare sub-toggle */
+        {
+            float row_avail = ImGui::GetContentRegionAvail().x;
+            bool val = cfg->show_sun;
+            bool prev = val;
+            DrawLayerCheckbox("Sun", &val, ICON_FA_CIRCLE_RADIATION,
+                              "Show the sun disc and its glow over the scene.\nIndependent of the Skybox.\n3D only.");
+            if (val != prev)
+                cfg->show_sun = val;
+
+            /* right-aligned sun-flare toggle, disabled while the master is off */
+            ImGui::BeginDisabled(!val);
+            const float box_w = 26.0f;
+            ImGui::SameLine(row_avail - box_w);
+            bool flare = cfg->show_sun_flare;
+            if (ImGui::Checkbox("##sun_flare", &flare))
+                cfg->show_sun_flare = flare;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Draw the lens-flare chain around the sun.\n3D only.");
+            ImGui::EndDisabled();
         }
 
         /* Ecliptic Frame (3D only) */

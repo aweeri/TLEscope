@@ -366,6 +366,8 @@ typedef struct
     bool show_scattering;
     bool hint_vsync;
     bool show_skybox;
+    bool show_sun;
+    bool show_sun_flare;
     bool show_ecliptic_frame;
     bool show_ground_coverage;
     bool show_apsides;
