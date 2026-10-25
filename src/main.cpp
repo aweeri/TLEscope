@@ -1096,11 +1096,6 @@ int main(void)
     float current_ecliptic_angle = 0.0f;
     bool is_pov_mode = false;
 
-    bool show_scope = false;
-    float scope_az = 180.0f;
-    float scope_el = 45.0f;
-    float scope_beam = 30.0f;
-
     Satellite *hovered_sat = NULL;
     Satellite *selected_sat = NULL;
     TargetLock active_lock = LOCK_EARTH;
@@ -3088,61 +3083,6 @@ int main(void)
                 rlEnableDepthMask();
             }
 
-            if (show_scope && home)
-            {
-                float h_lat_rad = home->lat * DEG2RAD;
-                float h_lon_rad = (home->lon + gmst_deg + cfg.earth_rotation_offset) * DEG2RAD;
-                
-                Vector3 h_pos3d = {
-                    cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, 
-                    sinf(h_lat_rad) * draw_earth_radius, 
-                    -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius
-                };
-
-                Vector3 up = Vector3Normalize(h_pos3d);
-                Vector3 east = {-sinf(h_lon_rad), 0.0f, -cosf(h_lon_rad)};
-                Vector3 north = {-cosf(h_lon_rad) * sinf(h_lat_rad), cosf(h_lat_rad), sinf(h_lon_rad) * sinf(h_lat_rad)};
-
-                float el_rad = scope_el * DEG2RAD;
-                float az_rad = scope_az * DEG2RAD;
-
-                Vector3 dir = Vector3Add(
-                    Vector3Add(Vector3Scale(north, cosf(el_rad) * cosf(az_rad)), 
-                               Vector3Scale(east, cosf(el_rad) * sinf(az_rad))),
-                    Vector3Scale(up, sinf(el_rad))
-                );
-                dir = Vector3Normalize(dir);
-
-                /* extend out to roughly GEO distance */
-                float cone_length = 25000.0f / DRAW_SCALE; 
-                float cone_radius = cone_length * tanf((scope_beam / 2.0f) * DEG2RAD);
-                Vector3 center_end = Vector3Add(h_pos3d, Vector3Scale(dir, cone_length));
-
-                Vector3 perp1 = Vector3CrossProduct(dir, up);
-                if (Vector3Length(perp1) < 0.01f) perp1 = Vector3CrossProduct(dir, north);
-                perp1 = Vector3Normalize(perp1);
-                Vector3 perp2 = Vector3CrossProduct(dir, perp1);
-
-                Color lineCol = ApplyAlpha(g_theme.ui.accent, 0.4f);
-
-                /* same overlay treatment as the slant range line: keep the
-                 * cone visible through clouds / scattering / footprint */
-                rlDrawRenderBatchActive();
-                rlDisableDepthTest();
-                rlDisableDepthMask();
-                for (int i = 0; i < 4; i++) {
-                    /* calculate 4 corners at 45, 135, 225, 315 degrees */
-                    float angle = (i * PI / 2.0f) + (PI / 4.0f);
-                    Vector3 pt = Vector3Add(center_end,
-                                    Vector3Add(Vector3Scale(perp1, cosf(angle) * cone_radius),
-                                               Vector3Scale(perp2, sinf(angle) * cone_radius)));
-                    DrawLine3D(h_pos3d, pt, lineCol);
-                }
-                rlDrawRenderBatchActive();
-                rlEnableDepthTest();
-                rlEnableDepthMask();
-            }
-
             /* tool scene hooks (3D overlays) */
             DrawSceneHooks(&sctx, &cfg);
 
@@ -3316,10 +3256,6 @@ int main(void)
             .exit_app = &exit_app,
             .is_ecliptic_frame = &is_ecliptic_frame,
             .is_pov_mode = &is_pov_mode,
-            .show_scope = &show_scope,
-            .scope_az = &scope_az,
-            .scope_el = &scope_el,
-            .scope_beam = &scope_beam,
             .selected_sat = &selected_sat,
             .hovered_sat = hovered_sat,
             .active_sat = active_sat,

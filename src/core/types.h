@@ -113,12 +113,10 @@ typedef enum
     PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
     PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
     PANEL_LAYERS,           /* Layer Controls               -> left  */
-    PANEL_SCOPE,            /* Scope                        -> left  */
     PANEL_ROTATOR,          /* Rotator Control              -> left  */
     PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
     PANEL_TRANSIT,          /* Transit Tracking             -> right */
     PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
-    PANEL_DOPPLER,          /* Doppler Analysis             -> right */
     PANEL_LOG,              /* Log                          -> right */
     PANEL_TRXDB,            /* TRXDB NORAD TEST             -> right */
     PANEL_EXAMPLE,          /* Example Tool                 -> right */

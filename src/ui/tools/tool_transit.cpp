@@ -60,6 +60,7 @@ static bool   s_list_scroll_reset = true; /* scroll the child to the top on next
 static bool   s_list_interacting = false; /* true while the user presses/drags the list */
 static int    s_last_num_passes = -1;     /* list size last draw (detect refreshes) */
 static bool   s_show_deep_space = false;  /* include deep-space/GEO/HEO sats in the list */
+static int    s_requested_tab = -1;       /* modal tab to force-select on next open (-1 = none) */
 
 /* stable selection identity: survives list recomputes while timewarping */
 static bool     s_sel_key_valid = false;
@@ -700,7 +701,7 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
 
             dl->PopClipRect();
 
-            /* right-click -> hand the pass off to Doppler */
+            /* right-click -> hand the pass off to Doppler (transit modal tab) */
             if (clicked_right)
             {
                 TransitSelectIndex(i);
@@ -708,7 +709,7 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
                 g_ui.locked_pass_sat = p->sat;
                 g_ui.locked_pass_aos = p->aos_epoch;
                 g_ui.locked_pass_los = p->los_epoch;
-                LayoutOpenPanel(PANEL_DOPPLER);
+                TransitOpenDopplerTab(cfg);
             }
 
             ImGui::SetCursorScreenPos(ImVec2(row_start.x,
@@ -1321,6 +1322,13 @@ static void DrawTransitOverviewTabs(UIContext *ctx, AppConfig *cfg, int *pending
         ToolSettingSetInt(cfg, "transit.modal_tab", active_tab);
 }
 
+void TransitOpenDopplerTab(AppConfig *cfg)
+{
+    s_requested_tab = 1;                 /* "Doppler Shift" tab (0=Polar,1=Doppler,2=El/Az) */
+    g_ui.transit_overview_open = true;
+    ToolSettingSetInt(cfg, "transit.modal_tab", 1);
+}
+
 void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
 {
     static bool s_tab_restored = false;
@@ -1352,7 +1360,10 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
     {
         if (!s_tab_restored)
         {
-            s_pending_tab = ToolSettingGetInt(cfg, "transit.modal_tab", 0);
+            s_pending_tab = (s_requested_tab >= 0)
+                                ? s_requested_tab
+                                : ToolSettingGetInt(cfg, "transit.modal_tab", 0);
+            s_requested_tab = -1;
             s_tab_restored = true;
         }
 

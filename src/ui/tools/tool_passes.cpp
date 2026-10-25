@@ -122,14 +122,14 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* ---- 2.5: right-click a pass to hand it off to Doppler ---- */
+        /* ---- 2.5: right-click a pass to hand it off to Doppler (transit modal) ---- */
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
         {
             g_ui.selected_pass_idx = i;
             g_ui.locked_pass_sat = p->sat;
             g_ui.locked_pass_aos = p->aos_epoch;
             g_ui.locked_pass_los = p->los_epoch;
-            LayoutOpenPanel(PANEL_DOPPLER);
+            TransitOpenDopplerTab(cfg);
         }
 
         /* ---- 2.3: thin progress bar, only while the pass is

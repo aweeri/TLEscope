@@ -9,7 +9,6 @@
 #include "ui/ui.h"
 
 #define ROTATOR_STEER_POLAR 0
-#define ROTATOR_STEER_SCOPE 1
 
 void RotatorShutdown(void);
 
@@ -33,7 +32,7 @@ void RotatorDisconnect(void);
 void RotatorPollNow(void);
 void RotatorSendCustomNow(void);
 
-void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_polar_dialog, bool polar_lunar_mode, int selected_pass_idx);
+void RotatorUpdateControl(UIContext *ctx, bool show_polar_dialog, bool polar_lunar_mode, int selected_pass_idx);
 
 bool RotatorIsConnected(void);
 float RotatorGetAz(void);

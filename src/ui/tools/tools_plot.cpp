@@ -1,9 +1,9 @@
 /*
  * tools_plot.cpp - Shared, theme-aware drawing and sampling primitives.
  *
- * Extracted from tool_polar_plot.cpp / tool_doppler.cpp so the Transit
- * Tracking panel, its overview modal and the Doppler panel share one
- * implementation of the polar canvas, the XY charts and the pass sampling.
+ * Extracted from tool_polar_plot.cpp so the Transit Tracking panel and its
+ * overview modal share one implementation of the polar canvas, the XY charts
+ * and the pass sampling.
  */
 
 #include "tools_plot.h"

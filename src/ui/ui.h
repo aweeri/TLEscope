@@ -27,13 +27,11 @@ typedef struct
     bool show_settings;
     bool show_passes_dialog;
     bool show_polar_dialog;
-    bool show_doppler_dialog;
     bool show_tle_warning;
     bool show_exit_dialog;
     bool show_sat_mgr_dialog;
     bool show_tle_mgr_dialog;
     bool show_time_dialog;
-    bool show_scope_dialog;
     bool show_sat_info_dialog;
     bool show_log_window;
 
@@ -93,12 +91,6 @@ typedef struct
     char text_hl_lon[32];
     char text_hl_alt[32];
     char text_unix[64];
-    char text_doppler_freq[32];
-    char text_doppler_res[32];
-    char text_doppler_file[128];
-    char text_scope_az[16];
-    char text_scope_el[16];
-    char text_scope_beam[16];
 
     /* edit mode flags */
     bool edit_sat_search;
@@ -109,8 +101,6 @@ typedef struct
     bool edit_year, edit_month, edit_day;
     bool edit_hour, edit_min, edit_sec;
     bool edit_unix;
-    bool edit_doppler_freq, edit_doppler_res, edit_doppler_file;
-    bool edit_scope_az, edit_scope_el, edit_scope_beam;
     bool rot_edit_host, rot_edit_port;
     bool rot_edit_get_fmt, rot_edit_set_fmt;
     bool rot_edit_custom_cmd;
@@ -121,16 +111,6 @@ typedef struct
     /* RA/Dec display format state */
     int ra_format;      /* 0 = decimal degrees (default), 1 = hours:minutes:seconds */
     int dec_format;     /* 0 = decimal degrees (default), 1 = degrees:arcminutes:arcseconds */
-
-    /* scope state */
-    bool scope_drag_active;
-    Vector2 scope_drag_last;
-    bool scope_drag_moved;
-    bool scope_lock;
-    bool scope_show_leo;
-    bool scope_show_heo;
-    bool scope_show_geo;
-    bool scope_show_trails;
 
     /* polar state */
     bool polar_lunar_mode;
@@ -198,10 +178,6 @@ typedef struct
     bool *exit_app;
     bool *is_ecliptic_frame;
     bool *is_pov_mode;
-    bool *show_scope;
-    float *scope_az;
-    float *scope_el;
-    float *scope_beam;
     Satellite **selected_sat;
     Satellite *hovered_sat;
     Satellite *active_sat;

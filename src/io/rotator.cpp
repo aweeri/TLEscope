@@ -329,7 +329,7 @@ void RotatorSendCustomNow(void)
     if (rot.custom_cmd[0] != '\0')
         SendRaw(rot.custom_cmd, NULL, 0);
 }
-void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_polar_dialog, bool polar_lunar_mode, int selected_pass_idx)
+void RotatorUpdateControl(UIContext *ctx, bool show_polar_dialog, bool polar_lunar_mode, int selected_pass_idx)
 {
     if (rot.connected)
         PollPosition();
@@ -339,13 +339,7 @@ void RotatorUpdateControl(UIContext *ctx, bool show_scope_dialog, bool show_pola
         float target_az = 0.0f, target_el = 0.0f;
         bool has_target = false;
 
-        if (rot.steer_mode == ROTATOR_STEER_SCOPE && show_scope_dialog)
-        {
-            target_az = *ctx->scope_az;
-            target_el = *ctx->scope_el;
-            has_target = true;
-        }
-        else if (rot.steer_mode == ROTATOR_STEER_POLAR && show_polar_dialog && !polar_lunar_mode && selected_pass_idx >= 0 && selected_pass_idx < num_passes)
+        if (rot.steer_mode == ROTATOR_STEER_POLAR && show_polar_dialog && !polar_lunar_mode && selected_pass_idx >= 0 && selected_pass_idx < num_passes)
         {
             SatPass *p = &passes[selected_pass_idx];
             int lead_sec = RotatorGetLeadTimeSec();

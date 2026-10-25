@@ -10,9 +10,9 @@
  * @brief Shared, theme-aware drawing and sampling primitives for tool plots.
  *
  * These helpers are used by the Transit Tracking panel and its overview modal
- * (and by the Doppler panel) so the polar canvas, the XY charts and the pass
- * sampling all have a single implementation. Every color comes from
- * g_theme.ui.* and every size is scaled through UIPx().
+ * so the polar canvas, the XY charts and the pass sampling all have a single
+ * implementation. Every color comes from g_theme.ui.* and every size is scaled
+ * through UIPx().
  */
 
 /* -- Polar canvas ---------------------------------------------------------- */

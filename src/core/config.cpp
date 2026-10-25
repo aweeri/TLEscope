@@ -524,6 +524,16 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                                 auto v = o.find("value");
                                 if (k == o.end() || v == o.end())
                                     continue;
+                                /* drop settings owned by the removed Scope /
+                                 * Doppler panels so they don't linger in the
+                                 * config after the tools are gone. */
+                                if (k->is_string())
+                                {
+                                    const std::string &key = k->get<std::string>();
+                                    if (key.rfind("scope.", 0) == 0 ||
+                                        key.rfind("doppler.", 0) == 0)
+                                        continue;
+                                }
                                 if (k->is_string())
                                     copy_str(s->key, sizeof(s->key), k->get<std::string>());
                                 if (v->is_string())
