@@ -37,9 +37,7 @@ typedef struct {
     OrbitalDataFormat format; // requested/detected format
 } AsyncFetchJob;
 
-// A completed job: the parsed satellites live in a heap-allocated buffer that
-// the UI thread owns after it drains the completion queue. The UI thread must
-// call AsyncFetchFreeResult() to release the buffer once applied.
+// completed job: parsed satellites live in a heap buffer owned by the UI thread; free with AsyncFetchFreeResult()
 typedef struct {
     AsyncFetchJob job;
     bool success;
@@ -68,24 +66,19 @@ void AsyncFetchSubmit(const AsyncFetchJob *job);
 /** returns true if at least one completed job is waiting to be applied */
 bool AsyncFetchHasResults(void);
 
-/**
- * Pop the next completed job. Returns false if the queue is empty.
- * The caller owns the returned result (its `parsed` buffer is a plain
- * struct array, so no manual free is required).
- */
+// pop the next completed job; returns false if the queue is empty
 bool AsyncFetchPopResult(AsyncFetchResult *out);
 
 /** returns the number of jobs still queued or in flight (for progress UI) */
 int AsyncFetchPendingCount(void);
 
+// completed jobs that produced no satellites since the last call (resets the counter); UI thread only
+int AsyncFetchTakeFailureCount(void);
+
 /** returns true while the worker thread is still processing jobs */
 bool AsyncFetchBusy(void);
 
-/**
- * Drain the completion queue and apply parsed results to the global
- * `satellites[]` array. Must be called once per frame on the UI thread.
- * When the last job finishes, saves the orbital data to disk.
- */
+// drain the completion queue into the global array (once per frame, UI thread); saves to disk when the last job finishes
 void AsyncFetchApplyResults(void);
 
 #endif // ASYNC_FETCH_H

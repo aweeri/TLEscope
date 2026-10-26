@@ -475,8 +475,7 @@ static HeaderSlot s_left_headers[MAX_PANELS];
 static HeaderSlot s_right_headers[MAX_PANELS];
 static int s_left_hc = 0, s_right_hc = 0;
 
-/* Themed tooltip drawn into the foreground draw list so it is never occluded
- * by the sidebars, panels, notches or modal dim. */
+// themed tooltip in the foreground draw list so it is never occluded
 static void NavTooltip(const char *text)
 {
     if (!text || !text[0]) return;
@@ -1408,15 +1407,15 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             /* data staleness */
             const char* stale_options[] = {
                 "6 hours", "12 hours", "1 day", "2 days (default)",
-                "3 days", "5 days", "7 days"
+                "3 days", "5 days", "7 days", "Never"
             };
             int stale_values[] = {
                 STALE_THRESHOLD_6H, STALE_THRESHOLD_12H, STALE_THRESHOLD_1D,
                 STALE_THRESHOLD_2D, STALE_THRESHOLD_3D, STALE_THRESHOLD_5D,
-                STALE_THRESHOLD_7D
+                STALE_THRESHOLD_7D, STALE_THRESHOLD_NEVER
             };
             int current_stale_idx = 3;
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < 8; i++)
             {
                 if (cfg->data_stale_threshold_seconds == stale_values[i])
                 {
@@ -1426,10 +1425,20 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
 
             ImGui::Text("Consider data outdated after:");
-            if (ImGui::Combo("##stale_threshold", &current_stale_idx, stale_options, 7))
+            if (ImGui::Combo("##stale_threshold", &current_stale_idx, stale_options, 8))
             {
                 cfg->data_stale_threshold_seconds = stale_values[current_stale_idx];
             }
+
+            /* automatic re-pull: skipped entirely when staleness is "Never" */
+            bool stale_never = (cfg->data_stale_threshold_seconds <= STALE_THRESHOLD_NEVER);
+            ImGui::BeginDisabled(stale_never);
+            ImGui::Checkbox("Automatically re-pull stale data", &cfg->auto_repull_stale);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("When enabled, stale data is re-pulled automatically and a\n"
+                                  "notification is shown, instead of asking for confirmation.\n"
+                                  "Ignored while staleness is set to \"Never\".");
 
             ImGui::Separator();
 

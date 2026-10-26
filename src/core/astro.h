@@ -28,12 +28,12 @@ extern Satellite *last_pass_calc_sat;
 extern float pass_min_elev;        /* minimum elevation (deg) for a pass to count */
 extern float pass_time_span_hours; /* prediction window in hours (default 24) */
 
-/* configurable runtime satellite limit (defaults to DEFAULT_MAX_SATELLITES).
- * SetMaxSatellites() clamps to [MIN_MAX_SATELLITES, MAX_SATELLITES_HARD_CAP]. */
+// runtime satellite limit; SetMaxSatellites() clamps to [MIN_MAX_SATELLITES, MAX_SATELLITES_HARD_CAP]
 int GetMaxSatellites(void);
 void SetMaxSatellites(int value);
 
 double get_current_real_time_epoch(void);
+double get_current_real_time_epoch_hr(void);
 double epoch_to_gmst(double epoch);
 void epoch_to_datetime_str(double epoch, char *buffer);
 
@@ -52,9 +52,7 @@ bool add_satellite_from_omm_elements(const char *name, const char *norad_id,
                                      double mean_anomaly_deg, double mean_motion_revday,
                                      double bstar, OrbitalDataMeta *meta);
 
-// Buffer-based variants that write into an array instead of the
-// global `satellites[]`, used by the async fetch worker thread so it never
-// touches the global array because the render loop touches that every frame
+// buffer-based variants for the async fetch worker (never touch the global array)
 bool add_satellite_from_tle_to(Satellite *sats, int *count,
                                const char* line0, const char* line1,
                                const char* line2, OrbitalDataMeta *meta);

@@ -54,6 +54,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->retlector_groups_fetched = false;
     config->custom_entry_count = 0;
     config->data_stale_threshold_seconds = STALE_THRESHOLD_DEFAULT;
+    config->auto_repull_stale = false;
     config->network_timeout_seconds = 45;
     config->max_satellites = DEFAULT_MAX_SATELLITES;
     config->prop_use_short_period = true;
@@ -177,6 +178,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->earth_rotation_offset = get_float("earth_rotation_offset", config->earth_rotation_offset);
                     config->orbits_to_draw = get_float("orbits_to_draw", config->orbits_to_draw);
                     config->data_stale_threshold_seconds = get_int("data_stale_threshold_seconds", config->data_stale_threshold_seconds);
+                    config->auto_repull_stale = get_bool("auto_repull_stale", config->auto_repull_stale);
                     config->network_timeout_seconds = get_int("network_timeout_seconds", config->network_timeout_seconds);
                     if (config->network_timeout_seconds < 15) config->network_timeout_seconds = 15;
                     if (config->network_timeout_seconds > 300) config->network_timeout_seconds = 300;
@@ -457,13 +459,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                             L->left_restore_width = get_val("left_restore_width", L->left_restore_width);
                             L->right_restore_width = get_val("right_restore_width", L->right_restore_width);
 
-                            /* One-time migration: older settings.json stored the
-                             * sidebar widths in absolute (already ui_scale-scaled)
-                             * pixels. The layout now stores them in base units and
-                             * multiplies by ui_scale at use, so divide the stored
-                             * values by the current ui_scale to preserve the
-                             * on-screen width. The "widths_logical" marker records
-                             * that the file has already been migrated. */
+                            // one-time migration: older settings stored absolute (ui_scale-scaled) widths; divide by ui_scale
                             bool widths_logical = false;
                             auto wl = ul->find("widths_logical");
                             if (wl != ul->end() && wl->is_boolean())
@@ -524,9 +520,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                                 auto v = o.find("value");
                                 if (k == o.end() || v == o.end())
                                     continue;
-                                /* drop settings owned by the removed Scope /
-                                 * Doppler panels so they don't linger in the
-                                 * config after the tools are gone. */
+                                // drop settings owned by the removed Scope/Doppler panels
                                 if (k->is_string())
                                 {
                                     const std::string &key = k->get<std::string>();
@@ -685,6 +679,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["night_mode"] = config->night_mode;
     root["first_day_of_week"] = config->first_day_of_week;
     root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
+    root["auto_repull_stale"] = config->auto_repull_stale;
     root["network_timeout_seconds"] = config->network_timeout_seconds;
     root["max_satellites"] = config->max_satellites;
     root["prop_use_short_period"] = config->prop_use_short_period;

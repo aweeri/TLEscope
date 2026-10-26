@@ -22,8 +22,7 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 #define LAYERS_KEY_ORBITS          "layers.orbits"            /* master: kill ALL orbit drawing, both views */
 #define LAYERS_KEY_ORBITS_DIMMED   "layers.orbits_unselected" /* draw unselected (dimmed) orbit lines */
 
-/* number of predicted (future) orbit steps drawn for each ground track in 2D
- * mode (float, in 0.25-orbit increments, default 2.0). */
+/* predicted (future) orbit steps per ground track in 2D mode (float, 0.25-orbit increments, default 2.0) */
 #define LAYERS_KEY_FUTURE_ORBITS_STEPS "layers.orbits_steps"
 #define LAYERS_FUTURE_ORBITS_STEPS_DEFAULT 2.0f
 #define LAYERS_FUTURE_ORBITS_STEPS_MIN    0.25f
@@ -65,12 +64,7 @@ typedef enum
     LAYER_PRESET_COUNT
 } LayerPresetId;
 
-/**
- * Apply a named layer preset (a LayerPresetId) and persist the selection.
- *
- * @param is_ecliptic_frame  optional live ecliptic flag; the panel passes its
- *                           UI pointer, first-boot callers pass NULL.
- */
+// apply a named layer preset and persist the selection; is_ecliptic_frame is optional (NULL for first-boot callers)
 void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame = nullptr);
 
 /* -- Shared UI helpers ----------------------------------------------------- */
@@ -90,6 +84,23 @@ bool DataSelectionAdd(SourceType type, const char *name, const char *identifier,
                       const char *paste_data, OrbitalDataFormat format);
 void DataSelectionRemove(int idx);
 
+/* -- Data source pull orchestration (panel button + staleness prompt) ------ */
+
+// start an async pull of all selected sources; returns false if none selected or a fetch is already in flight
+bool DataSourcesStartPull(AppConfig *cfg, UIContext *ctx);
+
+/** true while a pull started via DataSourcesStartPull() is still in progress */
+bool DataSourcesPullInProgress(void);
+
+// mark the in-flight pull as auto-triggered (changes the completion toast wording)
+void DataSourcesSetAutoPull(bool is_auto);
+
+/** number of sources in the in-flight pull (0 when none); for the progress UI */
+int DataSourcesPullTotal(void);
+
+// per-frame poll for pull completion; fires the notification and persists the catalogue (no-op when idle)
+void DataSourcesPollPullCompletion(AppConfig *cfg);
+
 /* -- Shared UI helpers ----------------------------------------------------- */
 
 /** case-insensitive substring search; returns true if substr is found in str */
@@ -105,38 +116,17 @@ void DrawClickableRADec(const char *label, double deg_value, int *format_var, bo
 
 /* tuning constants (see OrbitDirectionIntensity) */
 #define ORBIT_DIR_MIN          0.18f /* base alpha multiplier for dimmed/unselected orbits */
-#define ORBIT_DIR_MIN_SELECTED 0.45f /* base alpha multiplier for the selected orbit: keeps its
-                                      * dim (ahead) portion clearly brighter than a dimmed orbit
-                                      * while still leaving a visible trail gradient */
+#define ORBIT_DIR_MIN_SELECTED 0.45f /* base alpha for the selected orbit: brighter than a dimmed orbit, still leaves a trail gradient */
 #define ORBIT_DIR_TRAIL_LEN    0.30  /* highlighted trail length behind the satellite, in orbits */
 #define ORBIT_DIR_ANIM_TAU     0.10  /* animated pulse tail length, in orbits      */
 #define ORBIT_DIR_ANIM_SPEED   0.30  /* animated pulse sweeps per second           */
 #define ORBIT_DIR_WIDTH_MAX    2.5f  /* thickest line-width multiplier (2D only)   */
 
-/**
- * Direction-of-motion intensity for one point on an orbit line.
- *
- * @param phase     signed fraction of an orbit from the satellite/moon's current
- *                  position: positive = ahead (future), negative = behind
- *                  (trail). Values outside [-0.5, 0.5] are wrapped.
- * @param animated  when true, a bright pulse sweeps the orbit in the direction
- *                  of motion (driven by anim_time) instead of the static
- *                  trail/future ramp.
- * @param anim_time seconds; drives the pulse position when animated.
- * @param floor     base alpha multiplier for the dim (ahead) portion; pass
- *                  ORBIT_DIR_MIN_SELECTED for the selected orbit so it stays
- *                  clearly brighter than dimmed unselected orbits.
- *
- * @return an alpha multiplier in [floor, 1] to scale a segment's color.
- */
+// direction-of-motion alpha multiplier for one orbit point; phase is the signed fraction of an orbit (positive = ahead)
 float OrbitDirectionIntensity(double phase, bool animated, double anim_time,
                               float floor = ORBIT_DIR_MIN);
 
-/**
- * Line-width multiplier paired with OrbitDirectionIntensity (used by the 2D
- * ground tracks, where per-segment thickness is cheap). Returns a value in
- * [1, ORBIT_DIR_WIDTH_MAX].
- */
+// line-width multiplier paired with OrbitDirectionIntensity (2D ground tracks)
 float OrbitDirectionWidth(double phase, bool animated, double anim_time,
                           float floor = ORBIT_DIR_MIN);
 

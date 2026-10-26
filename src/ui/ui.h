@@ -13,13 +13,7 @@ typedef enum
     LOCK_SAT
 } TargetLock;
 
-/**
- * @brief encapsulates all UI-only state
- *
- * Holds window positions, dialog visibility flags, text buffers,
- * and other UI-specific state. Formalizing this struct makes the
- * separation between core simulation state and UI state explicit.
- */
+// UI-only state: window positions, dialog flags, text buffers
 typedef struct
 {
     /* dialog visibility flags */
@@ -172,6 +166,8 @@ typedef struct
     bool *is_auto_warping;
     double *auto_warp_target;
     double *auto_warp_initial_diff;
+    // sim clock slaved to the wall clock; false after a manual date jump so the live lock doesn't snap back to "now"
+    bool *live_follow;
     bool *is_2d_view;
     bool *hide_unselected;
     bool *picking_home;

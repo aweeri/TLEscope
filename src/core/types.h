@@ -12,18 +12,7 @@
  * to avoid symbol conflicts.
  */
 
-/*
- * On Windows, ensure windows.h is included BEFORE raylib.h to prevent
- * symbol conflicts between the Windows API and raylib.
- *
- * Conflicts handled:
- *   - Rectangle  (raylib struct vs wingdi.h function)           -> NOGDI
- *   - CloseWindow(raylib void(void) vs winuser.h BOOL(HWND))    -> rename macro
- *   - ShowCursor (raylib void(void) vs winuser.h int(BOOL))     -> rename macro
- *   - LoadImage  (raylib function vs winuser.h macro->LoadImageA)-> undef macro
- *   - DrawText   (raylib function vs winuser.h macro->DrawTextA) -> undef macro
- *   - DrawTextEx (raylib function vs winuser.h macro->DrawTextExA)-> undef macro
- */
+// include windows.h before raylib.h to avoid symbol conflicts (Rectangle, CloseWindow, ShowCursor, LoadImage, DrawText, DrawTextEx)
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -92,6 +81,9 @@
 /* symmetric timewarp magnitude limit: 524288 == 2^19 */
 #define MAX_TIME_MULTIPLIER 524288.0
 
+// max wall-clock drift (s) for the sim to count as "live"; shared by the main-loop time lock and the live badge
+#define LIVE_WINDOW_SEC 5.0
+
 #define ORBIT_CACHE_SIZE 361
 #define MAX_CUSTOM_DATA_SOURCES 20
 #define MAX_RETLECTOR_GROUPS 64
@@ -103,11 +95,7 @@
 
 /* -- Panel identity -------------------------------------------------------- */
 
-/**
- * Numeric identity of every tool panel. The sentinel PANEL_COUNT is the number
- * of panels and is used to size the layout arrays, so adding a panel here
- * automatically grows MAX_PANELS — no manual capacity bump required.
- */
+// numeric identity of every tool panel; PANEL_COUNT sizes the layout arrays
 typedef enum
 {
     PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
@@ -253,13 +241,7 @@ typedef struct {
 
 #define MAX_DATA_SOURCE_SELECTIONS 64
 
-/**
- * @brief persisted UI layout state (sidebar geometry, panel order, open state)
- *
- * Mirrors the runtime UILayoutState from ui_layout.h so layout can be
- * serialised to settings.json without the UI layer being required at
- * config-parse time.
- */
+// persisted UI layout state; mirrors UILayoutState so it can be saved without the UI layer
 typedef struct {
     /* sidebar geometry */
     float left_sidebar_width;
@@ -292,6 +274,7 @@ extern int location_count;
 #define MAX_MANUAL_ENTRIES 20
 
 // data staleness threshold presets (in seconds)
+#define STALE_THRESHOLD_NEVER   0       // disable all staleness checks/prompts
 #define STALE_THRESHOLD_6H      21600
 #define STALE_THRESHOLD_12H     43200
 #define STALE_THRESHOLD_1D      86400
@@ -327,11 +310,7 @@ typedef struct
     char value[256];
 } ToolSetting;
 
-/**
- * Generic persisted key-value map owned by tools. Tools read/write their own
- * namespaced keys (e.g. "cubeifier.enabled") via tools_settings.h, so adding a
- * toggle never requires a new AppConfig field or a config.cpp edit.
- */
+// generic persisted key-value map owned by tools (see tools_settings.h)
 typedef struct
 {
     ToolSetting entries[MAX_TOOL_SETTINGS];
@@ -402,6 +381,7 @@ typedef struct
     int custom_entry_count;
 
     int data_stale_threshold_seconds;  // default: STALE_THRESHOLD_DEFAULT (2 days)
+    bool auto_repull_stale;            // auto re-pull stale data instead of prompting (default false)
     int network_timeout_seconds;       // HTTP request timeout, 15-300 seconds (default 45)
     int max_satellites;                // runtime limit, MIN_MAX_SATELLITES..MAX_MAX_SATELLITES
 

@@ -6,6 +6,9 @@
 
 #include "tools_common.h"
 #include "core/theme.h"
+#include "data/async_fetch.h"
+#include "data/storage.h"
+#include "ui/notifications.h"
 #include "util/log.h"
 
 #include <cstdio>
@@ -19,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include "imgui.h"
+#include "IconsFontAwesome6.h"
 
 // -- Shared state -----------------------------------------------------------
 
@@ -64,18 +68,14 @@ float OrbitDirectionIntensity(double phase, bool animated, double anim_time, flo
 
     if (animated)
     {
-        // a bright comet sweeps the orbit in the direction of motion: a sharp
-        // head at the pulse with a tail trailing behind it (dim ahead of it)
+        // a bright comet sweeps the orbit: sharp head at the pulse, tail trailing behind
         const double pulse = anim_time * ORBIT_DIR_ANIM_SPEED;
         const double d = orbit_dir_wrap(s - pulse); // signed distance from the pulse
         g = (d > 0.0) ? 0.0 : exp(d / ORBIT_DIR_ANIM_TAU);
     }
     else
     {
-        // static ramp: the future (ahead, s>0) sits at the flat base level and is
-        // never highlighted. The trail (behind, s<0) is highlighted, fading from
-        // the satellite back over ORBIT_DIR_TRAIL_LEN of an orbit. The smoothstep
-        // falloff is C1-continuous at the satellite, so there is no seam.
+        // static ramp: future (s>0) stays at the base level; the trail (s<0) fades over ORBIT_DIR_TRAIL_LEN with a C1-continuous smoothstep
         if (s >= 0.0)
         {
             g = 0.0;
@@ -155,6 +155,105 @@ bool DataSelectionAdd(SourceType type, const char *name, const char *identifier,
     return selection_add(type, name, identifier, paste_data, format);
 }
 void DataSelectionRemove(int idx) { selection_remove(idx); }
+
+// -- Data source pull orchestration -----------------------------------------
+// job-build/submit is centralized here so the panel button and the staleness auto-pull/prompt share one path
+
+static bool g_pull_running = false;  // a pull started via DataSourcesStartPull()
+static int g_pull_total = 0;         // number of sources in that pull
+static bool g_pull_auto = false;     // the in-flight pull was auto-triggered
+
+bool DataSourcesPullInProgress(void) { return g_pull_running; }
+int DataSourcesPullTotal(void) { return g_pull_total; }
+void DataSourcesSetAutoPull(bool is_auto) { g_pull_auto = is_auto; }
+
+bool DataSourcesStartPull(AppConfig *cfg, UIContext *ctx)
+{
+    int count = DataSelectionCount();
+    if (count == 0)
+    {
+        LOG_INFO("No sources selected to pull");
+        return false;
+    }
+
+    /* never start a second pull while one is already in flight */
+    if (AsyncFetchBusy())
+        return false;
+
+    g_pull_total = count;
+    g_pull_auto = false;
+
+    /* Snapshot the active NORAD ids before replacing the catalogue. */
+    SaveSatSelection(cfg);
+    if (ctx && ctx->selected_sat)
+        *ctx->selected_sat = NULL;
+
+    sat_count = 0;
+    g_pull_running = true;
+
+    for (int i = 0; i < g_pull_total; i++)
+    {
+        DataSourceSelection *s = DataSelectionAt(i);
+        if (!s) break;
+
+        AsyncFetchJob job;
+        memset(&job, 0, sizeof(job));
+        job.type = (AsyncJobType)s->type;
+        strncpy(job.name, s->name, sizeof(job.name) - 1);
+        strncpy(job.identifier, s->identifier, sizeof(job.identifier) - 1);
+        strncpy(job.paste_data, s->paste_data, sizeof(job.paste_data) - 1);
+        job.format = s->format;
+
+        AsyncFetchSubmit(&job);
+    }
+
+    return true;
+}
+
+void DataSourcesPollPullCompletion(AppConfig *cfg)
+{
+    if (!g_pull_running)
+        return;
+
+    /* Wait until both worker jobs and queued results are drained. */
+    if (AsyncFetchBusy() || AsyncFetchHasResults())
+        return;
+
+    // fetched records start inactive; restore only NORAD ids that were active before this refresh
+    LoadSatSelection(cfg);
+    SaveOrbitalData("data.json", satellites, sat_count);
+
+    /* clearing the flag first guarantees the toast fires exactly once */
+    g_pull_running = false;
+    g_pull_total = 0;
+
+    // distinguish success/partial/total failure so a 24/7 operator notices silent refresh failures
+    int failed = AsyncFetchTakeFailureCount();
+    if (sat_count <= 0)
+    {
+        /* nothing arrived at all: offline or every selected source failed */
+        NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Data refresh failed - no satellites received");
+    }
+    else if (failed > 0)
+    {
+        /* partial success: some sources failed but data did arrive */
+        NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Data refreshed with %d failed source(s) (%d satellites)",
+                   failed, sat_count);
+    }
+    else if (g_pull_auto)
+    {
+        NotifyPush(NOTIFY_SUCCESS, ICON_FA_DOWNLOAD,
+                   "Stale orbital data auto-pulled (%d satellites)", sat_count);
+    }
+    else
+    {
+        NotifyPush(NOTIFY_SUCCESS, ICON_FA_DOWNLOAD,
+                   "Data sources refreshed (%d satellites)", sat_count);
+    }
+    g_pull_auto = false;
+}
 
 // -- Data source selection persistence (section 11) --------------------------
 

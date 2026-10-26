@@ -21,6 +21,7 @@
 #include "core/theme.h"
 #include "imgui_theme.h"
 #include "data/storage.h"
+#include "data/async_fetch.h"
 #include "util/log.h"
 #include "tools/tools_common.h"
 #include "tools/tools_settings.h"
@@ -147,7 +148,7 @@ void UICloseTopModal(AppConfig *cfg)
         { "Exit?",                &show_exit_dialog          },
         { "Help",                 &show_help                 },
         { "About TLEscope",       &show_about                },
-        { "Orbital Data Warning", &show_tle_warning          },
+        { "Re-pull stale data",   &show_tle_warning          },
         { "Update Available",     &g_ui.update_available     },
         { "Transit Overview",     &g_ui.transit_overview_open },
         { "Settings",             &g_layout.settings_open    },
@@ -371,10 +372,10 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
     char time_str[64];
     epoch_to_datetime_str(*ctx->current_epoch, time_str);
 
-    double real_now  = get_current_real_time_epoch();
+    double real_now  = get_current_real_time_epoch_hr();
     double drift_sec = fabs(*ctx->current_epoch - real_now) * 86400.0;
     bool is_paused = (*ctx->time_multiplier == 0.0);
-    bool is_live = (!*ctx->is_auto_warping) && (*ctx->time_multiplier == 1.0) && (drift_sec < 5.0);
+    bool is_live = (!*ctx->is_auto_warping) && (*ctx->time_multiplier == 1.0) && (drift_sec < LIVE_WINDOW_SEC);
 
     char speed_str[32];
     double mult = *ctx->time_multiplier;
@@ -544,6 +545,9 @@ static void DrawBottomBar(UIContext *ctx, AppConfig *cfg)
             if (ImGui::Button("Apply", ImVec2(3.0f * btn_sz, 0.0f)))
             {
                 *ctx->current_epoch = local_fields_to_epoch(s_year, s_day, s_hour, s_min, s_sec);
+                // leaving the wall clock on purpose: drop the live lock so the main loop doesn't snap back to "now"
+                if (ctx->live_follow)
+                    *ctx->live_follow = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::PopStyleColor();
@@ -684,29 +688,45 @@ static void DrawAboutModal(UIContext *ctx, AppConfig *cfg)
     }
 }
 
-/* -- TLE Warning Dialog ---------------------------------------------------- */
+/* -- TLE Warning / staleness orchestrator ---------------------------------- */
 
 static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
 {
-    (void)ctx;
-
-    bool data_is_old = false;
-    if (show_tle_warning)
+    /* Behavior 2: "Never" disables every staleness check (no prompt, no pull). */
+    if (cfg->data_stale_threshold_seconds <= STALE_THRESHOLD_NEVER)
     {
-        /* check if any satellite data is older than the configured threshold */
-        time_t now = time(NULL);
-        for (int i = 0; i < sat_count; i++)
-        {
-            if (satellites[i].data_meta.fetch_time > 0 &&
-                (now - satellites[i].data_meta.fetch_time) > cfg->data_stale_threshold_seconds)
-            {
-                data_is_old = true;
-                break;
-            }
-        }
+        show_tle_warning = false;
+        return;
+    }
 
-        if (!data_is_old)
+    // anti-nag for 24/7: prompt at most once per session, honour a "No" cool-down; both re-arm on fresh data
+    static bool   s_prompted_this_session = false;
+    static bool   s_auto_prompted = false;  /* the open popup was opened by us */
+    static time_t s_snooze_until = 0;
+
+    // compute staleness unconditionally so the auto path works without the manual ] trigger; unknown ages count as fresh
+    time_t now = time(NULL);
+    bool data_is_old = false;
+    for (int i = 0; i < sat_count; i++)
+    {
+        if (satellites[i].data_meta.fetch_time > 0 &&
+            (now - satellites[i].data_meta.fetch_time) > cfg->data_stale_threshold_seconds)
+        {
+            data_is_old = true;
+            break;
+        }
+    }
+
+    // fresh data re-arms the prompt and closes an auto-opened popup; a manual ] popup is left alone
+    if (!data_is_old)
+    {
+        s_prompted_this_session = false;
+        s_snooze_until = 0;
+        if (s_auto_prompted)
+        {
             show_tle_warning = false;
+            s_auto_prompted = false;
+        }
     }
 
     int threshold_secs = cfg->data_stale_threshold_seconds;
@@ -719,31 +739,102 @@ static void DrawDataWarning(UIContext *ctx, AppConfig *cfg)
     else if (threshold_secs <= STALE_THRESHOLD_5D) threshold_str = "5 days";
     else threshold_str = "7 days";
 
-    if (show_tle_warning)
+    // auto prompt/pull: only when stale, not prompted this session, not snoozed, no fetch running, no other modal
+    if (data_is_old && !s_prompted_this_session && now >= s_snooze_until &&
+        !AsyncFetchBusy() && !DataSourcesPullInProgress() && !UIModalAnyOpen())
     {
-        /* surface the staleness as a toast as well (ROADMAP section 8.1) */
-        NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
-                   "Orbital data is older than the configured threshold");
-        ImGui::OpenPopup("Orbital Data Warning");
+        if (cfg->auto_repull_stale)
+        {
+            // auto-pull instead of prompting; the completion toast is emitted by DataSourcesPollPullCompletion()
+            if (DataSourcesStartPull(cfg, ctx))
+                DataSourcesSetAutoPull(true);
+            // mark prompted even on failure so a 24/7 instance doesn't retry every frame
+            s_prompted_this_session = true;
+        }
+        else
+        {
+            /* Behavior 1: prompt instead of silently downloading. */
+            s_prompted_this_session = true;
+            s_auto_prompted = true;
+            show_tle_warning = true;
+        }
     }
 
-    if (ImGui::BeginPopupModal("Orbital Data Warning", &show_tle_warning, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::Text("Your orbital data is older than %s.", threshold_str);
-        ImGui::Text("Would you like to update it now?");
+    /* the `]` key (ToggleTLEWarning) also drives show_tle_warning */
+    if (show_tle_warning)
+        ImGui::OpenPopup("Re-pull stale data");
 
-        if (ImGui::Button("Update", ImVec2(120, 0)))
+    const char *title = ICON_FA_ROTATE "  Re-pull stale data?";
+    char line1[192];
+    snprintf(line1, sizeof(line1), "Your orbital data is older than %s.", threshold_str);
+    const char *line2 = "Would you like to re-pull it now?";
+
+    const float pad = UIPx(16.0f);
+    const float btn_w = UIPx(140.0f);
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float buttons_w = btn_w * 2.0f + spacing;
+
+    const float title_w = ImGui::CalcTextSize(title).x;
+    const float line1_w = ImGui::CalcTextSize(line1).x;
+    const float line2_w = ImGui::CalcTextSize(line2).x;
+
+    float content_w = title_w;
+    if (line1_w > content_w) content_w = line1_w;
+    if (line2_w > content_w) content_w = line2_w;
+    if (buttons_w > content_w) content_w = buttons_w;
+    const float dialog_w = content_w + pad * 2.0f;
+
+    ImGui::SetNextWindowSize(ImVec2(dialog_w, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+
+    if (ImGui::BeginPopupModal("Re-pull stale data", &show_tle_warning, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        const float win_w = ImGui::GetWindowWidth();
+
+        ImGui::SetCursorPosX((win_w - title_w) * 0.5f);
+        ImGui::TextColored(ThemeColor(g_theme.ui.warning), "%s", title);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::SetCursorPosX((win_w - line1_w) * 0.5f);
+        ImGui::TextUnformatted(line1);
+        ImGui::SetCursorPosX((win_w - line2_w) * 0.5f);
+        ImGui::TextUnformatted(line2);
+
+        ImGui::Spacing();
+
+        ImGui::SetCursorPosX((win_w - buttons_w) * 0.5f);
+
+        if (ImGui::Button("Don't Update", ImVec2(btn_w, 0.0f)))
         {
-            LayoutOpenPanel(PANEL_DATA_SOURCES);
+            /* snooze for one threshold interval before prompting again */
+            s_snooze_until = now + cfg->data_stale_threshold_seconds;
+            show_tle_warning = false;
+            s_auto_prompted = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Don't Update", ImVec2(120, 0)))
+        ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColor(g_theme.ui.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColor(ThemeHoverOf(g_theme.ui.accent, g_theme.ui.text)));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColor(ThemeActiveOf(g_theme.ui.accent, g_theme.ui.text)));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColor(g_theme.ui.bg));
+        if (ImGui::Button("Update", ImVec2(btn_w, 0.0f)))
         {
+            DataSourcesStartPull(cfg, ctx);
+            show_tle_warning = false;
+            s_auto_prompted = false;
             ImGui::CloseCurrentPopup();
         }
+        ImGui::PopStyleColor(4);
         ImGui::EndPopup();
     }
+
+    ImGui::PopStyleVar();
 }
 
 /* -- Update Check Notification ---------------------------------------------- */
@@ -930,6 +1021,9 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* begin rlImGui frame */
     rlImGuiBegin();
+
+    // handle a completed pull (notify + persist) even when the Data Sources panel is closed
+    DataSourcesPollPullCompletion(cfg);
 
     ImGuiIO &io = ImGui::GetIO();
     if (GetScreenWidth() > 0 && GetScreenHeight() > 0)
