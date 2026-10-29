@@ -64,7 +64,7 @@ TLEscope provides also packages on following systems/distributions:
     * [`tlescope-git`](https://aur.archlinux.org/packages/tlescope-git): Git clones the latest commit of this repository and installs on the system as AUR package.
 
 ### **Building From Source**
-TLEscope uses gcc for Linux builds, clang with Homebrew's raylib for macOS, and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
+TLEscope uses gcc for Linux builds, clang with Homebrew's. raylib for macOS, and cross-compiles for Windows using x86_64-w64-mingw32-gcc.
 
 Install the required build tools and libraries, then clone the repository and execute the `make linux` command in the root directory of the project, after which run `./bin/TLEscope` (running from within `bin/` will NOT work). If you want to build a Windows executable, you will also need to install the `mingw-w64` package via your package manager of choice. Steps for typical system configurations can be found below:
 
