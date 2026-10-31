@@ -92,13 +92,11 @@ static struct {
     int edgeFalloffLoc2D;
 } g_coverage_shaders;
 
-/* Fraction of the highlight color blended into the coverage fill; half-way
- * stays subtle, and alpha is preserved so the fill remains see-through. */
+// blend fraction for the coverage highlight; alpha is preserved so the fill stays see-through
 #define COVERAGE_SELECT_TINT 0.50f
 #define COVERAGE_HOVER_TINT  0.50f
 
-/** Blends `tint` into `base` by `amount` while preserving `base`'s alpha so
- *  the footprint stays transparent. */
+// blend tint into base, preserving base's alpha
 static Color CoverageTintFill(Color base, Color tint, float amount)
 {
     Color out;
@@ -109,15 +107,13 @@ static Color CoverageTintFill(Color base, Color tint, float amount)
     return out;
 }
 
-/** Selected-coverage fill: blend the selection color into `base` while
- *  preserving `base`'s alpha so the footprint stays transparent. */
+// selected-coverage fill (alpha preserved)
 static Color CoverageSelectFill(Color base)
 {
     return CoverageTintFill(base, g_theme.world.sat_selected, COVERAGE_SELECT_TINT);
 }
 
-/** Hovered-coverage fill: blend the hover color into `base` while preserving
- *  `base`'s alpha so the footprint stays transparent. */
+// hovered-coverage fill (alpha preserved)
 static Color CoverageHoverFill(Color base)
 {
     return CoverageTintFill(base, g_theme.world.sat_hover, COVERAGE_HOVER_TINT);
@@ -181,8 +177,7 @@ static Mesh GenEarthMesh(float radius, int slices, int rings)
     return mesh;
 }
 
-/* Future ground-track sample cache: 2D tracks re-propagate every point each
- * frame (~6000 SGP4 calls), so results are cached and rebuilt only on a miss. */
+// future ground-track sample cache: 2D tracks re-propagate ~6000 SGP4 calls/frame, so cache on a miss
 struct FutureTrackCacheEntry {
     Satellite *sat = NULL;
     double sat_epoch = 0.0;   /* invalidates the track on a TLE reload */
@@ -827,16 +822,12 @@ int main(void)
     TouchGestureInit();
     if (cfg.fullscreen) ToggleFullscreen();
 
-    /* Restore the persisted window placement. The restored (un-maximized)
-     * rectangle is applied before maximizing so that clicking Restore Down
-     * returns to a centered, fully on-screen geometry. */
+    // restore the persisted window placement before maximizing so Restore Down returns on-screen
     if (!cfg.fullscreen)
     {
         if (!cfg.has_window_placement)
         {
-            /* First run: pick a sensible centered restored rect on the current
-             * monitor. cfg.window_maximized defaults to true, so the window
-             * still opens maximized. */
+            // first run: pick a centered restored rect on the current monitor
             int monitor = GetCurrentMonitor();
             Vector2 pos = GetMonitorPosition(monitor);
             int mw = GetMonitorWidth(monitor);
@@ -934,11 +925,7 @@ int main(void)
     int sunDirLoc2D = GetShaderLocation(shader2D, "sunDir");
     int nightTexLoc2D = GetShaderLocation(shader2D, "texture1");
 
-    /* full-screen monochrome-red post-process (night / dark-adaptation mode).
-     * It is applied as a single screen-space pass over a GPU copy of the
-     * default (MSAA) framebuffer, so ImGui's DPI-based scissor math stays
-     * valid and antialiasing is preserved. nightTex holds the backbuffer copy
-     * and is (re)allocated at device-pixel size when the window changes. */
+    // night mode: single screen-space red pass over a GPU copy of the MSAA backbuffer
     Shader shaderNight = LoadShaderFromMemory(NULL, Shaders::fsNight);
     int nightIntensityLoc = GetShaderLocation(shaderNight, "intensity");
     Texture2D nightTex = {0};
@@ -1080,6 +1067,7 @@ int main(void)
     Satellite *track_follow_sat = NULL;
 
     double current_epoch = get_current_real_time_epoch();
+    bool live_follow = true;   /* sim clock slaved to wall clock while live */
     double time_multiplier = 1.0;
     double saved_multiplier = 1.0;
     bool is_2d_view = false;
@@ -1150,10 +1138,7 @@ int main(void)
             UnloadTexture(apoMark);
             UnloadFont(customFont);
 
-            /* reload theme data + ImGui presentation.
-             * NOTE: Do NOT call LoadAppConfig here — it would re-read
-             * settings.json (which still has the old theme name) and
-             * overwrite cfg.theme, defeating the switch. */
+            // reload theme data + ImGui presentation; do NOT call LoadAppConfig (it would overwrite cfg.theme)
             ThemeInitDefaults(&g_theme);
             ThemeLoad(cfg.theme, &g_theme);
             ThemeRebuildImGuiFonts(&g_theme, cfg.ui_scale);
@@ -1200,8 +1185,7 @@ int main(void)
             SetTextureFilter(apoMark, TEXTURE_FILTER_BILINEAR);
         }
 
-        /* 3-finger double-tap toggles clean view (identical to pressing H).
-         * Consumed unconditionally so it works even while a text field is focused. */
+        // 3-finger double-tap toggles clean view (same as H); consumed even while typing
         if (TouchGestureConsumeThreeFingerDoubleTap())
             LayoutToggleCleanView();
 
@@ -1214,8 +1198,7 @@ int main(void)
 
         Viewport3DSetRect(vp_x, vp_y, vp_w, vp_h);
 
-        /* Keep the 2D map centered on whole pixels and preserve the user's
-         * relative zoom when the window size changes. */
+        // keep the 2D map pixel-centered and preserve relative zoom on window resize
         {
             Camera2DParams.offset = (Vector2){floorf(vp_x + vp_w * 0.5f), floorf(vp_y + vp_h * 0.5f)};
             const float new_fill = MapFillZoomFor(map_w, map_h, vp_w, vp_h);
@@ -1410,9 +1393,16 @@ int main(void)
         /* time warp logic for jumping to specific dates */
         UpdateAutoWarpState(&is_auto_warping, &auto_warp_target, &auto_warp_initial_diff, &current_epoch, &time_multiplier, &saved_multiplier);
 
-        /* update time continuously for smooth visual interpolation */
-        current_epoch += (GetFrameTime() * time_multiplier) / 86400.0;
-        current_epoch = normalize_epoch(current_epoch);
+        // live-mode time lock: at 1x with no auto-warp, slave the sim clock to the wall clock; else accumulate frame time
+        double real_now = get_current_real_time_epoch_hr();
+        bool running_live = (!is_auto_warping) && (time_multiplier == 1.0);
+
+        if (running_live && live_follow)
+            current_epoch = real_now;
+        else
+            current_epoch = normalize_epoch(current_epoch + (GetFrameTime() * time_multiplier) / 86400.0);
+
+        live_follow = running_live && (fabs(current_epoch - real_now) * 86400.0 < LIVE_WINDOW_SEC);
 
         /* distance-based invalidation */
         if (sat_count > 0)
@@ -1459,8 +1449,7 @@ int main(void)
                 continue;
             }
 
-            /* if an orbital body ends up below 80% of earth's radius, disable it -
-               it's about to hit the singularity and get ejected at absurd speeds */
+            // below 80% of Earth's radius: about to hit the singularity, disable it
             if (Vector3Length(satellites[i].current_pos) < EARTH_RADIUS_KM * 0.8f)
             {
                 LOG_WARN("Sat %s deactivated - orbital decay (pos < 0.8x Earth radius)", satellites[i].name);
@@ -1520,11 +1509,7 @@ int main(void)
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
 
-        /* Classify the held left button as a click or a camera drag. Trackpads
-         * have no way to hold a right button while moving, so left-drag is the
-         * only workable pan/orbit gesture there; once a press passes the
-         * threshold the click is swallowed on release so dragging the view does
-         * not also select whatever sat happened to be under the cursor. */
+        // left-drag is the only pan/orbit gesture on trackpads; past the threshold the click is swallowed on release
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             left_press_pos = GetMousePosition();
@@ -1735,8 +1720,7 @@ int main(void)
                     float lat, lon;
                     if (GetMouseEarthIntersection(GetMousePosition(), is_2d_view, Camera2DParams, Camera3DParams, gmst_deg, cfg.earth_rotation_offset, map_w, map_h, &lat, &lon))
                     {
-                        /* picking on the map updates the location the picker was
-                         * activated from, or the home location if none was targeted */
+                        // picking updates the targeted location, or home if none was targeted
                         if (pick_location_index >= 0 && pick_location_index < location_count)
                         {
                             UpdateLocation(pick_location_index, NULL, lat, lon, 0.0f);
@@ -1870,16 +1854,14 @@ int main(void)
                 }
             }
 
-            /* Keep the horizontal target on the nearest map copy so panning can
-             * cross the antimeridian without the interpolation jumping a seam. */
+            // keep the horizontal target on the nearest map copy so panning crosses the antimeridian without a seam
             {
                 const float shift = -map_w * floorf((target_camera2d_target.x + map_w * 0.5f) / map_w);
                 target_camera2d_target.x += shift;
                 Camera2DParams.target.x += shift;
             }
 
-            /* Keep the map covering the viewport and prevent vertical panning
-             * beyond the north/south edges. */
+            // keep the map covering the viewport; clamp vertical panning to the poles
             if (cfg.limit_map_zoomout && target_camera2d_zoom < fill_zoom)
                 target_camera2d_zoom = fill_zoom;
             auto clamp_map_y = [&](float zoom, float y) {
@@ -2044,9 +2026,7 @@ int main(void)
         /* ground coverage scope: Sel (active satellite only) or All (every active satellite) */
         int gc_mode = ToolSettingGetInt(&cfg, LAYERS_KEY_GC_MODE, LAYERS_GC_MODE_SELECTED);
 
-        /* The frame is rendered exactly as normal to the default (MSAA)
-         * framebuffer. Night mode is applied afterwards as a single
-         * screen-space post-process pass just before EndDrawing() (below). */
+        // frame renders normally to the MSAA framebuffer; night mode is a post-process pass before EndDrawing()
         BeginDrawing();
         ClearBackground(g_theme.world.bg);
 
@@ -2111,8 +2091,7 @@ int main(void)
                                   ThemeEarthColor());
             }
 
-            /* Horizontal wrapping fills the scene viewport; vertically the map
-             * still ends at the poles. */
+            // horizontal wrapping fills the viewport; vertically the map ends at the poles
             Vector2 mapMin = GetWorldToScreen2D((Vector2){-map_w / 2.0f, -map_h / 2.0f}, Camera2DParams);
             Vector2 mapMax = GetWorldToScreen2D((Vector2){map_w / 2.0f, map_h / 2.0f}, Camera2DParams);
 
@@ -2363,13 +2342,7 @@ int main(void)
                     }
                 }
 
-                /* Future ground tracks share a fixed propagation budget in Multi/Fav mode.
-                 * The focused satellite keeps the original resolution; the remaining budget
-                 * is split across however many other satellites are in scope (no fixed cap).
-                 * Fav mode draws a track for each favorite satellite in scope. */
-                /* unified Orbits layer: master kills all; the dimmed and fav-color
-                 * toggles drive which unselected/favourite extra ground tracks
-                 * render, matching the 3D orbit on/off + scope rules. */
+                // future ground tracks share a fixed propagation budget (focused sat keeps full resolution, the rest split the remainder); unified Orbits layer: master kills all, dimmed/fav-color toggles pick the extra tracks
                 const bool future_orbits_enabled =
                     ToolSettingGetBool(&cfg, LAYERS_KEY_ORBITS, true);
                 const bool orbits_dimmed = ToolSettingGetBool(&cfg, LAYERS_KEY_ORBITS_DIMMED, true);
@@ -2391,11 +2364,7 @@ int main(void)
                     (int)fminf(4000.0f, fmaxf(50.0f, 400.0f * future_orbit_span));
                 const int future_segment_budget = 6000;
 
-                /* dynamic set of extra (non-focused) satellites to draw future tracks
-                 * for: favourites are coloured with their palette colour when the
-                 * fav-color toggle is on; every other in-scope satellite gets a dimmed
-                 * orbit when the dimmed toggle is on. extra_track_is_fav is kept in
-                 * lockstep so the draw pass can tell the two tiers apart. */
+                // extra (non-focused) sats to draw future tracks for; extra_track_is_fav keeps the two tiers in lockstep
                 std::vector<const Satellite*> extra_track_sats;
                 std::vector<bool> extra_track_is_fav;
                 if (future_orbits_enabled && extra_orbits_enabled)
@@ -2419,9 +2388,7 @@ int main(void)
                             extra_track_is_fav.push_back(true);
                             continue; /* fav wins over dimmed; skip dimmed for this sat */
                         }
-                        /* dimmed unselected orbits: driven directly by the dimmed toggle,
-                         * so the toggle always works and dimmed orbits appear regardless
-                         * of any selection. */
+                        // dimmed unselected orbits: driven directly by the dimmed toggle
                         if (orbits_dimmed)
                         {
                             extra_track_sats.push_back(sat);
@@ -2564,9 +2531,7 @@ int main(void)
                                         if (is_hl || extra_is_fav_color)
                                         {
                                             const float dir_floor = is_hl ? ORBIT_DIR_MIN_SELECTED : ORBIT_DIR_MIN;
-                                            /* 2D tracks only draw the future, so the trail is anchored at the
-                                             * satellite's current position and clamped so it never wraps onto
-                                             * the predicted portion or repeats on later orbits */
+                                            // 2D tracks only draw the future; anchor the trail at the sat and clamp so it never wraps
                                             const double dir_phase = (track_times[j] - current_epoch) / period_days;
                                             const double trail_phase = fmax(-dir_phase, -(double)ORBIT_DIR_TRAIL_LEN);
                                             drawCol = ApplyOrbitDirection(drawCol, trail_phase, dir_floor);
@@ -2799,8 +2764,7 @@ int main(void)
             atmosphereModel.transform = MatrixRotateY(earth_rot_rad);
             SetShaderValue(shaderAtmosphere, sunDirLocAtmosphere, &sunEcef, SHADER_UNIFORM_VEC3);
             SetShaderValue(shaderAtmosphere, viewPosLocAtmosphere, &viewEcef, SHADER_UNIFORM_VEC3);
-            /* Same reasoning as the cloud shell: the atmosphere is a transparent
-             * glow and must not occlude the ground coverage. */
+            // like the cloud shell: transparent glow must not occlude the ground coverage
             rlDrawRenderBatchActive();
             rlDisableDepthMask();
             DrawModel(atmosphereModel, Vector3Zero(), 1.0f, WHITE);
@@ -3068,12 +3032,7 @@ int main(void)
                 Vector3 h_pos3d = {cosf(h_lat_rad) * cosf(h_lon_rad) * draw_earth_radius, sinf(h_lat_rad) * draw_earth_radius, -cosf(h_lat_rad) * sinf(h_lon_rad) * draw_earth_radius};
                 Vector3 s_pos3d = Vector3Scale(active_sat->current_pos, 1.0f / DRAW_SCALE);
 
-                /* draw on top of the clouds / scattering / ground coverage
-                 * layers: flush the pending batch, then disable depth test so
-                 * those earlier-drawn shells do not occlude the line between
-                 * home and the satellite (the batch must be flushed while the
-                 * state is changed, otherwise the line is drawn later with
-                 * depth testing still enabled) */
+                // flush the batch, then disable depth test so the cloud/scattering/coverage shells don't occlude the line
                 rlDrawRenderBatchActive();
                 rlDisableDepthTest();
                 rlDisableDepthMask();
@@ -3179,8 +3138,7 @@ int main(void)
                             sCol.a = g_theme.world.sat.a;
                         sCol = ApplyAlpha(sCol, sat_alpha);
                         Vector2 sp = WorldToScreenViewport3D(draw_pos, Camera3DParams);
-                        /* rotate the icon so its bottom-right corner points toward the earth
-                         * (origin) in the current viewport (raylib rotation is in degrees) */
+                        // rotate the icon so its bottom-right corner points at Earth (raylib rotation is in degrees)
                         Vector2 earthScreen = WorldToScreenViewport3D(Vector3Zero(), Camera3DParams);
                         float sat_angle = (atan2f(earthScreen.y - sp.y, earthScreen.x - sp.x) * RAD2DEG) - 45.0f;
                         DrawTexturePro(satIcon, (Rectangle){0, 0, satIcon.width, satIcon.height}, (Rectangle){sp.x, sp.y, m_size_3d, m_size_3d}, (Vector2){m_size_3d / 2.f, m_size_3d / 2.f}, sat_angle, sCol);
@@ -3250,6 +3208,7 @@ int main(void)
             .is_auto_warping = &is_auto_warping,
             .auto_warp_target = &auto_warp_target,
             .auto_warp_initial_diff = &auto_warp_initial_diff,
+            .live_follow = &live_follow,
             .is_2d_view = &is_2d_view,
             .hide_unselected = &hide_unselected,
             .picking_home = &picking_home,
@@ -3267,25 +3226,19 @@ int main(void)
             .camera2d = &Camera2DParams,
             .camera3d = &Camera3DParams
         };
-        /* darken the background behind the settings modal.
-         * Replaced the expensive per-frame LoadImageFromScreen + Gaussian blur
-         * with a simple dark overlay — much cheaper, no font-atlas bleed-through,
-         * and still provides clear visual separation for the modal. */
+        // darken the background behind the settings modal (cheaper than the old blur, no font-atlas bleed)
         if (LayoutSettingsOpen())
         {
             DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                           g_theme.ui.overlay);
         }
 
-        /* apply any completed async fetch results to the global satellite array.
-         * Runs on the UI thread so it is safe with the render loop. */
+        // apply completed async fetch results on the UI thread (safe with the render loop)
         AsyncFetchApplyResults();
 
         DrawGUI(&uiCtx, &cfg, customFont);
 
-        /* statistics overlay (enabled via Settings -> Show Statistics).
-         * Positioned in the top-left corner of the central 3D view: below the
-         * nav bar and to the right of the (visible) left sidebar. */
+        // statistics overlay: top-left of the central view, below the nav bar
         if (cfg.show_statistics)
         {
             float stat_size = 16.0f * cfg.ui_scale;
@@ -3315,11 +3268,7 @@ int main(void)
             DrawUIText(customFont, time_str, x, y, stat_size, g_theme.ui.text_dim);
         }
 
-        /* Night mode: single screen-space post-process pass. Everything above
-         * (3D/2D scene + raylib UI + ImGui) was drawn to the default MSAA
-         * framebuffer. Flush the queued raylib/rlImGui geometry, copy the
-         * resolved backbuffer into nightTex, then blit it back through the red
-         * shader. No intermediate render texture is involved. */
+        // night mode: flush queued geometry, copy the resolved backbuffer into nightTex, blit back through the red shader
         if (cfg.night_mode)
         {
             int nw = GetRenderWidth();
@@ -3346,8 +3295,7 @@ int main(void)
                     nightTex.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
                 }
 
-                /* make sure every queued raylib/rlImGui draw has landed in the
-                 * framebuffer before we copy it */
+                // ensure every queued draw has landed before copying
                 rlDrawRenderBatchActive();
 
                 /* GPU copy of the backbuffer colour (resolves MSAA) */
@@ -3355,8 +3303,7 @@ int main(void)
                 rlEnableTexture(nightTex.id);
                 glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, nw, nh);
 
-                /* draw one fullscreen quad through the red shader; the negative
-                 * source height flips the bottom-up GL copy back upright */
+                // fullscreen quad through the red shader; negative source height flips the bottom-up GL copy
                 float night_intensity = 1.0f;
                 SetShaderValue(shaderNight, nightIntensityLoc, &night_intensity, SHADER_UNIFORM_FLOAT);
                 BeginShaderMode(shaderNight);
@@ -3368,8 +3315,7 @@ int main(void)
             }
         }
 
-        /* Expo Mode overlay: drawn after the night-mode post-process so it
-         * stays full-colour. */
+        // Expo Mode overlay: after night mode so it stays full-colour
         ExpoModeDrawOverlay(logoTex, customFont, &cfg, (Rectangle){vp_x, vp_y, vp_w, vp_h});
 
         EndDrawing();

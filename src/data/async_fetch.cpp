@@ -25,6 +25,9 @@ static std::atomic<bool> s_running{false};
 static std::atomic<bool> s_shutdown{false};
 static std::atomic<int> s_in_flight{0};            // queued + currently processing
 
+// completed jobs that yielded no satellites; UI-thread only, drained by AsyncFetchTakeFailureCount()
+static int s_fail_count = 0;
+
 /* -- Worker thread --------------------------------------------------------- */
 
 /** parse a fetched payload into a local Satellite buffer (never the global) */
@@ -57,8 +60,7 @@ static int parse_payload(const AsyncFetchJob *job, const char *data, size_t size
                     while (*ptr && *ptr != '\n' && j < 255) l2[j++] = *ptr++;
                     l2[j] = '\0'; if (*ptr == '\n') ptr++;
 
-                    /* a valid 3LE block requires a name line (line 0);
-                     * reject element-only input so no satellite is added */
+                    /* a valid 3LE block requires a name line; reject element-only input */
                     if (!(l0[0] != '1' && l1[0] == '1' && l1[1] == ' ' &&
                           l2[0] == '2' && l2[1] == ' '))
                     {
@@ -269,6 +271,13 @@ int AsyncFetchPendingCount(void)
     return s_in_flight.load();
 }
 
+int AsyncFetchTakeFailureCount(void)
+{
+    int n = s_fail_count;
+    s_fail_count = 0;
+    return n;
+}
+
 bool AsyncFetchBusy(void)
 {
     return s_in_flight.load() > 0;
@@ -300,6 +309,7 @@ void AsyncFetchApplyResults(void)
         if (!res.success || res.parsed_count <= 0)
         {
             LOG_WARN("Async fetch produced no satellites for source: %s", res.job.name);
+            s_fail_count++;
             AsyncFetchFreeResult(&res);
             continue;
         }

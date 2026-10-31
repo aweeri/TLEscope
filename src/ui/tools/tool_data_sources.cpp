@@ -531,88 +531,41 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
     ImGui::Separator();
     ImGui::PopTextWrapPos();
 
-    /* async pull state (persists across frames) */
-    static bool s_pull_running = false;
-    static int s_pull_total = 0;
+    // async pull state lives in tools_common so completion is handled even when this panel isn't drawn
+    bool pull_running = DataSourcesPullInProgress();
+    int pull_total = DataSourcesPullTotal();
 
-    /* track whether BeginDisabled() was called this frame so the matching
-     * EndDisabled() is only emitted when it was because imgui be crashy if not*/
+    // only emit EndDisabled() when BeginDisabled() was called this frame
     bool pull_disabled = false;
 
-    if (s_pull_running)
+    if (pull_running)
     {
-        /* Wait until both worker jobs and queued results are drained. */
-        if (!AsyncFetchBusy() && !AsyncFetchHasResults())
+        /* show progress while the worker thread fetches/parses in the background */
+        ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s Pulling data...",
+                           ICON_FA_SPINNER);
+        ImGui::SameLine();
+        static float spinner_angle = 0.0f;
+        spinner_angle += ImGui::GetIO().DeltaTime * 180.0f;
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "%c",
+                           "|/-\\"[(int)(spinner_angle / 45.0f) % 4]);
+
+        int done = pull_total - AsyncFetchPendingCount();
+        if (pull_total > 0)
         {
-            /* Fetched records start inactive. Restore only NORAD ids that were
-             * active before this refresh; genuinely new records stay inactive. */
-            LoadSatSelection(cfg);
-            SaveOrbitalData("data.json", satellites, sat_count);
-
-            s_pull_running = false;
-            s_pull_total = 0;
-            NotifyPush(NOTIFY_SUCCESS, ICON_FA_DOWNLOAD,
-                       "Data sources refreshed (%d satellites)", sat_count);
+            ImGui::ProgressBar((float)done / (float)pull_total,
+                               ImVec2(avail_w, 0.0f), "");
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
+                               "%d / %d sources", done, pull_total);
         }
-        else
-        {
-            /* show progress while the worker thread fetches/parses in the background */
-            ImGui::TextColored(ThemeColor(g_theme.ui.accent), "%s Pulling data...",
-                               ICON_FA_SPINNER);
-            ImGui::SameLine();
-            static float spinner_angle = 0.0f;
-            spinner_angle += ImGui::GetIO().DeltaTime * 180.0f;
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "%c",
-                               "|/-\\"[(int)(spinner_angle / 45.0f) % 4]);
 
-            int done = s_pull_total - AsyncFetchPendingCount();
-            if (s_pull_total > 0)
-            {
-                ImGui::ProgressBar((float)done / (float)s_pull_total,
-                                   ImVec2(avail_w, 0.0f), "");
-                ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
-                                   "%d / %d sources", done, s_pull_total);
-            }
-
-            /* disable the button while a pull is in flight */
-            ImGui::BeginDisabled();
-            pull_disabled = true;
-        }
+        /* disable the button while a pull is in flight */
+        ImGui::BeginDisabled();
+        pull_disabled = true;
     }
 
     if (ImGui::Button("Pull All Selected Sources", ImVec2(avail_w, 30)))
     {
-        s_pull_total = DataSelectionCount();
-        if (s_pull_total == 0)
-        {
-            LOG_INFO("No sources selected to pull");
-        }
-        else
-        {
-            /* Snapshot the active NORAD ids before replacing the catalogue. */
-            SaveSatSelection(cfg);
-            if (ctx && ctx->selected_sat)
-                *ctx->selected_sat = NULL;
-
-            sat_count = 0;
-            s_pull_running = true;
-
-            for (int i = 0; i < s_pull_total; i++)
-            {
-                DataSourceSelection *s = DataSelectionAt(i);
-                if (!s) break;
-
-                AsyncFetchJob job;
-                memset(&job, 0, sizeof(job));
-                job.type = (AsyncJobType)s->type;
-                strncpy(job.name, s->name, sizeof(job.name) - 1);
-                strncpy(job.identifier, s->identifier, sizeof(job.identifier) - 1);
-                strncpy(job.paste_data, s->paste_data, sizeof(job.paste_data) - 1);
-                job.format = s->format;
-
-                AsyncFetchSubmit(&job);
-            }
-        }
+        DataSourcesStartPull(cfg, ctx);
     }
 
     if (pull_disabled)
