@@ -19,8 +19,10 @@ VIAddVersionKey "ProductVersion" "${VERSION_STR}"
 VIAddVersionKey "LegalCopyright" "Copyright (c) TLEscope contributors"
 
 # installer icons
-Icon "dist\TLEscope-Win-Portable\logo.ico"
-UninstallIcon "dist\TLEscope-Win-Portable\logo.ico"
+# build/logo.ico is generated at build time by scripts/gen_icon.cpp from the
+# hardcoded logo code; no binary icon is committed to the repository.
+Icon "build\logo.ico"
+UninstallIcon "build\logo.ico"
 
 # default UI pages
 Page Directory
@@ -37,17 +39,16 @@ Section "Install"
 	# setting the OutPath sets the working directory for shortcuts created below
 	SetOutPath "$APPDATA\TLEscope"
 	File /r "dist\TLEscope-Win-Portable\themes"
-	File "dist\TLEscope-Win-Portable\logo.png"
-	File "dist\TLEscope-Win-Portable\logo.ico"
 	File /nonfatal "dist\TLEscope-Win-Portable\settings.json"
 	File /nonfatal "dist\TLEscope-Win-Portable\data.tle"
 	File /nonfatal "dist\TLEscope-Win-Portable\persistence.bin"
 	
 	# create shortcuts
-	# target: Program Files executable.
-	CreateShortcut "$DESKTOP\TLEscope.lnk" "$INSTDIR\TLEscope.exe" "" "$APPDATA\TLEscope\logo.ico"
+	# target: Program Files executable. The exe carries the icon as a resource,
+	# so shortcuts inherit it without shipping a separate .ico file.
+	CreateShortcut "$DESKTOP\TLEscope.lnk" "$INSTDIR\TLEscope.exe"
 	CreateDirectory "$SMPROGRAMS\TLEscope"
-	CreateShortcut "$SMPROGRAMS\TLEscope\TLEscope.lnk" "$INSTDIR\TLEscope.exe" "" "$APPDATA\TLEscope\logo.ico"
+	CreateShortcut "$SMPROGRAMS\TLEscope\TLEscope.lnk" "$INSTDIR\TLEscope.exe"
 SectionEnd
 
 Section "Uninstall"

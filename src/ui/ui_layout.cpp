@@ -1714,7 +1714,7 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 
             bool en = ExpoModeEnabled(cfg);
             if (ImGui::Checkbox("Enable Expo Mode", &en)) { ExpoModeSetEnabled(cfg, en); SaveAppConfig("settings.json", cfg); }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the TLEscope + 'available on GitHub' overlay in the bottom-right corner.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the TLEscope + 'available on GitHub' overlay in the top-right corner, below the menu bar.");
 
             float sz = ExpoModeGetSize(cfg);
             if (ImGui::SliderFloat("Overlay Size", &sz, EXPO_SIZE_MIN, EXPO_SIZE_MAX, "%.2fx")) ExpoModeSetSize(cfg, sz);

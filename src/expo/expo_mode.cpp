@@ -1,9 +1,11 @@
 #include "expo_mode.h"
 #include "ui/ui.h"
+#include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
 #include "core/theme.h"
 #include <math.h>
 #include <raylib.h>
+#include "imgui.h"
 
 bool ExpoModeEnabled(AppConfig *cfg)
 {
@@ -32,6 +34,8 @@ void ExpoModeDrawOverlay(Texture2D logo, Font font, AppConfig *cfg, Rectangle vi
     if (!ExpoModeEnabled(cfg)) return;
     float scale  = cfg->ui_scale * ExpoModeGetSize(cfg);
     float margin = 20.0f * cfg->ui_scale;
+    /* keep clear of the top nav bar (hidden in clean view) so the overlay never bleeds onto it */
+    float nav_h = g_layout.clean_view ? 0.0f : ImGui::GetFrameHeight();
     const char *title = "TLEscope";
     const char *gh    = "available on GitHub";
     float title_sz = 34.0f*scale, gh_sz = 18.0f*scale, logo_h = 44.0f*scale, gap = 8.0f*scale;
@@ -42,7 +46,7 @@ void ExpoModeDrawOverlay(Texture2D logo, Font font, AppConfig *cfg, Rectangle vi
     float text_w = (tm.x > gm.x) ? tm.x : gm.x;
     float group_w = logo_w + gap + text_w;
     float group_left = viewport.x + viewport.width - margin - group_w;
-    float group_top = viewport.y + margin;
+    float group_top = viewport.y + nav_h + margin;
     float text_x = group_left;
     float logo_x = group_left + text_w + gap;
     float logo_y = group_top + (group_h - logo_h)*0.5f;

@@ -34,12 +34,20 @@ else
     CC_WIN = x86_64-w64-mingw32-g++
 endif
 
-# Windows resource compiler (for the VERSIONINFO resource embedded in the exe)
+# Windows resource compiler (for the VERSIONINFO + ICON resources embedded in the exe)
 ifeq ($(MSYSTEM),CLANGARM64)
 	RC_WIN ?= llvm-windres
 else
 	RC_WIN ?= windres
 endif
+
+# Host compiler used to build the build-time icon generator. It must produce a
+# binary that runs on the build machine, so this is deliberately not CC_WIN
+# (which may be a cross-compiler when building from Linux).
+HOST_CXX ?= g++
+EXE_EXT  := $(if $(filter Windows_NT,$(OS)),.exe,)
+ICON_GEN := build/gen_icon$(EXE_EXT)
+ICON_OUT := build/logo.ico
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
@@ -63,7 +71,7 @@ CC_MACOS = clang++
 LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework CFNetwork -framework CoreFoundation -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework QuartzCore
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
+SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/logo.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
@@ -83,7 +91,7 @@ $(shell echo "$(TOTAL_WIN_OBJ)" > /tmp/tlescope_build_total_win; echo "0" > /tmp
 
 all: linux
 
-build/main.o: src/render/map_view.h src/expo/expo_mode.h
+build/main.o: src/render/map_view.h src/expo/expo_mode.h src/ui/logo.h
 
 # Build raylib from the git submodule into a static library (lib/raylib/src/libraylib.a)
 # Extra args can be passed via RAYLIB_MAKE_ARGS, e.g. for cross-compiling:
@@ -108,7 +116,6 @@ linux: raylib bin/TLEscope
 	cp bin/TLEscope $(DIST_LINUX)/TLEscope.tmp && mv -f $(DIST_LINUX)/TLEscope.tmp $(DIST_LINUX)/TLEscope
 	cp -r themes $(DIST_LINUX)/
 	cp settings.json $(DIST_LINUX)/ 2>/dev/null || true
-	cp logo*.png $(DIST_LINUX)/ 2>/dev/null || true
 	@echo "Linux build bundled in $(DIST_LINUX)/"
 	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
@@ -117,7 +124,6 @@ macos: raylib bin/TLEscope-macos
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
 	cp -r themes $(DIST_MACOS)/
 	cp settings.json $(DIST_MACOS)/ 2>/dev/null || true
-	cp logo*.png $(DIST_MACOS)/ 2>/dev/null || true
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 	@echo "To make a MacOS bundle: ./macos_bundle.sh"
@@ -128,7 +134,6 @@ windows: raylib bin/TLEscope.exe
 	cp $(MINGW_PREFIX)/bin/libzstd*.dll $(DIST_WIN)/ 2>/dev/null || true
 	cp -r themes $(DIST_WIN)/
 	cp settings.json $(DIST_WIN)/ 2>/dev/null || true
-	cp logo*.png $(DIST_WIN)/ 2>/dev/null || true
 	cp $(MINGW_PREFIX)/bin/libssp*.dll $(DIST_WIN)/ 2>/dev/null || true
 	@echo "Windows build bundled in $(DIST_WIN)/, run it from there!"
 
@@ -138,13 +143,11 @@ windows-arm64: raylib bin/TLEscope-arm64.exe
 	cp $(CLANG64_PREFIX)/bin/libzstd*.dll $(DIST_WIN_ARM64)/ 2>/dev/null || true
 	cp -r themes $(DIST_WIN_ARM64)/
 	cp settings.json $(DIST_WIN_ARM64)/ 2>/dev/null || true
-	cp logo*.png $(DIST_WIN_ARM64)/ 2>/dev/null || true
 	cp $(CLANG64_PREFIX)/bin/libssp*.dll $(DIST_WIN_ARM64)/ 2>/dev/null || true
 	@echo "Windows ARM64 build bundled in $(DIST_WIN_ARM64)/, run it from there!"
 
-win-installer: windows
+win-installer: windows $(ICON_OUT)
 	@echo "Building Windows installer..."
-	magick logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || convert logo.png -define icon:auto-resize=256,64,48,32,16 $(DIST_WIN)/logo.ico || cp logo.ico $(DIST_WIN)/
 	makensis -DVERSION_STR="$(GIT_VERSION)" -DVERSION_NUM="$(GIT_VERSION_NUM)" installer.nsi
 	@echo "Installer built at dist/TLEscope-Installer.exe"
 
@@ -194,10 +197,19 @@ build_win/%.o: lib/rlImGui/%.cpp | build_win
 	@mkdir -p $(@D)
 	@COUNTER_FILE=/tmp/tlescope_build_counter_win TOTAL_FILE=/tmp/tlescope_build_total_win scripts/progress.sh $(CC_WIN) $(CXXFLAGS_WIN) -c $< -o $@
 
-build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh scripts/version.sh | build_win
+# The .rc embeds both the VERSIONINFO and the application ICON, so the icon
+# must exist before windres runs (and therefore before the exe is linked).
+build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh scripts/version.sh $(ICON_OUT) | build_win
 	@mkdir -p $(@D)
-	@scripts/gen_versioninfo.sh "$(GIT_VERSION_NUM)" "$(GIT_VERSION)" build_win/versioninfo.rc
+	@scripts/gen_versioninfo.sh "$(GIT_VERSION_NUM)" "$(GIT_VERSION)" build_win/versioninfo.rc "$(ICON_OUT)"
 	@$(RC_WIN) -O coff -i build_win/versioninfo.rc -o $@
+
+# Rasterize the hardcoded logo into a multi-size .ico (build artifact, never
+# committed). Reuses src/ui/logo_raster.h, the same code the app renders with.
+$(ICON_OUT): scripts/gen_icon.cpp src/ui/logo_raster.h | build
+	@mkdir -p $(@D)
+	@$(HOST_CXX) -std=c++17 -O2 -Isrc -o $(ICON_GEN) scripts/gen_icon.cpp
+	@$(ICON_GEN) $(ICON_OUT)
 
 build:
 	mkdir -p build
@@ -221,7 +233,6 @@ install: linux
 	@echo 'USER_DIR="$${XDG_CONFIG_HOME:-$$HOME/.config}/TLEscope"' >> $(DESTDIR)$(LINK_DIR)/TLEscope
 	@echo 'mkdir -p "$$USER_DIR"' >> $(DESTDIR)$(LINK_DIR)/TLEscope
 	@echo 'ln -sfn "$(INSTALL_DIR)/themes" "$$USER_DIR/themes"' >> $(DESTDIR)$(LINK_DIR)/TLEscope
-	@echo 'ln -sfn "$(INSTALL_DIR)/logo.png" "$$USER_DIR/logo.png"' >> $(DESTDIR)$(LINK_DIR)/TLEscope
 	@echo 'if [ ! -f "$$USER_DIR/settings.json" ] && [ -f "$(INSTALL_DIR)/settings.json" ]; then cp "$(INSTALL_DIR)/settings.json" "$$USER_DIR/settings.json"; fi' >> $(DESTDIR)$(LINK_DIR)/TLEscope
 	@echo 'if [ ! -f "$$USER_DIR/data.tle" ] && [ -f "$(INSTALL_DIR)/data.tle" ]; then cp "$(INSTALL_DIR)/data.tle" "$$USER_DIR/data.tle"; fi' >> $(DESTDIR)$(LINK_DIR)/TLEscope
 	@echo 'cd "$$USER_DIR" && exec "$(INSTALL_DIR)/TLEscope" "$$@"' >> $(DESTDIR)$(LINK_DIR)/TLEscope
@@ -231,7 +242,6 @@ install: linux
 	@echo 'Type=Application' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
 	@echo 'Name=TLEscope' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
 	@echo 'Exec=TLEscope' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
-	@echo 'Icon=$(INSTALL_DIR)/logo.png' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
 	@echo 'Terminal=false' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
 	@echo 'Categories=Utility;Science;' >> $(DESTDIR)$(APP_DIR)/TLEscope.desktop
 	@echo "Install complete. You can now execute 'TLEscope' from anywhere."

@@ -1,8 +1,14 @@
-/* Windows VERSIONINFO resource template for TLEscope.
+/* Windows resource template for TLEscope.
  * Rendered by scripts/gen_versioninfo.sh at build time; the @PLACEHOLDERS@
- * are replaced with the version derived from git (see scripts/version.sh).
+ * are replaced with the version derived from git (see scripts/version.sh) and
+ * the path of the generated icon.
  * Compiled with windres and linked into TLEscope.exe so that
- * Properties -> Details shows real version metadata. */
+ * Properties -> Details shows real version metadata and Explorer shows the
+ * application icon. Neither resource needs a committed binary file: the icon
+ * is rasterized at build time from the hardcoded logo code. */
+
+/* Application icon (produced by scripts/gen_icon.cpp into build/logo.ico). */
+1 ICON "@ICON_PATH@"
 
 1 VERSIONINFO
 FILEVERSION     @FILEVERSION_COMMA@

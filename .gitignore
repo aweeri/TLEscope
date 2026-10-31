@@ -20,6 +20,12 @@ dev_thoughts.md
 *.csv
 build_win/
 
+# build-time generated application icon (rasterized from src/ui/logo_raster.h
+# by scripts/gen_icon.cpp); never commit a binary icon
+/build/logo.ico
+/build/gen_icon
+/build/gen_icon.exe
+
 # raylib is a git submodule (lib/raylib); ignore its build artifacts
 lib/raylib/src/*.o
 lib/raylib/src/libraylib.a

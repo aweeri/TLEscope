@@ -7,7 +7,6 @@ USER_DIR="$HOME/Library/Application Support/TLEscope"
 
 mkdir -p "$USER_DIR"
 ln -sfn "$RESOURCE_DIR/themes" "$USER_DIR/themes"
-ln -sfn "$RESOURCE_DIR/logo.png" "$USER_DIR/logo.png"
 
 cd "$USER_DIR"
 exec "$SCRIPT_DIR/TLEscope.bin" "$@"

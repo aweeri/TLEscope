@@ -32,6 +32,7 @@
 #include "ui/tools/tools_scene.h"
 #include "ui/tools/tools_settings.h"
 #include "ui/imgui_theme.h"
+#include "ui/logo.h"
 #include "io/rotator.h"
 #include "data/async_fetch.h"
 #include "data/storage.h"
@@ -853,22 +854,16 @@ int main(void)
 
     SetExitKey(0);
 
-    /* logo and icon loading */
-    Image logoImg = LoadImage("logo.png");
+    /* logo and window icon, generated in code (no image assets required) */
+    Image logoImg = LogoGenerateImage(256);
     Texture2D logoTex = {0};
     if (logoImg.data != NULL)
     {
-        SetWindowIcon(logoImg);
         logoTex = LoadTextureFromImage(logoImg);
+        SetWindowIcon(logoImg);
         UnloadImage(logoImg);
     }
-    Image logoLImg = LoadImage("logo.png");
-    Texture2D logoLTex = {0};
-    if (logoLImg.data != NULL)
-    {
-        logoLTex = LoadTextureFromImage(logoLImg);
-        UnloadImage(logoLImg);
-    }
+    Texture2D logoLTex = LogoLoadTexture(512);
 
     /* font loading with specific glyph range */
     int glyphsCount = 0;
@@ -3323,6 +3318,7 @@ int main(void)
 
     /* cleanup and save */
     UnloadTexture(logoTex);
+    UnloadTexture(logoLTex);
     UnloadTexture(satIcon);
     UnloadTexture(markerIcon);
     UnloadTexture(periMark);
