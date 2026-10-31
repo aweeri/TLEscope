@@ -113,7 +113,7 @@ typedef enum
     PANEL_SAT_MGR = 0,      /* Satellite Manager            -> left  */
     PANEL_DATA_SOURCES,     /* Data Sources                 -> left  */
     PANEL_LAYERS,           /* Layer Controls               -> left  */
-    PANEL_ROTATOR,          /* Rotator Control              -> left  */
+    PANEL_ROTATOR,          // retired: controls live in the Transit Rotator tab
     PANEL_SAT_INFO,         /* Satellite Info (inspector)   -> right */
     PANEL_TRANSIT,          /* Transit Tracking             -> right */
     PANEL_POLAR_PLOT,       /* Polar Plot                   -> right */
@@ -304,6 +304,8 @@ extern int location_count;
 /* persisted rotator connection/settings (see section 6 / 11) */
 typedef struct
 {
+    // driver key: rotctld (default), gs232, easycomm, custom
+    char protocol[16];
     char host[64];
     char port[16];
     char get_fmt[64];
@@ -312,8 +314,23 @@ typedef struct
     char park_az[16];
     char park_el[16];
     char lead_time[16];
+    char los_hold_s[16];      // post-LOS hold seconds; 0 = off
     bool auto_steer;
     int steer_mode;
+
+    char min_el_track[16];
+    char max_el_track[16];
+    char az_min[16];
+    char az_max[16];
+    char rate_limit_deg_s[16]; // inert, config round-trip only
+    char slew_tol_deg[16];
+    char slew_timeout_s[16];
+    char comm_timeout_s[16];
+    char send_interval_ms[16]; // transport cadence, never a target limit
+    int az_wrap_mode;          // 0=shortest, 1=CW, 2=CCW
+    bool park_on_exit;
+    bool park_between_passes;
+    bool queue_tracking;
 } RotatorSettings;
 
 /* -- Tool-owned settings (generic key-value store) -------------------------- */

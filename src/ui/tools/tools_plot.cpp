@@ -10,6 +10,7 @@
 #include "ui/imgui_theme.h"
 #include "core/theme.h"
 #include "core/astro.h"
+#include "io/rotator.h"
 
 #include <cstdio>
 #include <cmath>
@@ -238,6 +239,120 @@ void PlotDrawSkyDot(ImDrawList *dl, ImVec2 center, float radius,
         dl->AddCircle(dot_pos, dot_radius,
                       IM_COL32(accent.r, accent.g, accent.b, 255), 16, UIPx(2.5f));
     }
+}
+
+void PlotDrawRotatorMarker(ImDrawList *dl, ImVec2 center, float radius)
+{
+    if (!RotatorHasPosition())
+        return;
+
+    Color info = g_theme.ui.info;
+    Color bg = g_theme.ui.bg;
+    ImVec2 p = PlotPolarProject(center, radius, (double)RotatorGetAz(),
+                                (double)RotatorGetEl());
+
+    float tgt_az = 0.0f, tgt_el = 0.0f;
+    if (RotatorGetCommandedTarget(&tgt_az, &tgt_el))
+    {
+        ImVec2 tp = PlotPolarProject(center, radius, (double)tgt_az, (double)tgt_el);
+        dl->AddLine(p, tp, IM_COL32(info.r, info.g, info.b, 180), UIPx(1.5f));
+    }
+
+    float dot_r = UIPx(6.0f);
+    dl->AddCircleFilled(p, dot_r, IM_COL32(info.r, info.g, info.b, 255), 20);
+    dl->AddCircle(p, dot_r, IM_COL32(bg.r, bg.g, bg.b, 255), 20, UIPx(1.5f));
+    dl->AddCircle(p, dot_r + UIPx(2.0f), IM_COL32(info.r, info.g, info.b, 160), 20,
+                  UIPx(1.5f));
+}
+
+enum RotStateTone { TONE_DIM, TONE_INFO, TONE_SUCCESS };
+
+struct RotStateRow
+{
+    int state;
+    const char *label;
+    RotStateTone tone;
+};
+
+static const RotStateRow kRotStateRows[] = {
+    { PLOT_ROT_STATE_PARK, "Park",          TONE_INFO    },
+    { RQ_PENDING,          "Queued",        TONE_DIM     },
+    { RQ_ACTIVE,           "Tracking",      TONE_SUCCESS },
+    { RQ_DONE,             "Done",          TONE_SUCCESS },
+    { RQ_SKIPPED,          "Skipped",       TONE_INFO    },
+    { RQ_AWAITING,         "Waiting",       TONE_DIM     },
+    { RQ_AWAITING_AOS,     "Aiming at AOS", TONE_INFO    },
+    { RQ_LOS_HOLD,         "LOS hold",      TONE_INFO    },
+    { PLOT_ROT_STATE_NONE, "Waiting",       TONE_DIM     },
+};
+
+static const RotStateRow *RotStateFind(int state)
+{
+    for (const RotStateRow &row : kRotStateRows)
+        if (row.state == state)
+            return &row;
+    return nullptr;
+}
+
+const char *PlotRotatorStateLabel(int state, bool connected, bool slewing)
+{
+    if (state == PLOT_ROT_STATE_COMM_LOST)
+        return "Comm lost";
+    if (!connected)
+        return "Offline";
+    if (state == RQ_ACTIVE && slewing)
+        return "Slewing";
+    const RotStateRow *row = RotStateFind(state);
+    return row ? row->label : "Unknown";
+}
+
+ImU32 PlotRotatorStateColor(int state, bool connected)
+{
+    Color c = g_theme.ui.text_dim;
+    if (state == PLOT_ROT_STATE_COMM_LOST)
+        c = g_theme.ui.error;
+    else if (connected)
+    {
+        const RotStateRow *row = RotStateFind(state);
+        if (row && row->tone == TONE_SUCCESS) c = g_theme.ui.success;
+        else if (row && row->tone == TONE_INFO) c = g_theme.ui.info;
+    }
+    return IM_COL32(c.r, c.g, c.b, 255);
+}
+
+Color PlotRotatorStateColorC(int state, bool connected)
+{
+    ImU32 u = PlotRotatorStateColor(state, connected);
+    Color c;
+    c.r = (unsigned char)((u >> IM_COL32_R_SHIFT) & 0xFF);
+    c.g = (unsigned char)((u >> IM_COL32_G_SHIFT) & 0xFF);
+    c.b = (unsigned char)((u >> IM_COL32_B_SHIFT) & 0xFF);
+    c.a = 255;
+    return c;
+}
+
+void PlotFormatAzEl(char *out, size_t n, double az, double el)
+{
+    if (!out || n == 0) return;
+    snprintf(out, n, "Az %.1f° El %.1f°", az, el);
+}
+
+void PlotFormatAzElDelta(char *out, size_t n, double d_az, double d_el)
+{
+    if (!out || n == 0) return;
+    // ASCII dAz/dEl only, the delta symbol is outside the bundled font range
+    snprintf(out, n, "dAz %+.1f° dEl %+.1f°", d_az, d_el);
+}
+
+void PlotDrawRotatorStatusLine(const char *prefix, int state, bool connected,
+                               bool slewing)
+{
+    const char *word = PlotRotatorStateLabel(state, connected, slewing);
+    ImU32 col = PlotRotatorStateColor(state, connected);
+    if (prefix && prefix[0])
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s: %s", prefix, word);
+    else
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s", word);
 }
 
 /* ========================================================================== */

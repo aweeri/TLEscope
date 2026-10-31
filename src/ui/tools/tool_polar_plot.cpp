@@ -11,6 +11,7 @@
 #include "core/location.h"
 #include "core/config.h"
 #include "core/theme.h"
+#include "io/rotator.h"
 
 #include <cstdio>
 #include <cmath>
@@ -117,51 +118,6 @@ void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
     }
 }
 
-static void DrawPolarPlotGrid(ImDrawList *dl, ImVec2 center, float radius)
-{
-    Color grid_theme = g_theme.ui.text_dim;
-    Color label_theme = g_theme.ui.text_dim;
-
-    int rings[3] = { 60, 30, 0 };
-    ImU32 ring_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 80);
-    ImU32 ring_col_bold = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 160);
-
-    for (int r = 0; r < 3; r++)
-    {
-        float el = (float)rings[r];
-        float r_norm = (90.0f - el) / 90.0f;
-        float r_px = radius * r_norm;
-        ImU32 col = (rings[r] == 0) ? ring_col_bold : ring_col;
-        dl->AddCircle(center, r_px, col, 64, (rings[r] == 0) ? 2.0f : 1.0f);
-    }
-
-    /* crosshairs (N-S, E-W) */
-    dl->AddLine(ImVec2(center.x - radius, center.y), ImVec2(center.x + radius, center.y), ring_col, 1.0f);
-    dl->AddLine(ImVec2(center.x, center.y - radius), ImVec2(center.x, center.y + radius), ring_col, 1.0f);
-
-    /* cardinal labels */
-    const char *labels[] = { "N", "E", "S", "W" };
-    ImVec2 dirs[] = {
-        ImVec2(0, -1),  /* N = up */
-        ImVec2(1, 0),   /* E = right */
-        ImVec2(0, 1),   /* S = down */
-        ImVec2(-1, 0)   /* W = left */
-    };
-    ImU32 label_col = IM_COL32(label_theme.r, label_theme.g, label_theme.b, 200);
-    for (int i = 0; i < 4; i++)
-    {
-        ImVec2 pos = ImVec2(center.x + dirs[i].x * (radius + 12.0f),
-                            center.y + dirs[i].y * (radius + 12.0f));
-        dl->AddText(pos, label_col, labels[i]);
-    }
-
-    // elevation labels
-    ImU32 lbl_col = IM_COL32(grid_theme.r, grid_theme.g, grid_theme.b, 140);
-    /* +30° at radius*(2/3), +60° at radius/3 */
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius * (2.0f / 3.0f) + 2.0f), lbl_col, "30°");
-    dl->AddText(ImVec2(center.x + 4.0f, center.y + radius / 3.0f + 2.0f), lbl_col, "60°");
-}
-
 void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
 {
     (void)cfg;
@@ -208,7 +164,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     Color bg_theme = g_theme.ui.bg;
     dl->AddCircleFilled(center, radius + 4.0f,
                         IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 200), 64);
-    DrawPolarPlotGrid(dl, center, radius);
+    PlotDrawPolarGrid(dl, center, radius);
 
     /* ---- 2.4: render the selected pass sky path (SatPass.path_pts) ----
      * Draw the pass arc as a distinct highlighted polyline, with AOS/LOS
@@ -220,13 +176,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
         Color marker_col = g_theme.ui.warning;
 
         auto project = [&](double az, double el) -> ImVec2 {
-            float a_rad = (float)(az * DEG2RAD);
-            float e_ratio = (90.0f - (float)el) / 90.0f;
-            if (e_ratio < 0.0f) e_ratio = 0.0f;
-            if (e_ratio > 1.0f) e_ratio = 1.0f;
-            float r = radius * e_ratio;
-            return ImVec2(center.x + r * sinf(a_rad),
-                          center.y - r * cosf(a_rad));
+            return PlotPolarProject(center, radius, az, el);
         };
 
         /* draw the pass arc.
@@ -284,16 +234,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
     /* ---- Plot satellite position ---- */
     if (have_obs)
     {
-        float angle_rad = (float)(az * DEG2RAD);
-        float el_ratio = (90.0f - (float)el) / 90.0f;
-        if (el_ratio < 0.0f) el_ratio = 0.0f;
-        if (el_ratio > 1.0f) el_ratio = 1.0f;
-        float dot_r = radius * el_ratio;
-
-        ImVec2 dot_pos = ImVec2(
-            center.x + dot_r * sinf(angle_rad),
-            center.y - dot_r * cosf(angle_rad)
-        );
+        ImVec2 dot_pos = PlotPolarProject(center, radius, az, el);
 
         // below-horizon dot shrinks with depth
         float dot_scale = 1.0f;
@@ -330,28 +271,52 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
                     IM_COL32(msg_theme.r, msg_theme.g, msg_theme.b, 160), msg);
     }
 
+    // drawn last so the marker sits on top of grid, track and sky dot
+    PlotDrawRotatorMarker(dl, center, radius);
+
     ImGui::Dummy(ImVec2(0, 6.0f));
 
     /* ---- AZ/EL readout (aligned two-column block) ---- */
     if (have_obs)
     {
+        char azel_buf[64];
+        PlotFormatAzEl(azel_buf, sizeof(azel_buf), az, el);
         if (ImGui::BeginTable("##polar_azel", 2, ImGuiTableFlags_SizingFixedFit))
         {
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
 
             ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Azimuth");
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f°", az);
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Elevation");
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f°", el);
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Pointing");
+            ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(azel_buf);
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Range");
             ImGui::TableSetColumnIndex(1); ImGui::Text("%.1f km", range);
 
             ImGui::EndTable();
         }
+    }
+
+    {
+        bool rconn = RotatorIsConnected();
+        bool rcomm = RotatorCommLost();
+        bool rrunning = RotatorQueueIsRunning();
+        int ractive = RotatorQueueActiveIndex();
+        int rcount = RotatorQueueCount();
+        const RotatorQueueItem *ritems = RotatorQueueItems();
+
+        int rstate = PLOT_ROT_STATE_NONE;
+        bool rslewing = false;
+        if (rcomm)
+            rstate = PLOT_ROT_STATE_COMM_LOST;
+        else if (rrunning && ractive >= 0 && ritems)
+        {
+            rstate = (int)ritems[ractive].state;
+            rslewing = !ritems[ractive].arrived;
+        }
+        else if (!rrunning && rcount > 0)
+            rstate = RQ_PENDING;
+        PlotDrawRotatorStatusLine("Rotator", rstate, rconn, rslewing);
     }
 
     /* ---- Pass info ---- */

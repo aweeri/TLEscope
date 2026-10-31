@@ -61,11 +61,9 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
     /* empty state - point the user at the data puller */
     if (sat_count == 0)
     {
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
-                           "No satellites loaded yet.");
-        ImGui::TextWrapped("Add data sources in the Data Sources tab, then pull to populate this list.");
-        ImGui::PopTextWrapPos();
+        ToolsDrawBanner("No satellites loaded",
+                        "Add a data source, then pull to populate this list.",
+                        g_theme.ui.info);
         ImGui::Spacing();
         if (ImGui::SmallButton(ICON_FA_DATABASE " Open Data Sources"))
             LayoutOpenPanel(PANEL_DATA_SOURCES);

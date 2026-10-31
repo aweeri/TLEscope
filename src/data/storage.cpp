@@ -1,6 +1,7 @@
 #include "storage.h"
 #include "core/types.h"
 #include "core/astro.h"
+#include "core/config.h"
 #include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,6 +107,8 @@ static bool read_satellite_obj(const nlohmann::json &j, Satellite *sat)
 
 bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
 {
+    filename = AppConfigPath(filename);
+
     nlohmann::json root = nlohmann::json::object();
     root["version"] = 2;
     root["satellite_count"] = count;
@@ -179,6 +182,8 @@ static bool parse_orbital_json(const char *text, Satellite *sats, int *count, in
 
 bool LoadOrbitalData(const char *filename, Satellite *sats, int *count, int max)
 {
+    filename = AppConfigPath(filename);
+
     if (!FileExists(filename))
     {
         *count = 0;
@@ -211,6 +216,8 @@ bool LoadOrbitalDataFromString(const char *json, Satellite *sats, int *count, in
 
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
 {
+    filename = AppConfigPath(filename);
+
     nlohmann::json root = nlohmann::json::object();
     root["version"] = 2;
     root["source_count"] = count;
@@ -243,6 +250,8 @@ bool SaveSourceState(const char *filename, DataSourceState *sources, int count)
 
 bool LoadSourceState(const char *filename, DataSourceState *sources, int *count, int max)
 {
+    filename = AppConfigPath(filename);
+
     if (!FileExists(filename))
     {
         *count = 0;
@@ -312,6 +321,8 @@ static int s_fav_count = 0;
 
 int LoadFavorites(const char *filename)
 {
+    filename = AppConfigPath(filename);
+
     s_fav_count = 0;
     if (!FileExists(filename))
         return 0;
@@ -352,6 +363,8 @@ int LoadFavorites(const char *filename)
 
 bool SaveFavorites(const char *filename)
 {
+    filename = AppConfigPath(filename);
+
     nlohmann::json root = nlohmann::json::object();
     root["version"] = 1;
     nlohmann::json arr = nlohmann::json::array();

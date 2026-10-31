@@ -12,11 +12,15 @@
 #include "hints.h"
 #include "ui.h"
 #include "ui_layout.h"
+#include "tools/tools_settings.h"
 #include "core/config.h"
 
 #include "IconsFontAwesome6.h"
 
 /* -- Step table ------------------------------------------------------------ */
+
+// bump when a step is added so existing users see the tour again
+static const int kTutorialVersion = 2;
 
 static const Hint kTutorialHints[TUTORIAL_STEP_COUNT] = {
     { { ICON_FA_DATABASE,      "Data Sources",      "Add your TLE / OMM data here, then pull to cache it offline." } },
@@ -27,6 +31,7 @@ static const Hint kTutorialHints[TUTORIAL_STEP_COUNT] = {
     { { ICON_FA_GEAR,          "Settings",          "Set your home location under Locations so that transit calculations use your site." } },
     { { ICON_FA_GLOBE,         "3D / 2D View",      "Flip between the 3D globe and the flat 2D map (M)." } },
     { { ICON_FA_TABLE_COLUMNS, "Panel layout",      "Drag panel headers to rearrange their placement." } },
+    { { ICON_FA_SATELLITE_DISH, "Antenna / Rotator", "Click this chip to open the rotator. Its queue tracks every transit you mark in [Transit Tracking]." } },
 };
 
 /* -- Target resolution ----------------------------------------------------- */
@@ -45,6 +50,7 @@ static bool ResolveStepTarget(int step, UIRect *out)
     case 5: if (LayoutGetSettingsButtonRect(out))            return true; break;
     case 6: if (LayoutGetViewToggleRect(out))                return true; break;
     case 7: if (LayoutGetSidebarRect(SIDEBAR_LEFT, out))     return true; break;
+    case 8: if (LayoutGetRotatorNavRect(out))                return true; break;
     }
     if (LayoutGetSidebarRect(SIDEBAR_LEFT, out))  return true;
     if (LayoutGetSidebarRect(SIDEBAR_RIGHT, out)) return true;
@@ -70,10 +76,25 @@ void TutorialLaunch(AppConfig *cfg)
     s_running = true;
 }
 
+static void TutorialEnsureVersion(AppConfig *cfg)
+{
+    static bool s_checked = false;
+    if (s_checked || !cfg) return;
+    s_checked = true;
+    int seen = ToolSettingGetInt(cfg, "tutorial.version", 0);
+    if (seen < kTutorialVersion)
+    {
+        cfg->show_tutorial = true;
+        ToolSettingSetInt(cfg, "tutorial.version", kTutorialVersion);
+    }
+}
+
 void DrawTutorialOverlay(UIContext *ctx, AppConfig *cfg)
 {
     (void)ctx;
     if (!cfg) return;
+
+    TutorialEnsureVersion(cfg);
 
     if (TutorialActive(cfg) && !s_running)
     {
@@ -92,7 +113,9 @@ void DrawTutorialOverlay(UIContext *ctx, AppConfig *cfg)
         return;
     }
 
+    int step = HintStepIndex();
+
     /* refresh the current step's spotlight target from this frame's layout */
     UIRect t;
-    HintSetTarget(ResolveStepTarget(HintStepIndex(), &t) ? &t : NULL);
+    HintSetTarget(ResolveStepTarget(step, &t) ? &t : NULL);
 }

@@ -140,10 +140,9 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 {
     if (!*ctx->selected_sat)
     {
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
-                           "No satellite selected.\nClick a satellite in the 3D view or in the Satellite Manager.");
-        ImGui::PopTextWrapPos();
+        ToolsDrawBanner("No satellite selected",
+                        "Pick a satellite from the list to see its details.",
+                        g_theme.ui.info);
         return;
     }
 

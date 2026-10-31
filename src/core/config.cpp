@@ -7,6 +7,7 @@
 #include "ui/tools/tools_settings.h"
 #include "ui/tools/tools_common.h" /* ApplyLayerPreset (first-boot defaults) */
 #include "ui/tools/tools_registry.h"
+#include "io/rotator.h"
 #include "data/curl_diagnostics.h"
 
 #include <nlohmann/json.hpp>
@@ -16,15 +17,41 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <raylib.h>
+
 static void copy_str(char *dst, size_t dst_size, const std::string &src)
 {
     snprintf(dst, dst_size, "%s", src.c_str());
+}
+
+// rotating buffer pool so back-to-back calls do not clobber each other
+const char *AppConfigPath(const char *name)
+{
+    static char bufs[4][1024];
+    static int idx = 0;
+    if (name == NULL)
+        return name;
+
+    // drive-letter paths and roots are absolute
+    bool absolute = (name[0] == '/' || name[0] == '\\') ||
+                    (isalpha((unsigned char)name[0]) && name[1] == ':' &&
+                     (name[2] == '/' || name[2] == '\\'));
+    if (absolute)
+        return name;
+
+    const char *dir = GetApplicationDirectory(); // includes trailing separator
+    char *out = bufs[idx];
+    idx = (idx + 1) % 4;
+    snprintf(out, sizeof(bufs[0]), "%s%s", dir ? dir : "", name);
+    return out;
 }
 
 // read the json file and grab our settings
 void LoadAppConfig(const char *filename, AppConfig *config)
 {
     bool layout_migrated = false;
+
+    filename = AppConfigPath(filename);
 
     // default theme configuration
     strcpy(config->theme, "default");
@@ -64,6 +91,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     // default rotator settings (mirror the static defaults in rotator.cpp)
     {
         RotatorSettings *R = &config->rotator_settings;
+        strcpy(R->protocol, "rotctld");
         strcpy(R->host, "127.0.0.1");
         strcpy(R->port, "4533");
         strcpy(R->get_fmt, "p");
@@ -72,8 +100,22 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         strcpy(R->park_az, "180.0");
         strcpy(R->park_el, "0.0");
         strcpy(R->lead_time, "30");
+        strcpy(R->los_hold_s, "20");
         R->auto_steer = true;
         R->steer_mode = 0; // ROTATOR_STEER_POLAR
+        strcpy(R->min_el_track, "0.0");
+        strcpy(R->max_el_track, "89.0");
+        strcpy(R->az_min, "0.0");
+        strcpy(R->az_max, "360.0");
+        strcpy(R->rate_limit_deg_s, "6.0");
+        strcpy(R->slew_tol_deg, "1.0");
+        strcpy(R->slew_timeout_s, "60.0");
+        strcpy(R->comm_timeout_s, "3.0");
+        strcpy(R->send_interval_ms, "150");
+        R->az_wrap_mode = 0;
+        R->park_on_exit = true;
+        R->park_between_passes = true;
+        R->queue_tracking = false;
     }
 
     // default UI layout (first-run state)
@@ -554,6 +596,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                                 if (it != rot->end() && it->is_string())
                                     copy_str(dst, size, it->get<std::string>());
                             };
+                            get_s("protocol", R->protocol, sizeof(R->protocol));
                             get_s("host", R->host, sizeof(R->host));
                             get_s("port", R->port, sizeof(R->port));
                             get_s("get_fmt", R->get_fmt, sizeof(R->get_fmt));
@@ -562,13 +605,41 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                             get_s("park_az", R->park_az, sizeof(R->park_az));
                             get_s("park_el", R->park_el, sizeof(R->park_el));
                             get_s("lead_time", R->lead_time, sizeof(R->lead_time));
+                            get_s("los_hold_s", R->los_hold_s, sizeof(R->los_hold_s));
+                            // additive, missing fields keep defaults
+                            get_s("min_el_track", R->min_el_track, sizeof(R->min_el_track));
+                            get_s("max_el_track", R->max_el_track, sizeof(R->max_el_track));
+                            get_s("az_min", R->az_min, sizeof(R->az_min));
+                            get_s("az_max", R->az_max, sizeof(R->az_max));
+                            get_s("rate_limit_deg_s", R->rate_limit_deg_s, sizeof(R->rate_limit_deg_s));
+                            get_s("slew_tol_deg", R->slew_tol_deg, sizeof(R->slew_tol_deg));
+                            get_s("slew_timeout_s", R->slew_timeout_s, sizeof(R->slew_timeout_s));
+                            get_s("comm_timeout_s", R->comm_timeout_s, sizeof(R->comm_timeout_s));
+                            get_s("send_interval_ms", R->send_interval_ms, sizeof(R->send_interval_ms));
                             auto a = rot->find("auto_steer");
                             if (a != rot->end() && a->is_boolean())
                                 R->auto_steer = a->get<bool>();
                             auto sm = rot->find("steer_mode");
                             if (sm != rot->end() && sm->is_number_integer())
                                 R->steer_mode = sm->get<int>();
+                            auto aw = rot->find("az_wrap_mode");
+                            if (aw != rot->end() && aw->is_number_integer())
+                                R->az_wrap_mode = aw->get<int>();
+                            auto pe = rot->find("park_on_exit");
+                            if (pe != rot->end() && pe->is_boolean())
+                                R->park_on_exit = pe->get<bool>();
+                            auto pbp = rot->find("park_between_passes");
+                            if (pbp != rot->end() && pbp->is_boolean())
+                                R->park_between_passes = pbp->get<bool>();
+                            auto qt = rot->find("queue_tracking");
+                            if (qt != rot->end() && qt->is_boolean())
+                                R->queue_tracking = qt->get<bool>();
                         }
+                    }
+
+                    {
+                        auto rq = root.find("rotator_queue");
+                        RotatorDecodeQueue(rq != root.end() ? *rq : nlohmann::json::array());
                     }
 
                     // load active satellite selection (NORAD ids)
@@ -647,6 +718,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
 void SaveAppConfig(const char *filename, AppConfig *config)
 {
+    filename = AppConfigPath(filename);
+
     nlohmann::json root = nlohmann::json::object();
 
     root["theme"] = config->theme;
@@ -799,6 +872,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     {
         const RotatorSettings *R = &config->rotator_settings;
         root["rotator_settings"] = nlohmann::json{
+            {"protocol", R->protocol},
             {"host", R->host},
             {"port", R->port},
             {"get_fmt", R->get_fmt},
@@ -807,8 +881,28 @@ void SaveAppConfig(const char *filename, AppConfig *config)
             {"park_az", R->park_az},
             {"park_el", R->park_el},
             {"lead_time", R->lead_time},
+            {"los_hold_s", R->los_hold_s},
             {"auto_steer", R->auto_steer},
-            {"steer_mode", R->steer_mode}};
+            {"steer_mode", R->steer_mode},
+            {"min_el_track", R->min_el_track},
+            {"max_el_track", R->max_el_track},
+            {"az_min", R->az_min},
+            {"az_max", R->az_max},
+            {"rate_limit_deg_s", R->rate_limit_deg_s},
+            {"slew_tol_deg", R->slew_tol_deg},
+            {"slew_timeout_s", R->slew_timeout_s},
+            {"comm_timeout_s", R->comm_timeout_s},
+            {"send_interval_ms", R->send_interval_ms},
+            {"az_wrap_mode", R->az_wrap_mode},
+            {"park_on_exit", R->park_on_exit},
+            {"park_between_passes", R->park_between_passes},
+            {"queue_tracking", R->queue_tracking}};
+    }
+
+    {
+        nlohmann::json rq;
+        RotatorSerializeQueue(rq);
+        root["rotator_queue"] = rq;
     }
 
     // -- tool-owned settings (generic key-value store) --------------------

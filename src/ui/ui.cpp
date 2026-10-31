@@ -24,6 +24,7 @@
 #include "util/log.h"
 #include "tools/tools_common.h"
 #include "tools/tools_settings.h"
+#include "io/rotator.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -962,6 +963,8 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
     /* transit overview modal (large, root-level: must not live in the sidebar) */
     DrawTransitOverviewModal(ctx, cfg);
 
+    DrawTransitRotatorWindow(ctx, cfg);
+
     /* home-location picking hint banner (the settings modal is closed while picking) */
     if (*ctx->picking_home)
     {
@@ -999,6 +1002,11 @@ void DrawGUI(UIContext *ctx, AppConfig *cfg, Font customFont)
 
     /* when the UI is hidden (H), show just the simulated time in the lower-left */
     DrawHiddenClockOverlay(ctx, cfg);
+
+    // outside any panel, so it survives panel and modal closure
+    // now is the SIM clock in days, not wall time
+    RotatorQueueResolve(::passes, ::num_passes, *ctx->current_epoch);
+    RotatorTick(::passes, ::num_passes, *ctx->current_epoch);
 
     /* end rlImGui frame */
     rlImGuiEnd();

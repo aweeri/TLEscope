@@ -3,7 +3,7 @@
 #include "core/config.h"
 #include "ui.h"
 
-#define TUTORIAL_STEP_COUNT 8
+#define TUTORIAL_STEP_COUNT 9
 
 /* true while the first-boot tutorial should be shown and capture input */
 bool TutorialActive(const AppConfig *cfg);

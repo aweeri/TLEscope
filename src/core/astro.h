@@ -9,7 +9,7 @@
 #include "types.h"
 
 #define MAX_PASSES 1000
-typedef struct
+typedef struct SatPass
 {
     Satellite *sat;
     double aos_epoch;

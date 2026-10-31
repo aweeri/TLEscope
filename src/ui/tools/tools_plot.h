@@ -15,6 +15,23 @@
  * through UIPx().
  */
 
+// state is a RotatorQueueState int or a pseudo-state below
+#define PLOT_ROT_STATE_NONE      (-1)
+#define PLOT_ROT_STATE_COMM_LOST (-2)
+#define PLOT_ROT_STATE_PARK      (-3)
+
+// never NULL, unknown values fall back to "Unknown"
+const char *PlotRotatorStateLabel(int state, bool connected, bool slewing);
+ImU32 PlotRotatorStateColor(int state, bool connected);
+// same colour as a raylib Color, for banner and scene sinks
+Color PlotRotatorStateColorC(int state, bool connected);
+
+void PlotFormatAzEl(char *out, size_t n, double az, double el);
+void PlotFormatAzElDelta(char *out, size_t n, double d_az, double d_el);
+
+void PlotDrawRotatorStatusLine(const char *prefix, int state, bool connected,
+                               bool slewing);
+
 /* -- Polar canvas ---------------------------------------------------------- */
 
 /** draw the elevation-ring polar grid (rings at 0/30/60 deg + cardinals) */
@@ -32,6 +49,9 @@ void PlotDrawMaxElArrow(ImDrawList *dl, ImVec2 center, float radius,
 /** draw the live satellite sky position dot (filled above horizon, hollow below) */
 void PlotDrawSkyDot(ImDrawList *dl, ImVec2 center, float radius,
                     double az_deg, double el_deg);
+
+// draw last, nothing without a hardware position
+void PlotDrawRotatorMarker(ImDrawList *dl, ImVec2 center, float radius);
 
 /** project an az/el sky position to canvas pixels (shared by the polar track and hover) */
 ImVec2 PlotPolarProject(ImVec2 center, float radius, double az_deg, double el_deg);

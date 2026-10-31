@@ -5,7 +5,9 @@
 // that several tool panels rely on.
 
 #include "tools_common.h"
+#include "core/config.h"
 #include "core/theme.h"
+#include "ui/imgui_theme.h"
 #include "util/log.h"
 
 #include <cstdio>
@@ -30,6 +32,62 @@ bool log_show_timestamps = false;  // timestamps hidden by default (cleaner)
 ImVec4 ThemeColor(const Color &c)
 {
     return ImVec4(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f);
+}
+
+void ToolsDrawBanner(const char *title, const char *detail, Color accent)
+{
+    if (!title) title = "";
+    if (!detail) detail = "";
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float w = ImGui::GetContentRegionAvail().x;
+    float lh = ImGui::GetTextLineHeight();
+
+    const float pad_l = UIPx(14.0f);
+    const float pad_r = UIPx(14.0f);
+    const float pad_t = UIPx(8.0f);
+    const float pad_b = UIPx(8.0f);
+    const float spacing = UIPx(2.0f);
+
+    float wrap_width = w - pad_l - pad_r;
+    if (wrap_width < UIPx(8.0f)) wrap_width = UIPx(8.0f);
+
+    float title_h = ImGui::CalcTextSize(title, NULL, false, wrap_width).y;
+    float detail_h = ImGui::CalcTextSize(detail, NULL, false, wrap_width).y;
+    if (title_h < lh) title_h = lh;
+    if (detail_h < lh) detail_h = lh;
+
+    float h = pad_t + title_h + spacing + detail_h + pad_b;
+    if (h < UIPx(46.0f)) h = UIPx(46.0f);
+
+    ImGui::InvisibleButton("##tools_banner", ImVec2(w, h));
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    float r = UIPx(4.0f);
+
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h),
+                      IM_COL32(accent.r, accent.g, accent.b, 40), r);
+    dl->AddRect(p, ImVec2(p.x + w, p.y + h),
+                IM_COL32(accent.r, accent.g, accent.b, 200), r);
+    dl->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + UIPx(4.0f), p.y + h),
+                      IM_COL32(accent.r, accent.g, accent.b, 255), r);
+
+    ImVec2 cursor_after = ImGui::GetCursorScreenPos();
+    Color dim = g_theme.ui.text_dim;
+
+    ImGui::SetCursorScreenPos(ImVec2(p.x + pad_l, p.y + pad_t));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + wrap_width);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(accent.r, accent.g, accent.b, 255));
+    ImGui::TextUnformatted(title);
+    ImGui::PopStyleColor();
+
+    ImGui::SetCursorScreenPos(ImVec2(p.x + pad_l, p.y + pad_t + title_h + spacing));
+    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(dim.r, dim.g, dim.b, 230));
+    ImGui::TextUnformatted(detail);
+    ImGui::PopStyleColor();
+
+    ImGui::PopTextWrapPos();
+    ImGui::SetCursorScreenPos(cursor_after);
 }
 
 // case-insensitive substring search; returns true if substr is found in str
@@ -171,6 +229,7 @@ static void copy_str(char *dst, size_t dst_size, const std::string &src)
 // persist the shopping-cart selections to data_selections.json
 void SaveDataSelections(void)
 {
+    const char *path = AppConfigPath("data_selections.json");
     LOG_INFO("Saving %d data source selections", g_data_selection_count);
 
     nlohmann::json root;
@@ -191,10 +250,10 @@ void SaveDataSelections(void)
     root["selections"] = selections;
 
     std::string text = root.dump(2);
-    FILE *f = fopen("data_selections.json", "w");
+    FILE *f = fopen(path, "w");
     if (!f)
     {
-        LOG_ERROR("Failed to save data selections to data_selections.json");
+        LOG_ERROR("Failed to save data selections to %s", path);
         return;
     }
     fwrite(text.data(), 1, text.size(), f);
@@ -205,12 +264,14 @@ void SaveDataSelections(void)
 // restore the shopping-cart selections from data_selections.json
 void LoadDataSelections(void)
 {
+    const char *path = AppConfigPath("data_selections.json");
+
     g_data_selection_count = 0;
 
-    if (!FileExists("data_selections.json"))
+    if (!FileExists(path))
         return;
 
-    char *text = LoadFileText("data_selections.json");
+    char *text = LoadFileText(path);
     if (!text)
         return;
 

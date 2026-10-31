@@ -11,6 +11,7 @@
 #include "imgui_theme.h"
 #include "tools/tools.h"
 #include "tools/tools_common.h"
+#include "tools/tools_plot.h"
 #include "tools/tools_settings.h"
 #include "notifications.h"
 #include "tutorial.h"
@@ -21,6 +22,7 @@
 #include "data/curl_diagnostics.h"
 #include "util/log.h"
 #include "expo/expo_mode.h"
+#include "io/rotator.h"
 
 #include <raylib.h>
 #include <imgui.h>
@@ -392,6 +394,16 @@ bool LayoutGetViewToggleRect(UIRect *out)
     return out->valid;
 }
 
+bool LayoutGetRotatorNavRect(UIRect *out)
+{
+    if (!out) return false;
+    *out = UIRect{};
+    *out = g_layout.rotator_nav_rect;
+    if (!out->valid) return false;
+    if (out->x1 - out->x0 <= 0.0f || out->y1 - out->y0 <= 0.0f) return false;
+    return true;
+}
+
 /* -- Sidebar visibility helpers --------------------------------------------- */
 
 bool LayoutSidebarVisible(SidebarSide side)
@@ -500,6 +512,105 @@ static void NavTooltip(const char *text)
     dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), fill, round);
     dl->AddRect(p, ImVec2(p.x + w, p.y + h), edge, round, 0, UIPx(1.0f));
     dl->AddText(NULL, 0.0f, ImVec2(p.x + pad_x, p.y + pad_y), col, text, NULL, wrap_w);
+}
+
+static void DrawRotatorNavIndicator(UIContext *ctx, AppConfig *cfg)
+{
+    g_layout.rotator_nav_rect.valid = false;
+
+    bool conn = RotatorIsConnected();
+    bool comm_lost = RotatorCommLost();
+    bool running = RotatorQueueIsRunning();
+    int active = RotatorQueueActiveIndex();
+    int qcount = RotatorQueueCount();
+    const RotatorQueueItem *items = RotatorQueueItems();
+
+    int rstate = PLOT_ROT_STATE_NONE;
+    bool slewing = false;
+    if (comm_lost)
+        rstate = PLOT_ROT_STATE_COMM_LOST;
+    else if (running && active >= 0 && items)
+    {
+        rstate = (int)items[active].state;
+        slewing = !items[active].arrived;
+    }
+    else if (!running && qcount > 0)
+        rstate = RQ_PENDING;
+
+    const char *state_word = PlotRotatorStateLabel(rstate, conn, slewing);
+    Color col = PlotRotatorStateColorC(rstate, conn);
+
+    char label[96];
+    snprintf(label, sizeof(label), "%s  Rotator: %s", ICON_FA_SATELLITE_DISH, state_word);
+
+    ImVec2 ts = ImGui::CalcTextSize(label);
+    float w = ts.x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    float avail = ImGui::GetContentRegionAvail().x;
+    if (avail > w + UIPx(8.0f))
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - w - UIPx(8.0f));
+
+    ImVec4 tint = ImGui::ColorConvertU32ToFloat4(IM_COL32(col.r, col.g, col.b, 255));
+    ImGui::PushStyleColor(ImGuiCol_Text, tint);
+    if (g_ui.rot_show_window)
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              ImGui::ColorConvertU32ToFloat4(IM_COL32(col.r, col.g, col.b, 90)));
+    else
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                          ImGui::ColorConvertU32ToFloat4(IM_COL32(col.r, col.g, col.b, 60)));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                          ImGui::ColorConvertU32ToFloat4(IM_COL32(col.r, col.g, col.b, 110)));
+    bool clicked = ImGui::Button(label);
+    ImGui::PopStyleColor(4);
+
+    { ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+      g_layout.rotator_nav_rect = { a.x, a.y, b.x, b.y, true }; }
+
+    if (clicked)
+    {
+        if (g_ui.rot_show_window)
+            g_ui.rot_show_window = false;
+        else
+            TransitOpenRotatorTab(cfg);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        char name[64] = "";
+        if (active >= 0 && items)
+        {
+            for (int i = 0; i < num_passes; i++)
+            {
+                if (passes[i].sat && passes[i].sat->norad_id_num == items[active].norad)
+                {
+                    snprintf(name, sizeof(name), "%s", passes[i].sat->name);
+                    break;
+                }
+            }
+        }
+
+        char tip[320];
+        const char *act = g_ui.rot_show_window ? "Click to close the Rotator window"
+                                               : "Click to open the Rotator window";
+        char azel[64] = "";
+        if (conn && RotatorHasPosition())
+            PlotFormatAzEl(azel, sizeof(azel), (double)RotatorGetAz(), (double)RotatorGetEl());
+
+        char hold[48] = "";
+        double hold_left = ctx ? RotatorGetLosHoldRemaining(*ctx->current_epoch) : 0.0;
+        if (hold_left > 0.0)
+            snprintf(hold, sizeof(hold), "\nLOS hold %.0f s left", hold_left);
+
+        if (!conn)
+            snprintf(tip, sizeof(tip), "Rotator: %s%s\n%s", state_word, hold, act);
+        else if (name[0] && azel[0])
+            snprintf(tip, sizeof(tip), "Rotator: %s %s\n%s%s\n%s",
+                     state_word, name, azel, hold, act);
+        else
+            snprintf(tip, sizeof(tip), "Rotator: %s - %d queued%s\n%s",
+                     state_word, qcount, hold, act);
+        NavTooltip(tip);
+    }
 }
 
 /* ========================================================================== */
@@ -1153,6 +1264,7 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
     g_layout.tools_btn_rect.valid = false;
     g_layout.settings_btn_rect.valid = false;
     g_layout.view_toggle_rect.valid = false;
+    g_layout.rotator_nav_rect.valid = false;
 
     if (g_layout.clean_view)
         return; /* H key clean view: no menu bar */
@@ -1242,6 +1354,8 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
               g_layout.view_toggle_rect = { a.x, a.y, b.x, b.y, true }; }
         }
 
+        DrawRotatorNavIndicator(ctx, cfg);
+
         ImGui::EndMainMenuBar();
     }
 }
@@ -1256,6 +1370,10 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         ImGui::OpenPopup("Settings");
     /* fixed width + auto height so expanding sections never widen the modal */
     ImGui::SetNextWindowSize(ImVec2(UIPx(420.0f), 0), ImGuiCond_Always);
+    // cap the height so the modal cannot cover the time controls
+    ImGui::SetNextWindowSizeConstraints(ImVec2(UIPx(420.0f), 0.0f),
+                                        ImVec2(UIPx(420.0f),
+                                               ImGui::GetIO().DisplaySize.y - UIPx(48.0f)));
     ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 

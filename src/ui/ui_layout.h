@@ -55,6 +55,7 @@ typedef struct
     UIRect tools_btn_rect;                  /* top-bar "Tools" menu item */
     UIRect settings_btn_rect;               /* top-bar "Settings" menu item */
     UIRect view_toggle_rect;                /* top-bar 2D/3D view switch    */
+    UIRect rotator_nav_rect;                /* nav-bar rotator chip          */
 
     /* drag-reorder runtime state */
     int drag_panel;          /* PanelId currently dragged, -1 = none */
@@ -154,5 +155,6 @@ bool LayoutGetNotchRect(SidebarSide side, UIRect *out);
 bool LayoutGetToolsButtonRect(UIRect *out);
 bool LayoutGetSettingsButtonRect(UIRect *out);
 bool LayoutGetViewToggleRect(UIRect *out);
+bool LayoutGetRotatorNavRect(UIRect *out);
 
 #endif /* UI_LAYOUT_H */

@@ -3419,6 +3419,23 @@ int main(void)
     SaveFavorites("favorites.json"); /* persist favorite satellites */
     SimScanShutdown();
     AsyncFetchShutdown();
+    if (RotatorIsConnected() && cfg.rotator_settings.park_on_exit)
+    {
+        RotatorParkNow();
+        float park_az = (float)atof(cfg.rotator_settings.park_az);
+        float park_el = (float)atof(cfg.rotator_settings.park_el);
+        const float park_tol = 2.0f;
+        double t0 = GetTime();
+        while ((GetTime() - t0) < 0.4) // bounded wait, the exit must not hang
+        {
+            RotatorPollNow();
+            float daz = fabsf(RotatorGetAz() - park_az);
+            if (daz > 180.0f) daz = 360.0f - daz;
+            if (daz <= park_tol && fabsf(RotatorGetEl() - park_el) <= park_tol)
+                break;
+            WaitTime(0.05);
+        }
+    }
     RotatorShutdown();
     LogShutdown();
 

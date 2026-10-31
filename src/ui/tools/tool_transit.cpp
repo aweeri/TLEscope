@@ -1,14 +1,3 @@
-/*
- * tool_transit.cpp - Transit Tracking panel + overview modal.
- *
- * Unifies the former "Satellite Passes" and "Polar Plot" panels into one
- * compact panel, and adds a large "Transit Overview" modal with three plot
- * tabs (Polar, Doppler Shift, Elevation & Azimuth).
- *
- * Selection is a single source of truth: g_ui.selected_pass_idx, backed by a
- * stable key (norad + AOS) so it stays locked to one pass while timewarping.
- */
-
 #include "tools.h"
 #include "tools_plot.h"
 #include "tools_settings.h"
@@ -20,8 +9,11 @@
 #include "render/map_view.h"
 #include "core/astro.h"
 #include "core/config.h"
+#include "io/rotator.h"
+#include "ui/notifications.h"
 #include "core/theme.h"
 #include "core/location.h"
+#include "ui/hints.h"
 
 #include <cstdio>
 #include <cmath>
@@ -31,6 +23,7 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
@@ -79,56 +72,29 @@ static uint64_t TransitRowKey(const SatPass *p)
     return (n << 32) ^ a;
 }
 
-/* passes marked for tracking: norad + AOS, matched with tolerance across recomputes */
-typedef struct { uint32_t norad; double aos; } TransitMark;
-static std::vector<TransitMark> s_marked;
-
-/** true when this pass is marked for tracking */
+// queue is the source of truth, these wrappers keep both surfaces in sync
 static bool TransitIsMarked(const SatPass *p)
 {
     if (!p) return false;
     uint32_t n = p->sat ? p->sat->norad_id_num : 0u;
-    for (size_t i = 0; i < s_marked.size(); i++)
-        if (s_marked[i].norad == n && fabs(p->aos_epoch - s_marked[i].aos) < 1e-3)
-            return true;
-    return false;
+    return RotatorQueueIsQueued(n, p->aos_epoch);
 }
 
-/** toggle the tracking mark for this pass */
 static void TransitToggleMark(const SatPass *p)
 {
     if (!p) return;
     uint32_t n = p->sat ? p->sat->norad_id_num : 0u;
-    for (size_t i = 0; i < s_marked.size(); i++)
-    {
-        if (s_marked[i].norad == n && fabs(p->aos_epoch - s_marked[i].aos) < 1e-3)
-        {
-            s_marked.erase(s_marked.begin() + i);
-            return;
-        }
-    }
-    TransitMark m = { n, p->aos_epoch };
-    s_marked.push_back(m);
-}
-
-/** map marked passes to current passes[] indices; the rotator module calls this each frame */
-static int TransitResolveMarkedPasses(double now, int *out_indices, int max_out)
-{
-    (void)now;
-    int n = 0;
-    for (size_t m = 0; m < s_marked.size() && n < max_out; m++)
-    {
-        for (int i = 0; i < num_passes; i++)
-        {
-            if (passes[i].sat && passes[i].sat->norad_id_num == s_marked[m].norad &&
-                fabs(passes[i].aos_epoch - s_marked[m].aos) < 1e-3)
-            {
-                out_indices[n++] = i;
-                break;
-            }
-        }
-    }
-    return n;
+    const char *name = (p->sat && p->sat->name[0]) ? p->sat->name : "pass";
+    // toggle returns false for both removal and refused add
+    bool was_queued = RotatorQueueIsQueued(n, p->aos_epoch);
+    bool now_queued = RotatorQueueToggle(n, p->aos_epoch, p->los_epoch, p->max_el);
+    if (now_queued)
+        NotifyPush(NOTIFY_SUCCESS, ICON_FA_CROSSHAIRS, "Queued %s for rotator tracking", name);
+    else if (was_queued)
+        NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Removed %s from rotator queue", name);
+    else
+        NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Rotator queue is full (max %d)", MAX_ROTATOR_QUEUE);
 }
 
 /* ---- helpers ------------------------------------------------------------- */
@@ -412,14 +378,25 @@ static float TransitRowReveal(UIContext *ctx, int i, SatPass *p, bool selected,
 
     ImVec2 mark_min = ImVec2(btn_x, stack_y + btn_h + gap);
     ImVec2 mark_max = ImVec2(btn_x + btn_w, stack_y + btn_h + gap + btn_h);
+    bool queued = TransitIsMarked(p);
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
                         ImGui::IsMouseHoveringRect(mark_min, mark_max) ? 1.0f : slide_a);
+    if (queued)
+    {
+        Color info = g_theme.ui.info;
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              IM_COL32(info.r, info.g, info.b, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                              IM_COL32(info.r, info.g, info.b, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                              IM_COL32(info.r, info.g, info.b, 255));
+    }
     ImGui::SetCursorScreenPos(mark_min);
     if (ImGui::Button(ICON_FA_CROSSHAIRS, ImVec2(btn_w, btn_h)))
         TransitToggleMark(p);
+    if (queued)
+        ImGui::PopStyleColor(3);
     ImGui::PopStyleVar();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Mark for tracking");
 
     ImGui::PopID();
 
@@ -430,9 +407,103 @@ static float TransitRowReveal(UIContext *ctx, int i, SatPass *p, bool selected,
 /*  Scene hook: accent-colored line along the transit portion of the orbit    */
 /* ========================================================================== */
 
+// drawn before the pass early-returns so it works with no pass selected
+static void DrawRotatorBeam3D(SceneContext *sctx, AppConfig *cfg)
+{
+    if (!sctx || sctx->is_2d_view)
+        return;
+    if (!ToolSettingGetBool(cfg, "rotator.beam_3d", false))
+        return;
+    if (!RotatorIsConnected() || !RotatorHasPosition())
+        return;
+
+    Location *home = GetHomeLocation();
+    if (!home)
+        return;
+
+    float beam_w = ToolSettingGetFloat(cfg, "rotator.beam_width_deg", 10.0f);
+    if (beam_w < 1.0f) beam_w = 1.0f;
+    if (beam_w > 90.0f) beam_w = 90.0f;
+
+    // same mapping main.cpp uses for the 3D home marker
+    float lat = home->lat * DEG2RAD;
+    float lon = (home->lon + (float)sctx->gmst_deg + sctx->earth_rotation_offset) * DEG2RAD;
+    float r = sctx->draw_earth_radius;
+    Vector3 home_pos = { cosf(lat) * cosf(lon) * r, sinf(lat) * r, -cosf(lat) * sinf(lon) * r };
+
+    Vector3 up = Vector3Normalize(home_pos);
+    Vector3 pole = { 0.0f, 1.0f, 0.0f };
+    Vector3 east_c = Vector3CrossProduct(pole, up);
+    // degenerate at a pole, where up is parallel to the pole axis
+    Vector3 east = (Vector3LengthSqr(east_c) < 1e-8f)
+                 ? (Vector3){ 1.0f, 0.0f, 0.0f }
+                 : Vector3Normalize(east_c);
+    Vector3 north = Vector3CrossProduct(up, east);
+
+    // reported angles drive the beam, not the commanded target
+    float az = RotatorGetAz() * DEG2RAD;
+    float el = RotatorGetEl() * DEG2RAD;
+    float ce = cosf(el), se = sinf(el);
+    Vector3 dir = Vector3Add(Vector3Scale(up, se),
+                  Vector3Scale(Vector3Add(Vector3Scale(east, sinf(az)),
+                                          Vector3Scale(north, cosf(az))), ce));
+    dir = Vector3Normalize(dir);
+
+    // lift off a touch so the apex does not z-fight the globe
+    Vector3 apex = Vector3Scale(home_pos, 1.001f);
+
+    const float BEAM_LEN = 2.0f;   // draw units, visible at globe scale
+    const int RING_SEGS = 24;
+    const float half = beam_w * 0.5f * DEG2RAD;
+
+    // orthonormal pair perpendicular to dir
+    Vector3 ref = (fabsf(dir.y) < 0.9f) ? Vector3{0.0f, 1.0f, 0.0f} : Vector3{1.0f, 0.0f, 0.0f};
+    Vector3 perp = Vector3Normalize(Vector3CrossProduct(dir, ref));
+    Vector3 other = Vector3CrossProduct(dir, perp);
+
+    Vector3 ring[RING_SEGS];
+    float ch = cosf(half), sh = sinf(half);
+    for (int i = 0; i < RING_SEGS; i++)
+    {
+        float th = (2.0f * PI * (float)i) / (float)RING_SEGS;
+        Vector3 rd = Vector3Add(Vector3Scale(dir, ch),
+                     Vector3Add(Vector3Scale(perp, sh * cosf(th)),
+                                Vector3Scale(other, sh * sinf(th))));
+        rd = Vector3Normalize(rd);
+        ring[i] = Vector3Add(apex, Vector3Scale(rd, BEAM_LEN));
+    }
+
+    Color col = g_theme.ui.accent;
+    unsigned char a = 150;
+
+    rlDrawRenderBatchActive();
+    rlSetLineWidth(1.5f);
+    rlBegin(RL_LINES);
+    rlColor4ub(col.r, col.g, col.b, a);
+    for (int i = 0; i < RING_SEGS; i++)
+    {
+        Vector3 p0 = ring[i];
+        Vector3 p1 = ring[(i + 1) % RING_SEGS];
+        rlVertex3f(p0.x, p0.y, p0.z);
+        rlVertex3f(p1.x, p1.y, p1.z);
+    }
+    // four generatrices from apex to ring
+    for (int k = 0; k < 4; k++)
+    {
+        Vector3 p = ring[(k * RING_SEGS) / 4];
+        rlVertex3f(apex.x, apex.y, apex.z);
+        rlVertex3f(p.x, p.y, p.z);
+    }
+    rlEnd();
+    // flush while the line width is still set, then restore the default
+    rlDrawRenderBatchActive();
+    rlSetLineWidth(1.0f);
+}
+
 void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg)
 {
-    (void)cfg;
+    DrawRotatorBeam3D(sctx, cfg);
+
     SatPass *pass = TransitSelectedPass();
     if (!pass || !pass->sat || !pass->sat->is_active)
         return;
@@ -777,6 +848,8 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
         PlotDrawSkyDot(pdl, center, radius, az, el);
     }
 
+    PlotDrawRotatorMarker(pdl, center, radius);
+
     if (!has_sel)
     {
         const char *msg = "No transit selected";
@@ -1033,6 +1106,8 @@ static void DrawTransitPolarTab(UIContext *ctx, AppConfig *cfg)
         PlotDrawSkyDot(dl, center, radius, az, el);
     }
 
+    PlotDrawRotatorMarker(dl, center, radius);
+
     /* hover: mark the trajectory point nearest the cursor */
     if (has_sel && hovered)
     {
@@ -1281,7 +1356,964 @@ static void DrawTransitElevAzTab(UIContext *ctx, AppConfig *cfg)
                     -1.0f, TransitElevAzHover, &hc);
 }
 
-/** RIGHT column: the three plot tabs */
+static SatPass *TransitRotatorFindPass(uint32_t norad, double aos)
+{
+    for (int i = 0; i < num_passes; i++)
+    {
+        if (passes[i].sat && passes[i].sat->norad_id_num == norad &&
+            fabs(passes[i].aos_epoch - aos) < 1e-3)
+            return &passes[i];
+    }
+    return NULL;
+}
+
+static void TransitRotatorSatName(uint32_t norad, char *out, size_t out_sz)
+{
+    for (int i = 0; i < num_passes; i++)
+    {
+        if (passes[i].sat && passes[i].sat->norad_id_num == norad)
+        {
+            snprintf(out, out_sz, "%s", passes[i].sat->name);
+            return;
+        }
+    }
+    snprintf(out, out_sz, "NORAD %u", (unsigned)norad);
+}
+
+static bool TransitRotatorPassAzEl(const SatPass *pass, double now, float *az_out, float *el_out)
+{
+    if (!pass || !pass->sat)
+        return false;
+    Location *home = GetHomeLocation();
+    if (!home)
+        return false;
+    double t = now;
+    if (t < pass->aos_epoch) t = pass->aos_epoch;
+    if (t > pass->los_epoch) t = pass->los_epoch;
+    double gmst = epoch_to_gmst(t);
+    Vector3 pos = calculate_position(pass->sat, get_unix_from_epoch(t));
+    double az = 0.0, el = 0.0;
+    get_az_el(pos, gmst, home->lat, home->lon, home->alt, &az, &el);
+    if (az_out) *az_out = (float)az;
+    if (el_out) *el_out = (float)el;
+    return true;
+}
+
+static void TransitRotatorCountdown(double secs, char *out, size_t out_sz)
+{
+    const char *sign = (secs < 0.0) ? "+" : "-";
+    double s = fabs(secs);
+    int h = (int)(s / 3600.0);
+    int m = (int)((s - h * 3600.0) / 60.0);
+    int sec = (int)(s - h * 3600.0 - m * 60.0);
+    snprintf(out, out_sz, "T%s%02d:%02d:%02d", sign, h, m, sec);
+}
+
+static float TransitRotatorAzDelta(float target, float current)
+{
+    float d = fmodf(target - current, 360.0f);
+    if (d > 180.0f) d -= 360.0f;
+    if (d < -180.0f) d += 360.0f;
+    return d;
+}
+
+static void TransitRotatorStateChip(RotatorQueueState s, const char **label, Color *col)
+{
+    *label = PlotRotatorStateLabel((int)s, true, false);
+    *col = PlotRotatorStateColorC((int)s, true);
+}
+
+// every motion goes through RotatorGotoAzEl(), never raw SetPosition
+static void TransitRotatorManualJog(bool conn, bool auto_driving,
+                                    bool have_current, float cur_az, float cur_el,
+                                    bool have_cmd, float tgt_az, float tgt_el)
+{
+    Color accent  = g_theme.ui.accent;
+    Color warning = g_theme.ui.warning;
+    float avail_w = ImGui::GetContentRegionAvail().x;
+
+    if (auto_driving)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(
+            IM_COL32(warning.r, warning.g, warning.b, 255)));
+        ImGui::TextWrapped("%s The queue is driving the rotator.", ICON_FA_TRIANGLE_EXCLAMATION);
+        ImGui::PopStyleColor();
+        ImGui::TextDisabled("Stop the queue to take manual control.");
+        ImGui::Spacing();
+    }
+
+    static float jog_az = 0.0f;
+    static float jog_el = 0.0f;
+    static int   jog_step_idx = 1; // 0=1deg, 1=5deg, 2=10deg
+    static const float jog_steps[3] = { 1.0f, 5.0f, 10.0f };
+    static const char *jog_step_labels[3] = { "1 deg", "5 deg", "10 deg" };
+    static bool  jog_init = false;
+
+    if (!jog_init)
+    {
+        if (have_current) { jog_az = cur_az; jog_el = cur_el; }
+        else if (have_cmd) { jog_az = tgt_az; jog_el = tgt_el; }
+        jog_init = true;
+    }
+
+    const float step = jog_steps[jog_step_idx];
+    const bool jog_enabled = conn && !auto_driving;
+
+    ImGui::TextDisabled("Step");
+    ImGui::SameLine();
+    for (int i = 0; i < 3; i++)
+    {
+        if (i > 0) ImGui::SameLine();
+        bool sel = (jog_step_idx == i);
+        if (sel)
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::ColorConvertU32ToFloat4(
+                    IM_COL32(accent.r, accent.g, accent.b, 200)));
+        if (ImGui::Button(jog_step_labels[i], ImVec2(UIPx(52.0f), 0.0f)))
+            jog_step_idx = i;
+        if (sel) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Jog step size (degrees)");
+    }
+
+    ImGui::BeginDisabled(!jog_enabled);
+    ImGui::SetNextItemWidth(avail_w);
+    ImGui::InputFloat("##jog_az", &jog_az, 0.0f, 0.0f, "Az %.1f°");
+    ImGui::SetNextItemWidth(avail_w);
+    ImGui::InputFloat("##jog_el", &jog_el, 0.0f, 0.0f, "El %.1f°");
+
+    {
+        float bw = UIPx(46.0f);
+        float gap = ImGui::GetStyle().ItemSpacing.x;
+        float pad_w = bw * 3.0f + gap * 2.0f;
+        float pad_off = (avail_w - pad_w) * 0.5f;
+        if (pad_off < 0.0f) pad_off = 0.0f;
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_off + bw + gap);
+        if (ImGui::Button(ICON_FA_ARROW_UP "##jogN", ImVec2(bw, 0.0f))) jog_el += step;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jog Up / North (el +%.0f deg)", step);
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_off);
+        if (ImGui::Button(ICON_FA_ARROW_LEFT "##jogW", ImVec2(bw, 0.0f))) jog_az -= step;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jog West (az -%.0f deg)", step);
+
+        ImGui::SameLine();
+        ImGui::Dummy(ImVec2(bw, 0.0f));
+
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_FA_ARROW_RIGHT "##jogE", ImVec2(bw, 0.0f))) jog_az += step;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jog East (az +%.0f deg)", step);
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_off + bw + gap);
+        if (ImGui::Button(ICON_FA_ARROW_DOWN "##jogS", ImVec2(bw, 0.0f))) jog_el -= step;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jog Down / South (el -%.0f deg)", step);
+    }
+
+    if (jog_az < 0.0f) jog_az += 360.0f;
+    if (jog_az >= 360.0f) jog_az -= 360.0f;
+    if (jog_el < -90.0f) jog_el = -90.0f;
+    if (jog_el > 90.0f) jog_el = 90.0f;
+
+    ImGui::Spacing();
+    if (ImGui::Button(ICON_FA_LOCATION_CROSSHAIRS " Goto Az/El", ImVec2(avail_w, 0.0f)))
+        RotatorGotoAzEl(jog_az, jog_el);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Slew to the entered target. Passes through all safety limits.");
+
+    if (!conn && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Connect rotator first");
+    else if (auto_driving && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Stop the queue to jog");
+
+    ImGui::BeginDisabled(!conn);
+    if (ImGui::Button("Load current heading", ImVec2(avail_w, 0.0f)))
+    {
+        if (have_current) { jog_az = cur_az; jog_el = cur_el; }
+    }
+    ImGui::EndDisabled();
+    if (!conn && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Connect rotator first");
+    ImGui::EndDisabled();
+}
+
+static void DrawTransitRotatorConfig(UIContext *ctx, AppConfig *cfg);
+
+// beam settings live in the tool KV store, the 3D scene reads the same keys
+static void DrawRotatorBeamControls(AppConfig *cfg)
+{
+    bool beam_on = ToolSettingGetBool(cfg, "rotator.beam_3d", false);
+    float beam_w = ToolSettingGetFloat(cfg, "rotator.beam_width_deg", 10.0f);
+    if (beam_w < 1.0f) beam_w = 1.0f;
+    if (beam_w > 90.0f) beam_w = 90.0f;
+
+    if (ImGui::Checkbox("Draw beam in 3D Mode", &beam_on))
+        ToolSettingSetBool(cfg, "rotator.beam_3d", beam_on);
+
+    if (beam_on)
+    {
+        ImGui::Indent();
+        ImGui::SetNextItemWidth(UIPx(110.0f));
+        if (ImGui::InputFloat("Beam width (deg)", &beam_w, 1.0f, 5.0f, "%.1f"))
+        {
+            if (beam_w < 1.0f) beam_w = 1.0f;
+            if (beam_w > 90.0f) beam_w = 90.0f;
+            ToolSettingSetFloat(cfg, "rotator.beam_width_deg", beam_w);
+        }
+        ImGui::Unindent();
+    }
+}
+
+static void DrawTransitRotatorTab(UIContext *ctx, AppConfig *cfg)
+{
+    double now = *ctx->current_epoch;
+
+    bool conn = RotatorIsConnected();
+    bool comm_lost = RotatorCommLost();
+    bool has_pos = RotatorHasPosition();
+    bool running = RotatorQueueIsRunning();
+    float cur_az = RotatorGetAz();
+    float cur_el = RotatorGetEl();
+
+    const bool auto_driving = conn && (running || RotatorGetAutoSteer());
+
+    int qcount = RotatorQueueCount();
+    const RotatorQueueItem *items = RotatorQueueItems();
+    int active_idx = RotatorQueueActiveIndex();
+    const RotatorQueueItem *active_item =
+        (items && active_idx >= 0 && active_idx < qcount) ? &items[active_idx] : NULL;
+
+    SatPass *target_pass = NULL;
+    if (active_item)
+        target_pass = TransitRotatorFindPass(active_item->norad, active_item->aos);
+    if (!target_pass)
+        target_pass = TransitSelectedPass();
+
+    float tgt_az = 0.0f, tgt_el = 0.0f;
+    bool have_target = false;
+    if (target_pass && TransitRotatorPassAzEl(target_pass, now, &tgt_az, &tgt_el))
+        have_target = true;
+    else if (RotatorGetCommandedTarget(&tgt_az, &tgt_el))
+        have_target = true;
+
+    bool have_current = conn && has_pos;
+
+    float d_az = 0.0f, d_el = 0.0f;
+    bool have_err = have_target && have_current;
+    if (have_err)
+    {
+        d_az = TransitRotatorAzDelta(tgt_az, cur_az);
+        d_el = tgt_el - cur_el;
+    }
+
+    char act_name[96] = "";
+    if (active_item)
+        TransitRotatorSatName(active_item->norad, act_name, sizeof(act_name));
+
+    int b_state = PLOT_ROT_STATE_NONE;
+    bool b_slewing = false;
+    if (comm_lost)
+        b_state = PLOT_ROT_STATE_COMM_LOST;
+    else if (active_item)
+    {
+        b_state = (int)active_item->state;
+        b_slewing = (active_item->state == RQ_ACTIVE && !active_item->arrived);
+    }
+    const bool b_have_pos = conn && has_pos;
+    const char *b_word = PlotRotatorStateLabel(b_state, b_have_pos, b_slewing);
+    Color b_col = PlotRotatorStateColorC(b_state, b_have_pos);
+
+    char b_title[192];
+    char b_detail[224];
+    char azel[64];
+    if (!conn)
+    {
+        snprintf(b_title, sizeof(b_title), "%s  %s", ICON_FA_PLUG, b_word);
+        snprintf(b_detail, sizeof(b_detail), "Connect the rotator to start pointing. Target preview only.");
+    }
+    else if (comm_lost)
+    {
+        snprintf(b_title, sizeof(b_title), "%s  %s - retrying", ICON_FA_TRIANGLE_EXCLAMATION, b_word);
+        snprintf(b_detail, sizeof(b_detail), "No position update from the rotator. Holding last command.");
+    }
+    else if (!has_pos)
+    {
+        snprintf(b_title, sizeof(b_title), "%s  Connected - waiting for position", ICON_FA_SATELLITE_DISH);
+        snprintf(b_detail, sizeof(b_detail), "Link up, but no heading reported yet.");
+    }
+    else if (!running)
+    {
+        snprintf(b_title, sizeof(b_title), "%s  Connected - Idle (queue stopped)", ICON_FA_CIRCLE_CHECK);
+        snprintf(b_detail, sizeof(b_detail), "%d pass%s queued. Press Start to drive the queue.",
+                 qcount, qcount == 1 ? "" : "es");
+    }
+    else if (active_item)
+    {
+        if (active_item->state == RQ_LOS_HOLD)
+        {
+            double hold_left = RotatorGetLosHoldRemaining(now);
+            if (hold_left < 0.0) hold_left = 0.0;
+            snprintf(b_title, sizeof(b_title), "%s  %s (%.0f s left)",
+                     ICON_FA_SATELLITE_DISH, b_word, hold_left);
+            PlotFormatAzEl(azel, sizeof(azel), (double)active_item->los_az,
+                           (double)active_item->los_el);
+            snprintf(b_detail, sizeof(b_detail), "Holding %s", azel);
+        }
+        else if (active_item->state == RQ_AWAITING)
+        {
+            char cd[32];
+            TransitRotatorCountdown((active_item->aos - now) * 86400.0, cd, sizeof(cd));
+            snprintf(b_title, sizeof(b_title), "%s  %s (%s)", ICON_FA_CLOCK, b_word, cd);
+            snprintf(b_detail, sizeof(b_detail), "Next up: %s  #%u", act_name, (unsigned)active_item->norad);
+        }
+        else if (active_item->state == RQ_AWAITING_AOS)
+        {
+            char cd[32];
+            TransitRotatorCountdown((active_item->aos - now) * 86400.0, cd, sizeof(cd));
+            snprintf(b_title, sizeof(b_title), "%s  %s (%s)", ICON_FA_SATELLITE_DISH, b_word, cd);
+            if (have_err)
+            {
+                PlotFormatAzElDelta(azel, sizeof(azel), d_az, d_el);
+                snprintf(b_detail, sizeof(b_detail), "On target. %s", azel);
+            }
+            else
+                snprintf(b_detail, sizeof(b_detail), "On target.");
+        }
+        else if (!active_item->arrived)
+        {
+            snprintf(b_title, sizeof(b_title), "%s  %s to target", ICON_FA_ROTATE, b_word);
+            if (have_err)
+            {
+                PlotFormatAzElDelta(azel, sizeof(azel), d_az, d_el);
+                snprintf(b_detail, sizeof(b_detail), "%s", azel);
+            }
+            else
+                snprintf(b_detail, sizeof(b_detail), "Next up: %s  #%u", act_name, (unsigned)active_item->norad);
+        }
+        else
+        {
+            snprintf(b_title, sizeof(b_title), "%s  %s %s", ICON_FA_SATELLITE_DISH, b_word, act_name);
+            if (have_err)
+            {
+                PlotFormatAzElDelta(azel, sizeof(azel), d_az, d_el);
+                snprintf(b_detail, sizeof(b_detail), "On target. %s", azel);
+            }
+            else
+                snprintf(b_detail, sizeof(b_detail), "On target.");
+        }
+    }
+    else
+    {
+        const RotatorQueueItem *nextp = NULL;
+        for (int i = 0; i < qcount; i++)
+        {
+            if (items[i].armed && items[i].state == RQ_PENDING) { nextp = &items[i]; break; }
+        }
+        if (nextp)
+        {
+            char cd[32];
+            TransitRotatorCountdown((nextp->aos - now) * 86400.0, cd, sizeof(cd));
+            char nm[96];
+            TransitRotatorSatName(nextp->norad, nm, sizeof(nm));
+            snprintf(b_title, sizeof(b_title), "%s  %s (%s)", ICON_FA_CLOCK, b_word, cd);
+            snprintf(b_detail, sizeof(b_detail), "Next up: %s  #%u", nm, (unsigned)nextp->norad);
+        }
+        else
+        {
+            snprintf(b_title, sizeof(b_title), "%s  Running - nothing queued", ICON_FA_CIRCLE_CHECK);
+            snprintf(b_detail, sizeof(b_detail), "Mark a pass with the crosshair button to add it here.");
+        }
+    }
+    auto draw_live = [&]() {
+    ImGui::Dummy(ImVec2(0.0f, UIPx(4.0f)));
+    ToolsDrawBanner(b_title, b_detail, b_col);
+
+    ImVec2 lav = ImGui::GetContentRegionAvail();
+    const bool two_up = lav.x >= UIPx(380.0f);
+    float plot = two_up ? lav.x * 0.55f : lav.x;
+    float plot_h = lav.y - UIPx(64.0f);
+    if (plot > plot_h) plot = plot_h;
+    if (plot < UIPx(140.0f)) plot = UIPx(140.0f);
+    if (plot > UIPx(340.0f)) plot = UIPx(340.0f);
+    {
+        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##rot_polar", ImVec2(plot, plot));
+        ImVec2 center = ImVec2(canvas_pos.x + plot * 0.5f, canvas_pos.y + plot * 0.5f);
+        float radius = plot * 0.5f - UIPx(18.0f);
+
+        ImDrawList *dl = ImGui::GetWindowDrawList();
+        Color bg = g_theme.ui.bg;
+        Color warn = g_theme.ui.warning;
+
+        dl->AddCircleFilled(center, radius + UIPx(4.0f),
+                            IM_COL32(bg.r, bg.g, bg.b, 200), 64);
+        PlotDrawPolarGrid(dl, center, radius);
+
+        if (target_pass)
+            PlotDrawPolarTrack(dl, center, radius, target_pass, now, 0.85f);
+
+        if (have_target && have_err)
+        {
+            ImVec2 cp = PlotPolarProject(center, radius, cur_az, cur_el);
+            ImVec2 tp = PlotPolarProject(center, radius, tgt_az, tgt_el);
+            dl->AddLine(cp, tp, IM_COL32(warn.r, warn.g, warn.b, 220), UIPx(2.0f));
+        }
+
+        PlotDrawRotatorMarker(dl, center, radius);
+
+        const char *msg = NULL;
+        if (!conn)
+            msg = "Not connected";
+        else if (!has_pos)
+            msg = "No position fix";
+        else if (!have_target)
+            msg = "No target selected";
+
+        if (msg)
+        {
+            ImGui::SetWindowFontScale(1.05f);
+            ImVec2 ms = ImGui::CalcTextSize(msg);
+            dl->AddText(ImVec2(center.x - ms.x * 0.5f, center.y - ms.y * 0.5f),
+                        IM_COL32(warn.r, warn.g, warn.b, 230), msg);
+            ImGui::SetWindowFontScale(1.0f);
+        }
+
+        if (two_up) ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::TextDisabled("Azimuth / Elevation");
+
+        const ImGuiTableFlags tf = ImGuiTableFlags_BordersInnerV |
+                                   ImGuiTableFlags_SizingFixedFit;
+        if (ImGui::BeginTable("##rot_readout", 3, tf))
+        {
+            ImGui::TableSetupColumn("item");
+            ImGui::TableSetupColumn("az");
+            ImGui::TableSetupColumn("el");
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableHeadersRow();
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Target");
+            ImGui::TableSetColumnIndex(1);
+            if (have_target) ImGui::Text("%.1f°", tgt_az); else ImGui::TextDisabled("%s", "-");
+            ImGui::TableSetColumnIndex(2);
+            if (have_target) ImGui::Text("%.1f°", tgt_el); else ImGui::TextDisabled("%s", "-");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Current");
+            ImGui::TableSetColumnIndex(1);
+            if (have_current) ImGui::Text("%.1f°", cur_az); else ImGui::TextDisabled("%s", "-");
+            ImGui::TableSetColumnIndex(2);
+            if (have_current) ImGui::Text("%.1f°", cur_el); else ImGui::TextDisabled("%s", "-");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Delta");
+            ImVec4 dcol = (have_err) ? ImGui::ColorConvertU32ToFloat4(
+                              IM_COL32(warn.r, warn.g, warn.b, 255))
+                          : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+            ImGui::PushStyleColor(ImGuiCol_Text, dcol);
+            ImGui::TableSetColumnIndex(1);
+            if (have_err) ImGui::Text("%+.1f°", d_az); else ImGui::TextDisabled("%s", "-");
+            ImGui::TableSetColumnIndex(2);
+            if (have_err) ImGui::Text("%+.1f°", d_el); else ImGui::TextDisabled("%s", "-");
+            ImGui::PopStyleColor();
+            ImGui::EndTable();
+        }
+
+        if (!conn)
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(
+                IM_COL32(g_theme.ui.error.r, g_theme.ui.error.g, g_theme.ui.error.b, 255)),
+                "%s Disconnected", ICON_FA_PLUG);
+        else
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(
+                IM_COL32(g_theme.ui.success.r, g_theme.ui.success.g, g_theme.ui.success.b, 255)),
+                "%s Connected - %s", ICON_FA_PLUG,
+                has_pos ? RotatorGetStatusText() : "no position fix");
+        ImGui::EndGroup();
+    }
+    };
+
+    auto draw_settings = [&]() {
+    {
+        ImGui::Spacing();
+        ImGui::Text("%s  Rotator", ICON_FA_SATELLITE_DISH);
+        ImGui::SameLine();
+
+        if (!conn)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::ColorConvertU32ToFloat4(IM_COL32(
+                    g_theme.ui.accent.r, g_theme.ui.accent.g, g_theme.ui.accent.b, 200)));
+            if (ImGui::Button(ICON_FA_PLUG "  Connect"))
+                RotatorConnect();
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Open the stored link to the rotator");
+        }
+        else
+        {
+            if (ImGui::Button(ICON_FA_POWER_OFF "  Disconnect"))
+                RotatorDisconnect();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Close the rotator link (motion stops)");
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!conn);
+        if (ImGui::Button(ICON_FA_HOUSE "  Park"))
+            RotatorParkNow();
+        ImGui::EndDisabled();
+        if (!conn && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Connect rotator first");
+        else if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Stop motion and send the rotator to its home/park position");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    if (ImGui::CollapsingHeader(ICON_FA_SLIDERS "  Configuration"))
+    {
+        DrawTransitRotatorConfig(ctx, cfg);
+    }
+
+    if (ImGui::CollapsingHeader(ICON_FA_GAMEPAD "  Manual jog"))
+    {
+        TransitRotatorManualJog(conn, auto_driving, have_current, cur_az, cur_el,
+                                have_target, tgt_az, tgt_el);
+    }
+
+    if (ImGui::CollapsingHeader(ICON_FA_SATELLITE_DISH "  Beam"))
+        DrawRotatorBeamControls(cfg);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("%s  Queue  (%d)", ICON_FA_LIST, qcount);
+    ImGui::SameLine();
+
+    {
+        ImGui::BeginDisabled(!conn);
+        if (running)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::ColorConvertU32ToFloat4(IM_COL32(
+                    g_theme.ui.warning.r, g_theme.ui.warning.g, g_theme.ui.warning.b, 200)));
+            if (ImGui::Button(ICON_FA_STOP "  Stop", ImVec2(UIPx(96.0f), 0.0f)))
+            {
+                RotatorQueueStop();
+                RotatorSetAutoSteer(false);
+            }
+            ImGui::PopStyleColor();
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::ColorConvertU32ToFloat4(IM_COL32(
+                    g_theme.ui.accent.r, g_theme.ui.accent.g, g_theme.ui.accent.b, 200)));
+            if (ImGui::Button(ICON_FA_PLAY "  Start", ImVec2(UIPx(96.0f), 0.0f)))
+            {
+                RotatorQueueStart();
+                if (!RotatorGetAutoSteer())
+                    RotatorSetAutoSteer(true);
+            }
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    {
+        ImGui::BeginDisabled(qcount == 0);
+        if (ImGui::Button(ICON_FA_TRASH_CAN "  Clear"))
+            RotatorQueueClear();
+        ImGui::EndDisabled();
+    }
+
+    ImVec2 qav = ImGui::GetContentRegionAvail();
+    float qh = qav.y - UIPx(4.0f);
+    if (qh < UIPx(60.0f)) qh = UIPx(60.0f);
+    ImGui::BeginChild("##rot_queue", ImVec2(0.0f, qh), true);
+
+    if (qcount <= 0)
+    {
+        ImGui::TextDisabled("No passes queued.");
+    }
+    else
+    {
+        int next_pending = -1;
+        for (int i = 0; i < qcount; i++)
+            if (items[i].armed && items[i].state == RQ_PENDING) { next_pending = i; break; }
+
+        const ImGuiTableFlags qtf = ImGuiTableFlags_BordersInnerV |
+                                    ImGuiTableFlags_RowBg |
+                                    ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("##rot_queue_tbl", 5, qtf))
+        {
+            ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("AOS", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Max El", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("##act", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < qcount; i++)
+            {
+                const RotatorQueueItem *it = &items[i];
+                ImGui::TableNextRow();
+
+                bool is_active = (i == active_idx);
+                bool is_next = (i == next_pending);
+                if (is_active)
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
+                        IM_COL32(g_theme.ui.accent.r, g_theme.ui.accent.g,
+                                 g_theme.ui.accent.b, 55));
+
+                const char *chip = NULL;
+                Color ccol;
+                TransitRotatorStateChip(it->state, &chip, &ccol);
+                ImU32 cui = IM_COL32(ccol.r, ccol.g, ccol.b, 255);
+
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(cui), "%s", chip);
+
+                ImGui::TableSetColumnIndex(1);
+                char nm[96];
+                TransitRotatorSatName(it->norad, nm, sizeof(nm));
+                if (is_active)
+                {
+                    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(cui),
+                                       "%s  #%u", nm, (unsigned)it->norad);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(now)");
+                }
+                else if (is_next)
+                {
+                    ImGui::Text("%s  #%u", nm, (unsigned)it->norad);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(next up)");
+                }
+                else
+                {
+                    ImGui::Text("%s  #%u", nm, (unsigned)it->norad);
+                }
+
+                ImGui::TableSetColumnIndex(2);
+                char aos_str[64];
+                epoch_to_datetime_str(it->aos, aos_str);
+                ImGui::TextUnformatted(aos_str);
+
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%.1f", it->max_el);
+
+                ImGui::TableSetColumnIndex(4);
+                ImGui::PushID(i);
+                if (ImGui::SmallButton(ICON_FA_TRASH_CAN))
+                {
+                    RotatorQueueToggle(it->norad, it->aos, it->los, it->max_el);
+                    ImGui::PopID();
+                    ImGui::EndTable();
+                    ImGui::EndChild();
+                    return; // list changed, bail out of this frame
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::EndChild();
+    };
+
+    float avail_w = ImGui::GetContentRegionAvail().x;
+    if (avail_w >= UIPx(560.0f))
+    {
+        float left_w = avail_w * 0.42f;
+        if (left_w < UIPx(240.0f)) left_w = UIPx(240.0f);
+        float right_w = avail_w - left_w - ImGui::GetStyle().ItemSpacing.x;
+        if (right_w < UIPx(200.0f)) right_w = UIPx(200.0f);
+
+        ImGui::BeginChild("##rot_left", ImVec2(left_w, 0.0f), false);
+        draw_settings();
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##rot_right", ImVec2(right_w, 0.0f), false);
+        draw_live();
+        ImGui::EndChild();
+    }
+    else
+    {
+        draw_live();
+        ImGui::Separator();
+        draw_settings();
+    }
+}
+
+// limits apply now, the link on next Connect
+static void RotatorConfigSave(AppConfig *cfg)
+{
+    RotatorLoadSettings(cfg);
+    SaveAppConfig("settings.json", cfg);
+}
+
+static void RotatorConfigField(const char *label, char *buf, size_t buf_sz,
+                               float width, const char *tip)
+{
+    ImGui::SetNextItemWidth(width);
+    ImGui::InputText(label, buf, buf_sz);
+    if (tip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tip);
+}
+
+static void DrawTransitRotatorConfig(UIContext *ctx, AppConfig *cfg)
+{
+    (void)ctx;
+    RotatorSettings *R = &cfg->rotator_settings;
+
+    ImGui::TextDisabled("Connection");
+
+    static char proto_keys[256];
+    if (proto_keys[0] == '\0')
+    {
+        int n = RotatorProtocolCount();
+        size_t off = 0;
+        for (int i = 0; i < n && off + 32 < sizeof(proto_keys); i++)
+        {
+            const char *k = RotatorProtocolKey(i);
+            if (!k) continue;
+            size_t len = strlen(k);
+            memcpy(proto_keys + off, k, len);
+            off += len;
+            proto_keys[off++] = '\0';
+        }
+        proto_keys[off] = '\0';
+    }
+
+    int proto_idx = 0;
+    bool proto_known = false;
+    int pcount = RotatorProtocolCount();
+    for (int i = 0; i < pcount; i++)
+    {
+        const char *k = RotatorProtocolKey(i);
+        if (k && strcmp(k, R->protocol) == 0) { proto_idx = i; proto_known = true; break; }
+    }
+    if (!proto_known)
+    {
+        strncpy(R->protocol, "rotctld", sizeof(R->protocol) - 1);
+        R->protocol[sizeof(R->protocol) - 1] = '\0';
+        proto_idx = 0;
+    }
+
+    ImGui::SetNextItemWidth(UIPx(230.0f));
+    if (ImGui::Combo("Protocol##rot", &proto_idx, proto_keys))
+    {
+        const char *k = RotatorProtocolKey(proto_idx);
+        if (k) { strncpy(R->protocol, k, sizeof(R->protocol) - 1); R->protocol[sizeof(R->protocol) - 1] = '\0'; }
+        RotatorConfigSave(cfg);
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("How TLEscope talks to the rotator.\n"
+                          "rotctld / generic: Hamlib rotctld (default; works with most rigs).\n"
+                          "GS-232, EasyComm II: serial-native command sets sent over TCP.\n"
+                          "Custom: your own get/set format strings (advanced).");
+
+    ImGui::SetNextItemWidth(UIPx(230.0f));
+    ImGui::InputText("Host##rot", R->host, sizeof(R->host));
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(UIPx(80.0f));
+    ImGui::InputText("Port##rot", R->port, sizeof(R->port));
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    ImGui::TextDisabled("Connection fields apply on the next Connect.");
+
+    bool show_fmt = (strcmp(R->protocol, "rotctld") == 0 || strcmp(R->protocol, "custom") == 0);
+    if (show_fmt)
+    {
+        ImGui::Spacing();
+        ImGui::TextDisabled("Command formats (advanced)");
+        ImGui::SetNextItemWidth(UIPx(230.0f));
+        ImGui::InputText("Get format##rot", R->get_fmt, sizeof(R->get_fmt));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Query sent to read the position (rotctld default: \"p\").");
+        if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+        if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+        ImGui::SetNextItemWidth(UIPx(230.0f));
+        ImGui::InputText("Set format##rot", R->set_fmt, sizeof(R->set_fmt));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Slew command template. Two %%f placeholders, az then el\n"
+                              "(rotctld default: \"P %%.1f %%.1f\").");
+        if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+        if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+        ImGui::SetNextItemWidth(UIPx(230.0f));
+        ImGui::InputText("Custom command##rot", R->custom_cmd, sizeof(R->custom_cmd));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Optional raw command fired by the Custom button.");
+        if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+        if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    }
+    else
+    {
+        ImGui::TextDisabled("Command formats are fixed by the selected protocol.");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("Limits & Safety");
+    ImGui::TextWrapped("Hard limits applied to EVERY commanded move, before it is sent.");
+    if (RotatorIsConnected())
+        ImGui::TextDisabled("Rotator is connected; limits apply immediately.");
+    else
+        ImGui::TextDisabled("Not connected. Safety limits apply immediately once connected.");
+
+    RotatorConfigField("Min elevation##rot", R->min_el_track, sizeof(R->min_el_track), UIPx(90.0f),
+                       "Never command below this elevation (deg) - protects low-angle rigs.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    ImGui::SameLine();
+    RotatorConfigField("Max elevation##rot", R->max_el_track, sizeof(R->max_el_track), UIPx(90.0f),
+                       "Never command above this elevation (deg) - avoids zenith keyholes.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    RotatorConfigField("Az min##rot", R->az_min, sizeof(R->az_min), UIPx(90.0f),
+                       "Lower azimuth travel limit (deg). Leave 0/360 for full rotation.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    ImGui::SameLine();
+    RotatorConfigField("Az max##rot", R->az_max, sizeof(R->az_max), UIPx(90.0f),
+                       "Upper azimuth travel limit (deg). Only enforced when the span is less\n"
+                       "than the full 360 degrees.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("Motion");
+    ImGui::TextDisabled("Targets are sent at full value (no smoothing).");
+    ImGui::TextDisabled("Only the send cadence is paced; the rotator ramps itself.");
+
+    RotatorConfigField("Slew tolerance##rot", R->slew_tol_deg, sizeof(R->slew_tol_deg), UIPx(90.0f),
+                       "Considered \"on target\" (deg) when within this of the commanded angle.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    RotatorConfigField("Slew timeout##rot", R->slew_timeout_s, sizeof(R->slew_timeout_s), UIPx(90.0f),
+                       "Stop steering a pass that is not on target within this many seconds.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    RotatorConfigField("Comm timeout##rot", R->comm_timeout_s, sizeof(R->comm_timeout_s), UIPx(90.0f),
+                       "Treat the link as lost if no position update arrives within this many seconds.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    RotatorConfigField("Send interval (ms)##rot", R->send_interval_ms, sizeof(R->send_interval_ms), UIPx(90.0f),
+                       "Minimum gap between transmitted position commands (ms).\n"
+                       "Paces link traffic only - the target value itself is unchanged\n"
+                       "(there is no software slew-rate limiting). 150 = ~6.7 Hz.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("Park");
+    RotatorConfigField("Park AZ##rot", R->park_az, sizeof(R->park_az), UIPx(90.0f),
+                       "Azimuth to slew to when parking (degrees).");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    ImGui::SameLine();
+    RotatorConfigField("Park EL##rot", R->park_el, sizeof(R->park_el), UIPx(90.0f),
+                       "Elevation to slew to when parking (degrees).");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    if (ImGui::Checkbox("Park on stop / exit##rot", &R->park_on_exit))
+        RotatorConfigSave(cfg);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Slew to the park position when tracking stops or the app exits.");
+
+    if (ImGui::Checkbox("Park between passes##rot", &R->park_between_passes))
+        RotatorConfigSave(cfg);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Slew to the park position in the gap between queued passes\n"
+                          "(and resume tracking when the next pass starts).");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("Passes / Targets");
+    RotatorConfigField("Lead time (s)##rot", R->lead_time, sizeof(R->lead_time), UIPx(90.0f),
+                       "Begin slewing this many seconds before AOS.");
+    if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+    if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+
+    {
+        int hold_sz = RotatorGetLosHoldBufferSize();
+        if (hold_sz > (int)sizeof(R->los_hold_s)) hold_sz = (int)sizeof(R->los_hold_s);
+        RotatorConfigField("LOS hold (s)##rot", R->los_hold_s, (size_t)hold_sz, UIPx(90.0f),
+                           "After LOS, keep pointing at the last az/el for this many seconds\n"
+                           "(0 = disable the post-LOS hold).");
+        if (ImGui::IsItemEdited()) RotatorLoadSettings(cfg);
+        if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+    }
+
+    if (ImGui::Checkbox("Auto-steer##rot", &R->auto_steer))
+    {
+        RotatorSetAutoSteer(R->auto_steer);
+        RotatorConfigSave(cfg);
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Automatically steer the rotator to follow queued passes.");
+
+    if (ImGui::Checkbox("Queue tracking (persist)##rot", &R->queue_tracking))
+        RotatorConfigSave(cfg);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Remember the queue run-state across restarts.\n"
+                          "The Start/Stop buttons remain the live session gate.");
+
+    const char *steer_modes = "Polar\0";
+    R->steer_mode = 0;
+    ImGui::BeginDisabled();
+    ImGui::Combo("Steer mode##rot", &R->steer_mode, steer_modes);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(polar only)");
+
+    const char *wrap_modes = "Shortest path\0Clockwise only\0Counter-clockwise only\0";
+    if (ImGui::Combo("Az wrap##rot", &R->az_wrap_mode, wrap_modes))
+        RotatorConfigSave(cfg);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Which way to turn when the target azimuth crosses 0/360.\n"
+                          "Shortest path: always the smaller arc (default).\n"
+                          "Clockwise / Counter-clockwise only: always turn that way,\n"
+                          "e.g. to avoid cable wrap on a rotator without a stop.");
+}
+
+void DrawTransitRotatorWindow(UIContext *ctx, AppConfig *cfg)
+{
+    if (!g_ui.rot_show_window) return;
+
+    ImVec2 screen = ImGui::GetIO().DisplaySize;
+    const float def_w = UIPx(840.0f);
+    const float def_h = UIPx(680.0f);
+    float max_w = (UIPx(1100.0f) < screen.x * 0.62f) ? UIPx(1100.0f) : screen.x * 0.62f;
+    if (max_w < UIPx(560.0f)) max_w = UIPx(560.0f);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(UIPx(560.0f), UIPx(340.0f)),
+                                        ImVec2(max_w, screen.y - UIPx(48.0f)));
+    ImGui::SetNextWindowSize(ImVec2(def_w, def_h), ImGuiCond_FirstUseEver);
+    float pos_x = screen.x - def_w - UIPx(24.0f);
+    if (pos_x < UIPx(8.0f)) pos_x = UIPx(8.0f);
+    ImGui::SetNextWindowPos(ImVec2(pos_x, ImGui::GetFrameHeight() + UIPx(16.0f)),
+                            ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin(ICON_FA_SATELLITE_DISH "  Antenna / Rotator", &g_ui.rot_show_window,
+                     ImGuiWindowFlags_NoCollapse))
+    {
+        DrawTransitRotatorTab(ctx, cfg);
+    }
+    ImGui::End();
+}
+
 static void DrawTransitOverviewTabs(UIContext *ctx, AppConfig *cfg, int *pending_tab)
 {
     int active_tab = -1;
@@ -1329,13 +2361,18 @@ void TransitOpenDopplerTab(AppConfig *cfg)
     ToolSettingSetInt(cfg, "transit.modal_tab", 1);
 }
 
+void TransitOpenRotatorTab(AppConfig *cfg)
+{
+    (void)cfg;
+    g_ui.rot_show_window = true;
+}
+
 void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
 {
     static bool s_tab_restored = false;
     static int  s_pending_tab = -1;
 
-    /* Keep BeginPopupModal reachable even when closed so an externally-cleared
-       flag (global Escape router) actually closes the popup via p_open. */
+    // always reach BeginPopupModal so an external close lands on p_open
     if (!g_ui.transit_overview_open)
     {
         s_tab_restored = false;
@@ -1363,6 +2400,9 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
             s_pending_tab = (s_requested_tab >= 0)
                                 ? s_requested_tab
                                 : ToolSettingGetInt(cfg, "transit.modal_tab", 0);
+            // old configs may store 4, the removed Rotator tab
+            if (s_pending_tab < 0 || s_pending_tab > 3)
+                s_pending_tab = 0;
             s_requested_tab = -1;
             s_tab_restored = true;
         }
@@ -1375,19 +2415,16 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
         float left_w = avail_w * 0.35f;
         float right_w = avail_w - left_w - ImGui::GetStyle().ItemSpacing.x;
 
-        /* ---- LEFT: maximal-info transit list ---- */
         ImGui::BeginChild("##transit_ov_left", ImVec2(left_w, body_h), true);
         DrawTransitOverviewList(ctx, cfg);
         ImGui::EndChild();
 
         ImGui::SameLine();
 
-        /* ---- RIGHT: three plot tabs ---- */
         ImGui::BeginChild("##transit_ov_right", ImVec2(right_w, body_h), true);
         DrawTransitOverviewTabs(ctx, cfg, &s_pending_tab);
         ImGui::EndChild();
 
-        /* ---- footer ---- */
         ImGui::Separator();
         if (ImGui::Button("Close", ImVec2(UIPx(140.0f), 0)))
         {

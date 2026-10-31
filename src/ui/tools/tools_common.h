@@ -78,6 +78,8 @@ void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame = null
 /** convert a raylib Color to an ImGui ImVec4 */
 ImVec4 ThemeColor(const Color &c);
 
+void ToolsDrawBanner(const char *title, const char *detail, Color accent);
+
 /* -- Data source selection (shopping-cart) persistence --------------------- */
 
 void SaveDataSelections(void);
