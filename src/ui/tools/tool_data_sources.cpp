@@ -365,11 +365,10 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::Button(ICON_FA_FOLDER "##select_custom_file",ImVec2(file_btn_w, file_btn_w)))
         {
-            g_ui.file_dialog_tle.open();
+            g_ui.file_dialog_tle.open("Open TLE file", ".tle, .3le, .txt");
         }
         if (g_ui.file_dialog_tle.isOpen() && g_ui.file_dialog_tle.draw())
         {
-
             std::snprintf(s_file_buf, sizeof(s_file_buf), "%s",
                           g_ui.file_dialog_tle.fileName().c_str());
         }
@@ -389,7 +388,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             else
             {
-              s_file_buf[0] = '\0'; /* clear on success */
+                s_file_buf[0] = '\0'; /* clear on success */
             }
         }
         if (ImGui::IsItemHovered())
