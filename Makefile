@@ -111,7 +111,7 @@ clean-libs:
 	rm -f $(RAYLIB_LIB) $(RAYLIB_SRC)/libraylib.web.a $(RAYLIB_SRC)/libraylib.so*
 	rm -f $(RAYLIB_SRC)/raygui.c $(RAYLIB_SRC)/*-protocol.h $(RAYLIB_SRC)/*-protocol-code.h $(RAYLIB_SRC)/*-protocol-code.c
 
-linux: raylib bin/TLEscope
+linux: $(ICON_OUT) raylib bin/TLEscope
 	rm -rf $(DIST_LINUX)
 	@mkdir -p $(DIST_LINUX)
 	cp bin/TLEscope $(DIST_LINUX)/TLEscope.tmp && mv -f $(DIST_LINUX)/TLEscope.tmp $(DIST_LINUX)/TLEscope
@@ -120,12 +120,12 @@ linux: raylib bin/TLEscope
 	@echo "Linux build bundled in $(DIST_LINUX)/"
 	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
-macos: raylib bin/TLEscope-macos
+macos: $(ICON_OUT) raylib bin/TLEscope-macos
 	rm -rf $(DIST_MACOS)
 	@mkdir -p $(DIST_MACOS)
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
 	cp -r themes $(DIST_MACOS)/
-	cp $(ICON_OUT) $(DIST_LINUX)/
+	cp $(ICON_OUT) $(DIST_MACOS)/
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 	@echo "To make a MacOS bundle: ./macos_bundle.sh"
@@ -157,12 +157,12 @@ win-installer: windows $(ICON_OUT)
 # microsoft, and I mean this sincerely, please keep bloating windows so that people stop using it and annoying me about it thanks bye.
 
 # depends on the raylib archive so a parallel make cannot link before it exists
-bin/TLEscope: $(OBJ) $(ICON_OUT) $(RAYLIB_LIB) | bin
+bin/TLEscope: $(OBJ) $(RAYLIB_LIB) | bin
 	@printf "\033[1;35mLinking...\033[0m\n"
 	$(CC_LINUX) $(CXXFLAGS_LIN) -o $@ $(OBJ) $(LDFLAGS_LIN)
 	@printf "\033[1;32mBuild complete! \033[0m\033[0;36mTLEscope v$(GIT_VERSION)\033[0m\n"
 
-bin/TLEscope-macos: $(ICON_OUT) raylib $(SRC) src/util/window_macos.mm src/util/proxy_macos.cpp $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
+bin/TLEscope-macos: raylib $(SRC) src/util/window_macos.mm src/util/proxy_macos.cpp $(IMGUI_SRC) $(RLIMGUI_SRC) | bin
 	$(CC_MACOS) $(CXXFLAGS) $(RAYLIB_CFLAGS) -o $@ $(filter-out raylib,$^) $(LDFLAGS_MACOS)
 
 bin/TLEscope.exe: $(OBJ_WIN) build_win/versioninfo.o $(RAYLIB_LIB) | bin
