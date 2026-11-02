@@ -15,6 +15,7 @@
 #include "tools/tools_settings.h"
 #include "notifications.h"
 #include "tutorial.h"
+#include "planet.h"
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
@@ -1300,6 +1301,26 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
                 SaveAppConfig("settings.json", cfg);
             }
             ImGui::EndMenu();
+        }
+
+        /* ---- Planet selector (test-planetary) ---------------------------- */
+        {
+            char planet_label[64];
+            snprintf(planet_label, sizeof(planet_label), ICON_FA_EARTH_AMERICAS "  %s",
+                     PlanetName(PlanetSelected()));
+            if (ImGui::BeginMenu(planet_label))
+            {
+                for (int i = 0; i < PLANET_COUNT; i++)
+                {
+                    PlanetId id = static_cast<PlanetId>(i);
+                    /* no bool* out-param: this is a radio list, one body at a time */
+                    if (ImGui::MenuItem(PlanetName(id), NULL, PlanetSelected() == id))
+                        PlanetSelect(id);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::IsItemHovered())
+                NavTooltip("Select the body to render (Earth only for now)");
         }
 
         /* ---- Tools: opens the tools manager directly (no dropdown) ------- */
