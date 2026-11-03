@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace pfd { class open_file; }
 
@@ -24,33 +25,30 @@ class FileDialog
          * Open the native file dialog. Does nothing if already open or if no
          * dialog backend is available.
          *
-         * @param title       Dialog window title.
-         * @param filter      Extensions to show, separated by commas, semicolons
-         *                    or spaces, e.g. ".tle, .3le, .txt". Dots and
-         *                    wildcards are optional (".tle", "*.tle" and "tle"
-         *                    are equivalent). Empty or "*" = all files. An
-         *                    "All files" entry is always offered as well.
+         * @param title       Dialog window title
          * @param initialPath Start directory (or file) used if no file has been
          *                    selected before; empty = home directory. After a
-         *                    selection, the last used directory takes priority.
+         *                    selection, the last used directory takes priority
+         * @param filter      File filter list
          */
         void open(const std::string& title,
-                  const std::string& filter = "*",
-                  const std::string& initialPath = "");
+                  const std::string& initialPath = "",
+                  const std::vector<std::string> filter = { "All Files", "*" });
 
         /// Poll the dialog. @return true once, when a file was confirmed.
         bool draw();
 
         bool isOpen() const { return open_; }
 
-        /// Full path of the last selected file (empty if none yet).
-        std::string fileName() const { return fileNameSelected_; }
+        /// Full path of the last selected file
+        std::string fileName() const { return fileName_; }
 
     private:
+
         bool open_ = false;
+        std::string fileName_ = "";
         std::shared_ptr<pfd::open_file> dialog_;   // alive while the dialog is up
-        std::string lastSelectedDirectory_;
-        std::string fileNameSelected_;
+
 };
 
 #endif // FILE_DIALOG_H
