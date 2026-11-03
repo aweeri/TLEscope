@@ -134,7 +134,7 @@ typedef struct
     char custom_paste_buf[4096];
 
     /* file dialog */
-    FileDialog file_dialog_tle = FileDialog();
+    FileDialog file_dialog_tle;
 
     /* pass state */
     int selected_pass_idx;
