@@ -6,4 +6,4 @@
 	url = https://github.com/nlohmann/json.git
 [submodule "lib/portable-file-dialogs"]
 	path = lib/portable-file-dialogs
-	url = https://github.com/samhocevar/portable-file-dialogs
+	url = https://github.com/samhocevar/portable-file-dialogs.git
