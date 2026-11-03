@@ -86,36 +86,6 @@ static int *GetCelestrakSortedIndex(void)
     return s_idx;
 }
 
-static bool PasteTleHasNameLine(const char *data)
-{
-    const char *p = data;
-    while (*p)
-    {
-        const char *lines[3] = {0};
-        int n = 0;
-
-        /* collect up to three significant lines (skip blanks and comments) */
-        while (n < 3)
-        {
-            while (*p == '\r' || *p == '\n') p++;
-            if (!*p) break;
-            if (*p == '#')
-            {
-                while (*p && *p != '\n') p++;
-                continue;
-            }
-            lines[n++] = p;
-            while (*p && *p != '\n') p++;
-        }
-
-        if (n == 0) break;
-        if (n < 3) return false;                    /* incomplete block */
-        if (lines[0][0] == '1' && lines[0][1] == ' ')
-            return false;                           /* first line is an element line - no name */
-    }
-    return true;
-}
-
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 {
     float avail_w = ImGui::GetContentRegionAvail().x;
@@ -431,7 +401,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         /* 3LE requires a name line; element-only input is rejected */
         bool tle_missing_name = has_content && (paste_fmt == FORMAT_TLE) &&
-                                !PasteTleHasNameLine(s_paste_buf);
+                                !tleHasNameLine(s_paste_buf);
 
         bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
 

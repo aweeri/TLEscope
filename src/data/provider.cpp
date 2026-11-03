@@ -16,6 +16,9 @@
 #include <thread>
 #include <nlohmann/json.hpp>
 
+#include "ui/notifications.h"
+#include "IconsFontAwesome6.h"
+
 // -- Built-in Source Lists --------------------------------------------------
 
 #define CELESTRAK_BASE "https://celestrak.org/NORAD/elements/gp.php"
@@ -598,6 +601,36 @@ int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_
 
 // -- Format Detection -------------------------------------------------------
 
+bool tleHasNameLine(const char *data)
+{
+    const char *p = data;
+    while (*p)
+    {
+        const char *lines[3] = {0};
+        int n = 0;
+
+        /* collect up to three significant lines (skip blanks and comments) */
+        while (n < 3)
+        {
+            while (*p == '\r' || *p == '\n') p++;
+            if (!*p) break;
+            if (*p == '#')
+            {
+                while (*p && *p != '\n') p++;
+                continue;
+            }
+            lines[n++] = p;
+            while (*p && *p != '\n') p++;
+        }
+
+        if (n == 0) break;
+        if (n < 3) return false;                    /* incomplete block */
+        if (lines[0][0] == '1' && lines[0][1] == ' ')
+            return false;                           /* first line is an element line - no name */
+    }
+    return true;
+}
+
 OrbitalDataFormat DetectDataFormat(const char *data, size_t size)
 {
     if (!data || size == 0) return FORMAT_UNKNOWN;
@@ -749,6 +782,19 @@ FetchResult FetchFromCustomFile(const char *filename)
         result.format = DetectDataFormat(result.data, result.size);
         LOG_INFO("Custom file fetch OK: %s (%zu bytes, detected: %s)",
                  filename, result.size, FormatToString(result.format));
+    }
+
+    // Check for presence of name line
+
+    if (!tleHasNameLine(result.data))
+    {
+        /* reject element-only 3LE input: a name line is mandatory */
+        NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Invalid file content: a name line is required "
+                   "(name, then line 1 and line 2)");
+        LOG_DEBUG("Rejected TLE file content: missing name line");
+        result = {0};
+        result.success = false;
     }
 
     return result;
