@@ -29,11 +29,16 @@ class FileDialog
          * @param initialPath Start directory (or file) used if no file has been
          *                    selected before; empty = home directory. After a
          *                    selection, the last used directory takes priority
-         * @param filter      File filter list
+         * @param filter      File filter list (pairs of display name + wildcard
+         *                    pattern). Defaults to an unrestricted filter. An
+         *                    empty/invalid list also falls back to "All Files"
          */
         void open(const std::string& title,
                   const std::string& initialPath = "",
-                  const std::vector<std::string> filter = { "All Files", "*" });
+                  const std::vector<std::string>& filter = { "All Files", "*" });
+
+        // Closes a still-open native dialog so shutdown cannot block it
+        ~FileDialog();
 
         /// Poll the dialog. @return true once, when a file was confirmed.
         bool draw();

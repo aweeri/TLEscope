@@ -335,7 +335,8 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         if (ImGui::Button(ICON_FA_FOLDER "##select_custom_file",ImVec2(file_btn_w, file_btn_w)))
         {
-            const std::vector<std::string> filter = { "TLE Files", "*.3le *.json *.csv *.kvn *.xml", "All Files", "*" };
+            // Default to "All Files"
+            const std::vector<std::string> filter = { "All Files", "*", "GP", "*.3le *.json *.csv *.kvn *.xml" };
             g_ui.file_dialog_tle.open("Open TLE file","",filter);
         }
         if (g_ui.file_dialog_tle.isOpen() && g_ui.file_dialog_tle.draw())
