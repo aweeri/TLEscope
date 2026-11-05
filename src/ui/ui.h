@@ -3,6 +3,7 @@
 
 #include "core/config.h"
 #include "core/types.h"
+#include "data/file_dialog.h"
 #include <raylib.h>
 
 typedef enum
@@ -131,6 +132,9 @@ typedef struct
     bool retlector_fetch_done;
     char custom_url_buf[512];
     char custom_paste_buf[4096];
+
+    /* file dialog */
+    FileDialog file_dialog_tle;
 
     /* pass state */
     int selected_pass_idx;

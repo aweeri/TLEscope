@@ -2,7 +2,7 @@ GIT_VERSION     := $(shell scripts/version.sh describe 2>/dev/null || echo "vUnk
 GIT_VERSION_NUM := $(shell scripts/version.sh num 2>/dev/null || echo "0.0.0.0")
 
 CC_LINUX = g++
-CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/nlohmann/single_include -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\" -DImDrawIdx='unsigned int'
+CXXFLAGS   = -Wall -Wextra -std=c++20 -O2 -Isrc -Ilib -Ilib/nlohmann/single_include -Ilib/imgui -Ilib/rlImGui -Ilib/rlImGui/extras -Ilib/portable-file-dialogs -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-stringop-truncation -Wno-format-truncation -Wno-maybe-uninitialized -Wno-narrowing -Wno-missing-field-initializers -DTLESCOPE_VERSION=\"$(GIT_VERSION)\" -DImDrawIdx='unsigned int'
 
 # raylib is built from the git submodule (lib/raylib)
 RAYLIB_SRC   = lib/raylib/src
@@ -58,7 +58,7 @@ endif
 
 # Link against the static raylib built from the submodule, plus per-OS system libs
 LDFLAGS_LIN = $(RAYLIB_LIB) -lcurl -lGL -lX11 -lm -lpthread -ldl -lrt
-LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic -lwinpthread -Wl,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -mwindows $(LDFLAGS_WIN_EXTRA)
+LDFLAGS_WIN = $(RAYLIB_LIB) -Wl,-Bstatic $(CURL_FIX) -lssp_nonshared -Wl,-Bdynamic -lzstd -lbcrypt -lsecur32 -liphlpapi -Wl,-Bstatic -lwinpthread -Wl,--allow-multiple-definition -lopengl32 -lgdi32 -lwinmm -lole32 -loleaut32 -luuid -lshell32 -mwindows $(LDFLAGS_WIN_EXTRA)
 DIST_LINUX = dist/TLEscope-Linux-Portable
 DIST_WIN   = dist/TLEscope-Win-Portable
 
@@ -71,7 +71,7 @@ CC_MACOS = clang++
 LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework CFNetwork -framework CoreFoundation -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework QuartzCore
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/logo.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
+SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/file_dialog.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/logo.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)

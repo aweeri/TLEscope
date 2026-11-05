@@ -10,6 +10,7 @@
 #include "core/astro.h"
 #include "core/theme.h"
 #include "core/config.h"
+#include "data/file_dialog.h"
 #include "data/provider.h"
 #include "data/storage.h"
 #include "data/omm_parser.h"
@@ -83,36 +84,6 @@ static int *GetCelestrakSortedIndex(void)
         s_built = true;
     }
     return s_idx;
-}
-
-static bool PasteTleHasNameLine(const char *data)
-{
-    const char *p = data;
-    while (*p)
-    {
-        const char *lines[3] = {0};
-        int n = 0;
-
-        /* collect up to three significant lines (skip blanks and comments) */
-        while (n < 3)
-        {
-            while (*p == '\r' || *p == '\n') p++;
-            if (!*p) break;
-            if (*p == '#')
-            {
-                while (*p && *p != '\n') p++;
-                continue;
-            }
-            lines[n++] = p;
-            while (*p && *p != '\n') p++;
-        }
-
-        if (n == 0) break;
-        if (n < 3) return false;                    /* incomplete block */
-        if (lines[0][0] == '1' && lines[0][1] == ' ')
-            return false;                           /* first line is an element line - no name */
-    }
-    return true;
 }
 
 void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
@@ -347,6 +318,55 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
     }
 
     /* ====================================================================
+     *  Custom File Section
+     * ==================================================================== */
+    if (ImGui::CollapsingHeader("Custom File"))
+    {
+        /* file input + file dialog + add button on the same line */
+        float file_btn_w = ImGui::GetFrameHeight();
+        static char s_file_buf[512] = "";
+
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+            "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
+
+        ImGui::SetNextItemWidth(avail_w - 2*file_btn_w - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::InputText("##custom_file", s_file_buf, sizeof(s_file_buf));
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_FOLDER "##select_custom_file",ImVec2(file_btn_w, file_btn_w)))
+        {
+            const std::vector<std::string> filter = { "TLE Files", "*.3le *.json *.csv *.kvn *.xml", "All Files", "*" };
+            g_ui.file_dialog_tle.open("Open TLE file","",filter);
+        }
+        if (g_ui.file_dialog_tle.isOpen() && g_ui.file_dialog_tle.draw())
+        {
+            std::snprintf(s_file_buf, sizeof(s_file_buf), "%s",
+                          g_ui.file_dialog_tle.fileName().c_str());
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Select file");
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_PLUS "##add_custom_file", ImVec2(file_btn_w, file_btn_w)) && s_file_buf[0])
+        {
+            /* extract a short name from the file for display */
+            const char *name_start = strrchr(s_file_buf, '/');
+            if (name_start) name_start++; else name_start = s_file_buf;
+
+            if (!DataSelectionAdd(SOURCE_CUSTOM_FILE, name_start, s_file_buf, NULL, FORMAT_UNKNOWN))
+            {
+                LOG_DEBUG("File '%s' already in selection list", s_file_buf);
+            }
+            else
+            {
+                s_file_buf[0] = '\0'; /* clear on success */
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Add this file to the active selections (fetched on pull)");
+    }
+
+    /* ====================================================================
      *  Custom Paste Section
      * ==================================================================== */
     if (ImGui::CollapsingHeader("Custom Paste"))
@@ -381,7 +401,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
         /* 3LE requires a name line; element-only input is rejected */
         bool tle_missing_name = has_content && (paste_fmt == FORMAT_TLE) &&
-                                !PasteTleHasNameLine(s_paste_buf);
+                                !tleHasNameLine(s_paste_buf);
 
         bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
 
@@ -483,10 +503,11 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImVec4 badge_col;
             switch (s->type)
             {
-                case SOURCE_RETLECTOR:  badge = "R";  badge_col = ImVec4(0.3f, 0.6f, 1.0f, 1.0f); break;
-                case SOURCE_CELESTRAK:  badge = "C";  badge_col = ImVec4(0.3f, 1.0f, 0.4f, 1.0f); break;
-                case SOURCE_CUSTOM_URL: badge = "URL"; badge_col = ImVec4(1.0f, 0.7f, 0.2f, 1.0f); break;
-                case SOURCE_CUSTOM_PASTE: badge = "P"; badge_col = ImVec4(0.8f, 0.4f, 1.0f, 1.0f); break;
+                case SOURCE_RETLECTOR:    badge = "R";    badge_col = ImVec4(0.3f, 0.6f, 1.0f, 1.0f); break;
+                case SOURCE_CELESTRAK:    badge = "C";    badge_col = ImVec4(0.3f, 1.0f, 0.4f, 1.0f); break;
+                case SOURCE_CUSTOM_URL:   badge = "URL";  badge_col = ImVec4(1.0f, 0.7f, 0.2f, 1.0f); break;
+                case SOURCE_CUSTOM_FILE:  badge = "FILE"; badge_col = ImVec4(0.5f, 0.2f, 0.8f, 1.0f); break;
+                case SOURCE_CUSTOM_PASTE: badge = "P";    badge_col = ImVec4(0.8f, 0.4f, 1.0f, 1.0f); break;
             }
 
             ImGui::TextColored(badge_col, "[%s]", badge);
@@ -494,9 +515,9 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
 
             char obj_name[64];
             const char *display = s->name;
-            if (s->type == SOURCE_CUSTOM_URL)
+            if (s->type == SOURCE_CUSTOM_URL || s->type == SOURCE_CUSTOM_FILE)
             {
-                /* prefer the full URL, which is the identifier */
+                /* prefer the full URL or filename, which is the identifier */
                 display = (s->identifier[0] != '\0') ? s->identifier : s->name;
             }
             else if (s->type == SOURCE_CUSTOM_PASTE)
