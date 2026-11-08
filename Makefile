@@ -48,6 +48,8 @@ HOST_CXX ?= g++
 EXE_EXT  := $(if $(filter Windows_NT,$(OS)),.exe,)
 ICON_GEN := build/gen_icon$(EXE_EXT)
 ICON_OUT := build/logo.ico
+# macOS needs a .icns, not the .ico: same generator, PNG representations.
+ICNS_OUT := build/AppIcon.icns
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
@@ -120,12 +122,12 @@ linux: $(ICON_OUT) raylib bin/TLEscope
 	@echo "Linux build bundled in $(DIST_LINUX)/"
 	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
-macos: $(ICON_OUT) raylib bin/TLEscope-macos
+macos: $(ICNS_OUT) raylib bin/TLEscope-macos
 	rm -rf $(DIST_MACOS)
 	@mkdir -p $(DIST_MACOS)
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
 	cp -r themes $(DIST_MACOS)/
-	cp $(ICON_OUT) $(DIST_MACOS)/
+	cp $(ICNS_OUT) $(DIST_MACOS)/AppIcon.icns
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 	@echo "To make a MacOS bundle: ./macos_bundle.sh"
@@ -206,12 +208,18 @@ build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh script
 	@scripts/gen_versioninfo.sh "$(GIT_VERSION_NUM)" "$(GIT_VERSION)" build_win/versioninfo.rc "$(ICON_OUT)"
 	@$(RC_WIN) -O coff -i build_win/versioninfo.rc -o $@
 
-# Rasterize the hardcoded logo into a multi-size .ico (build artifact, never
-# committed). Reuses src/ui/logo_raster.h, the same code the app renders with.
-$(ICON_OUT): scripts/gen_icon.cpp src/ui/logo_raster.h | build
+# Rasterize the hardcoded logo into the platform icon containers (build
+# artifacts, never committed). Reuses src/ui/logo_raster.h, the same code the
+# app renders with; scripts/gen_icon.cpp picks .ico or .icns by extension.
+$(ICON_GEN): scripts/gen_icon.cpp src/ui/logo_raster.h | build
 	@mkdir -p $(@D)
 	@$(HOST_CXX) -std=c++17 -O2 -Isrc -o $(ICON_GEN) scripts/gen_icon.cpp
+
+$(ICON_OUT): $(ICON_GEN)
 	@$(ICON_GEN) $(ICON_OUT)
+
+$(ICNS_OUT): $(ICON_GEN)
+	@$(ICON_GEN) $(ICNS_OUT)
 
 build:
 	mkdir -p build

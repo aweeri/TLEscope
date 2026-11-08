@@ -164,6 +164,7 @@ jobs:
           test -x dist/TLEscope.app/Contents/MacOS/TLEscope.bin
           test -f dist/TLEscope.app/Contents/Resources/themes/default/theme.json
           test -f dist/TLEscope.app/Contents/Resources/themes/default/font.ttf
+          test -f dist/TLEscope.app/Contents/Resources/AppIcon.icns
           plutil -lint dist/TLEscope.app/Contents/Info.plist
 
       - name: Verify architecture
