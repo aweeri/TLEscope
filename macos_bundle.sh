@@ -17,6 +17,11 @@ if [[ ! -d "$PORTABLE_DIR/themes" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$PORTABLE_DIR/AppIcon.icns" ]]; then
+    echo "Missing app icon: $PORTABLE_DIR/AppIcon.icns (run: make macos)" >&2
+    exit 1
+fi
+
 rm -rf "$APP_DIR"
 cp -R bundle "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/Resources"
