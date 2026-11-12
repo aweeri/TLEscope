@@ -75,6 +75,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->hint_vsync = true;       // default
     config->use_local_time = true;   // default: display in system local timezone
     config->night_mode = false;      // default: full-screen red post-process off
+    config->discord_rpc_enabled = true; // default: publish presence to Discord
     config->first_day_of_week = 1;   // default: Monday first in the date-picker calendar
     config->custom_data_source_count = 0;
     config->retlector_group_count = 0;
@@ -252,6 +253,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_tutorial = get_bool("show_tutorial", config->show_tutorial);
                     config->use_local_time = get_bool("use_local_time", config->use_local_time);
                     config->night_mode = get_bool("night_mode", config->night_mode);
+                    config->discord_rpc_enabled = get_bool("discord_rpc_enabled", config->discord_rpc_enabled);
 
                     // load manual orbital data entries
                     auto me = root.find("manual_entries");
@@ -677,6 +679,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->limit_map_zoomout = true;
         config->hint_vsync = true;
         config->night_mode = false;
+        config->discord_rpc_enabled = true;
         config->max_satellites = DEFAULT_MAX_SATELLITES;
         config->prop_use_short_period = true;
         // first run: a single default home location, no forced example marker
@@ -750,6 +753,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_tutorial"] = config->show_tutorial;
     root["use_local_time"] = config->use_local_time;
     root["night_mode"] = config->night_mode;
+    root["discord_rpc_enabled"] = config->discord_rpc_enabled;
     root["first_day_of_week"] = config->first_day_of_week;
     root["data_stale_threshold_seconds"] = config->data_stale_threshold_seconds;
     root["auto_repull_stale"] = config->auto_repull_stale;

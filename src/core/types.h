@@ -374,6 +374,7 @@ typedef struct
     bool reload_theme;
     bool use_local_time;   // display dates/times in the system local timezone (default true)
     bool night_mode;       // full-screen monochrome-red post-process for dark adaptation
+    bool discord_rpc_enabled; // publish presence to the local Discord client (default true)
     int first_day_of_week; // first day of the week in date pickers: 0 = Sunday, 1 = Monday (default)
 
     bool prop_use_short_period;   // include J2 short-period terms in the cheap path (default true)
