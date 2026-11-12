@@ -330,7 +330,7 @@ static void Connect(void)
 
 static const char *OrbitClass(const Satellite *sat)
 {
-    double mm = sat->mean_motion; // rev/day
+    double mm = sat->mean_motion * 86400.0 / (2.0 * PI); 
     double ecc = sat->eccentricity;
     if (ecc > 0.25)
         return "HEO";
