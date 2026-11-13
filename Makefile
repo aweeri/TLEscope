@@ -48,6 +48,8 @@ HOST_CXX ?= g++
 EXE_EXT  := $(if $(filter Windows_NT,$(OS)),.exe,)
 ICON_GEN := build/gen_icon$(EXE_EXT)
 ICON_OUT := build/logo.ico
+# macOS needs a .icns, not the .ico: same generator, PNG representations.
+ICNS_OUT := build/AppIcon.icns
 
 CURL_FIX_RAW := $(shell $(PKG_CONFIG_WIN) --libs --static libcurl 2>/dev/null)
 ifeq ($(strip $(CURL_FIX_RAW)),)
@@ -71,7 +73,7 @@ CC_MACOS = clang++
 LDFLAGS_MACOS = $(RAYLIB_LIB) -lcurl -framework CFNetwork -framework CoreFoundation -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework QuartzCore
 DIST_MACOS = dist/TLEscope-macOS-Portable
 
-SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/data/file_dialog.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/data/ephem_store.cpp src/data/ephem_parse.cpp src/data/horizons_api.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/logo.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
+SRC          = src/main.cpp src/core/astro.cpp src/core/propagator.cpp src/core/config.cpp src/core/theme.cpp src/core/location.cpp src/core/discord_rpc.cpp src/data/file_dialog.cpp src/data/storage.cpp src/data/provider.cpp src/data/cache.cpp src/data/omm_parser.cpp src/data/async_fetch.cpp src/data/ephem_store.cpp src/data/ephem_parse.cpp src/data/horizons_api.cpp src/ui/ui.cpp src/ui/ui_input.cpp src/ui/ui_layout.cpp src/ui/labels.cpp src/ui/imgui_theme.cpp src/ui/logo.cpp src/ui/notifications.cpp src/ui/touch_gesture.cpp src/ui/hints.cpp src/ui/tutorial.cpp src/io/rotator.cpp src/util/c23_compat.cpp src/util/log.cpp src/render/coverage_mesh.cpp src/expo/expo_mode.cpp src/ui/tools/tools_registry.cpp src/ui/tools/tools_common.cpp src/ui/tools/tools_settings.cpp src/ui/tools/tools_scene.cpp src/ui/tools/tools_plot.cpp $(wildcard src/ui/tools/tool_*.cpp)
 IMGUI_SRC    = lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp
 RLIMGUI_SRC  = lib/rlImGui/rlImGui.cpp
 OBJ          = $(SRC:src/%.cpp=build/%.o) $(IMGUI_SRC:lib/imgui/%.cpp=build/%.o) $(RLIMGUI_SRC:lib/rlImGui/%.cpp=build/%.o)
@@ -120,12 +122,12 @@ linux: $(ICON_OUT) raylib bin/TLEscope
 	@echo "Linux build bundled in $(DIST_LINUX)/"
 	@echo "Run it with: cd $(DIST_LINUX)/ && ./TLEscope"
 
-macos: $(ICON_OUT) raylib bin/TLEscope-macos
+macos: $(ICNS_OUT) raylib bin/TLEscope-macos
 	rm -rf $(DIST_MACOS)
 	@mkdir -p $(DIST_MACOS)
 	cp bin/TLEscope-macos $(DIST_MACOS)/TLEscope
 	cp -r themes $(DIST_MACOS)/
-	cp $(ICON_OUT) $(DIST_MACOS)/
+	cp $(ICNS_OUT) $(DIST_MACOS)/AppIcon.icns
 	@echo "macOS build bundled in $(DIST_MACOS)/"
 	@echo "Run it with: cd $(DIST_MACOS)/ && ./TLEscope"
 	@echo "To make a MacOS bundle: ./macos_bundle.sh"
@@ -206,12 +208,18 @@ build_win/versioninfo.o: src/versioninfo.rc.in scripts/gen_versioninfo.sh script
 	@scripts/gen_versioninfo.sh "$(GIT_VERSION_NUM)" "$(GIT_VERSION)" build_win/versioninfo.rc "$(ICON_OUT)"
 	@$(RC_WIN) -O coff -i build_win/versioninfo.rc -o $@
 
-# Rasterize the hardcoded logo into a multi-size .ico (build artifact, never
-# committed). Reuses src/ui/logo_raster.h, the same code the app renders with.
-$(ICON_OUT): scripts/gen_icon.cpp src/ui/logo_raster.h | build
+# Rasterize the hardcoded logo into the platform icon containers (build
+# artifacts, never committed). Reuses src/ui/logo_raster.h, the same code the
+# app renders with; scripts/gen_icon.cpp picks .ico or .icns by extension.
+$(ICON_GEN): scripts/gen_icon.cpp src/ui/logo_raster.h | build
 	@mkdir -p $(@D)
 	@$(HOST_CXX) -std=c++17 -O2 -Isrc -o $(ICON_GEN) scripts/gen_icon.cpp
+
+$(ICON_OUT): $(ICON_GEN)
 	@$(ICON_GEN) $(ICON_OUT)
+
+$(ICNS_OUT): $(ICON_GEN)
+	@$(ICON_GEN) $(ICNS_OUT)
 
 build:
 	mkdir -p build

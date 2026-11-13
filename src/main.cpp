@@ -19,6 +19,7 @@
 #include "core/config.h"
 #include "core/theme.h"
 #include "core/location.h"
+#include "core/discord_rpc.h"
 #include "util/log.h"
 #ifdef __APPLE__
 #include "util/window_macos.h"
@@ -1069,6 +1070,7 @@ int main(int argc, char **argv)
     SimScanInit();
 
     LoadAppConfig("settings.json", &cfg);
+    DiscordRpcInit(cfg.discord_rpc_enabled);
     SetUseLocalTime(cfg.use_local_time);
     sat_prop_set_short_period(cfg.prop_use_short_period);
     RotatorLoadSettings(&cfg); /* restore persisted rotator config */
@@ -3768,6 +3770,8 @@ int main(int argc, char **argv)
         // apply completed async fetch results on the UI thread (safe with the render loop)
         AsyncFetchApplyResults();
 
+        DiscordRpcUpdate(selected_sat, sat_count, current_epoch);
+
         DrawGUI(&uiCtx, &cfg, customFont);
 
         // statistics overlay: top-left of the central view, below the nav bar
@@ -3917,6 +3921,7 @@ int main(int argc, char **argv)
         }
     }
     RotatorShutdown();
+    DiscordRpcShutdown();
     LogShutdown();
 
     CloseWindow();

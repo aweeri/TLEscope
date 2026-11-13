@@ -19,6 +19,7 @@
 #include "core/theme.h"
 #include "core/config.h"
 #include "core/location.h"
+#include "core/discord_rpc.h"
 #include "data/curl_diagnostics.h"
 #include "util/log.h"
 #include "expo/expo_mode.h"
@@ -1719,6 +1720,17 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             float sz = ExpoModeGetSize(cfg);
             if (ImGui::SliderFloat("Overlay Size", &sz, EXPO_SIZE_MIN, EXPO_SIZE_MAX, "%.2fx")) ExpoModeSetSize(cfg, sz);
             if (ImGui::IsItemDeactivatedAfterEdit()) SaveAppConfig("settings.json", cfg);
+        }
+
+        if (ImGui::CollapsingHeader("Integrations"))
+        {
+            if (ImGui::Checkbox("Discord Rich Presence", &cfg->discord_rpc_enabled))
+            {
+                DiscordRpcSetEnabled(cfg->discord_rpc_enabled);
+                SaveAppConfig("settings.json", cfg);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Show what you are tracking on your Discord profile");
         }
 
         /* ---- Buttons ----------------------------------------------------- */
