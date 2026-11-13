@@ -1,9 +1,7 @@
-/**
- * @file coverage_mesh.cpp
- * @brief Coverage mesh generation and caching.
- */
+// Coverage mesh generation and caching.
 
 #include "coverage_mesh.h"
+#include "../core/astro.h" /* SatIsEphem() */
 #include "../util/log.h"
 #include <math.h>
 #include <stdlib.h>
@@ -201,6 +199,11 @@ struct CoverageCapEntry {
 static std::map<int, CoverageCapEntry> g_coverage_cap_cache;
 
 const CoverageCapData *GetCachedCoverageCap(float altitude_km, CoverageMeshLOD lod) {
+    // SelectCoverageLOD2D() returns COVERAGE_LOD_COUNT for an ephemeris mission,
+    // which lands here as "no cap": never build a footprint from a tabulated state.
+    if (lod < 0 || lod >= COVERAGE_LOD_COUNT)
+        return NULL;
+
     if (altitude_km < 0.0f) altitude_km = 0.0f;
     int altitude_bucket = (int)(altitude_km / 10.0f);
     int cache_key = (altitude_bucket << 2) | (int)lod;
@@ -249,6 +252,14 @@ void CalculateCoverageParams(const Satellite *sat, float *out_theta, float *out_
         *out_radius = 0.0f;
         return;
     }
+
+    // ephemeris missions have no elements to derive a cap from; zero theta makes
+    // the caller skip the draw and leaves no stale mesh behind
+    if (SatIsEphem(sat)) {
+        *out_theta = 0.0f;
+        *out_radius = 0.0f;
+        return;
+    }
     
     float r = Vector3Length(sat->current_pos);
     if (r <= EARTH_RADIUS_KM) {
@@ -286,6 +297,10 @@ CoverageMeshLOD SelectCoverageLOD(const Satellite *sat, Camera camera) {
 CoverageMeshLOD SelectCoverageLOD2D(const Satellite *sat, float zoom, float map_w) {
     if (!sat || !sat->is_active)
         return COVERAGE_LOD_LOW;
+
+    // COVERAGE_LOD_COUNT is the "do not build" marker checked by GetCachedCoverageCap()
+    if (SatIsEphem(sat))
+        return COVERAGE_LOD_COUNT;
 
     float r = Vector3Length(sat->current_pos);
     if (r <= EARTH_RADIUS_KM)

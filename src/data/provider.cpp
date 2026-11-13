@@ -14,6 +14,18 @@
 #include <curl/curl.h>
 #include <chrono>
 #include <thread>
+#include <mutex>
+#include <string>
+#ifdef _WIN32
+// windows.h min/max macros would collide with std::min/std::max in nlohmann/json.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <nlohmann/json.hpp>
 
 #include "ui/notifications.h"
@@ -261,7 +273,157 @@ static bool reset_memory_buffer(MemoryBuf *chunk)
     return chunk->memory != NULL;
 }
 
-static FetchResult http_fetch(const char *url)
+// libcurl requires curl_global_init() before any other call; call_once makes
+// the lazy init safe from the UI thread and both fetch workers.
+static void ensure_curl_global_init(void)
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        const CURLcode rc = curl_global_init(CURL_GLOBAL_DEFAULT);
+        if (rc != CURLE_OK)
+            LOG_ERROR("curl_global_init failed: %s (%d)",
+                      curl_easy_strerror(rc), (int)rc);
+        else
+            LOG_DEBUG("libcurl %s initialised", curl_version());
+    });
+}
+
+// Used only for CA-bundle probing, so fopen() avoids a <filesystem> dependency.
+static bool path_is_file(const std::string &path)
+{
+    if (path.empty()) return false;
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+    fclose(f);
+    return true;
+}
+
+// Portable bundles place data next to the binary; fall back to the CWD.
+static std::string executable_dir(void)
+{
+#ifdef _WIN32
+    char buf[MAX_PATH] = {0};
+    const DWORD n = GetModuleFileNameA(NULL, buf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH)
+    {
+        std::string path(buf, (size_t)n);
+        const size_t slash = path.find_last_of("\\/");
+        if (slash != std::string::npos) return path.substr(0, slash);
+    }
+#endif
+    return std::string(".");
+}
+
+// A static OpenSSL libcurl has no compiled-in trust path, so the Windows build
+// fails the handshake with CURLE_SSL_CACERT without this. Returns "" if none.
+static std::string resolve_ca_bundle(void)
+{
+    const char *const env_names[] = { "CURL_CA_BUNDLE", "SSL_CERT_FILE" };
+    for (const char *name : env_names)
+    {
+        const char *v = getenv(name);
+        if (v && *v && path_is_file(v)) return std::string(v);
+    }
+
+    const char *const file_names[] = {
+        "ca-bundle.crt", "cacert.pem", "curl-ca-bundle.crt", "ca-bundle.pem"
+    };
+    const std::string exe_dir = executable_dir();
+    const std::string dirs[] = { exe_dir, exe_dir + "/themes" };
+    for (const std::string &dir : dirs)
+    {
+        if (dir.empty()) continue;
+        for (const char *name : file_names)
+        {
+            const std::string path = dir + "/" + name;
+            if (path_is_file(path)) return path;
+        }
+    }
+    return std::string();
+}
+
+#ifdef _WIN32
+// libcurl only reads the *_proxy environment variables, never the WinINET
+// setting, so read the current-user proxy here. Returns "" when unset.
+static std::string resolve_windows_system_proxy(const char *url)
+{
+    HKEY key = NULL;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER,
+                      "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
+                      0, KEY_READ, &key) != ERROR_SUCCESS)
+        return std::string();
+
+    DWORD enable = 0, enable_size = sizeof(enable), enable_type = 0;
+    const bool enabled =
+        RegQueryValueExA(key, "ProxyEnable", NULL, &enable_type,
+                         (LPBYTE)&enable, &enable_size) == ERROR_SUCCESS &&
+        enable_type == REG_DWORD && enable != 0;
+
+    char server[512] = {0};
+    DWORD server_size = sizeof(server) - 1, server_type = 0;
+    const bool has_server =
+        RegQueryValueExA(key, "ProxyServer", NULL, &server_type,
+                         (LPBYTE)server, &server_size) == ERROR_SUCCESS &&
+        (server_type == REG_SZ || server_type == REG_EXPAND_SZ) && server[0];
+    RegCloseKey(key);
+
+    if (!enabled || !has_server) return std::string();
+
+    // "host:port" or a per-scheme list "http=h:p;https=h:p;socks=h:p".
+    const std::string spec(server);
+    if (spec.find('=') == std::string::npos) return spec;
+
+    const bool https = strncmp(url, "https://", 8) == 0;
+    const char *want = https ? "https=" : "http=";
+    size_t pos = 0;
+    while (pos < spec.size())
+    {
+        const size_t end = spec.find(';', pos);
+        const std::string part =
+            spec.substr(pos, (end == std::string::npos) ? std::string::npos : end - pos);
+        if (part.compare(0, strlen(want), want) == 0 && part.size() > strlen(want))
+            return part.substr(strlen(want));
+        if (end == std::string::npos) break;
+        pos = end + 1;
+    }
+    return std::string();
+}
+#endif
+
+// Keeps verification ON and points CURLOPT_CAINFO at whatever bundle we find.
+static void apply_tls_trust(CURL *curl, const char *url)
+{
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    const std::string ca = resolve_ca_bundle();
+    if (!ca.empty())
+    {
+        curl_easy_setopt(curl, CURLOPT_CAINFO, ca.c_str());
+        LOG_DEBUG("TLS CA bundle for %s: %s", url, ca.c_str());
+        return;
+    }
+
+    LOG_WARN("No CA bundle found for %s (set CURL_CA_BUNDLE or place "
+             "ca-bundle.crt next to the executable); TLS may fail to verify",
+             url);
+
+    // An empty built-in path means no trust store, so every handshake fails TLS.
+#if LIBCURL_VERSION_NUM >= 0x075400
+    const char *builtin_ca = NULL;
+    if (curl_easy_getinfo(curl, CURLINFO_CAINFO, &builtin_ca) == CURLE_OK)
+        LOG_WARN("libcurl built-in CAINFO for %s: %s", url,
+                 (builtin_ca && *builtin_ca) ? builtin_ca : "(none)");
+#endif
+
+    // Schannel honours this, OpenSSL ignores it: a harmless best-effort fallback.
+#ifdef CURLSSLOPT_NATIVE_CA
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+}
+
+// keep_error_body: hand back a non-2xx body (success stays false) for Horizons.
+static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
 {
     FetchResult result = {0};
     result.success = false;
@@ -274,6 +436,8 @@ static FetchResult http_fetch(const char *url)
         LOG_ERROR("Failed to allocate HTTP response buffer");
         return result;
     }
+
+    ensure_curl_global_init();
 
     CURL *curl = curl_easy_init();
     if (!curl)
@@ -292,6 +456,16 @@ static FetchResult http_fetch(const char *url)
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
 
     size_t proxy_count = 1;
+#ifdef _WIN32
+    {
+        const std::string sys_proxy = resolve_windows_system_proxy(url);
+        if (!sys_proxy.empty())
+        {
+            curl_easy_setopt(curl, CURLOPT_PROXY, sys_proxy.c_str());
+            LOG_DEBUG("Windows system proxy for %s: %s", url, sys_proxy.c_str());
+        }
+    }
+#endif
 #ifdef __APPLE__
     auto env_set = [](const char *name) {
         const char *value = getenv(name);
@@ -326,9 +500,7 @@ static FetchResult http_fetch(const char *url)
              TLESCOPE_VERSION);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
 
-#if defined(_WIN32) || defined(_WIN64)
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-#endif
+    apply_tls_trust(curl, url);
 
     const int max_attempts = 3;
     CURLcode res = CURLE_OK;
@@ -386,6 +558,7 @@ static FetchResult http_fetch(const char *url)
 
     curl_easy_cleanup(curl);
     result.http_code = http_code;
+    result.curl_code = (int)res;
 
     if (res == CURLE_OK && http_status_success(http_code))
     {
@@ -397,15 +570,39 @@ static FetchResult http_fetch(const char *url)
     else
     {
         if (res == CURLE_OK)
+        {
             LOG_ERROR("HTTP fetch failed: %s (HTTP %ld)", url, http_code);
+            if (keep_error_body)
+            {
+                result.data = chunk.memory;
+                result.size = chunk.size;
+            }
+            else
+            {
+                free(chunk.memory);
+            }
+        }
         else
-            LOG_ERROR("HTTP transport failed: %s (%s)", url, curl_easy_strerror(res));
-        free(chunk.memory);
+        {
+            // no status line: the CURLcode distinguishes DNS/TLS/connect/timeout
+            LOG_ERROR("HTTP transport failed: %s (%s, CURLcode %d)",
+                      url, curl_easy_strerror(res), (int)res);
+            if (res == CURLE_PEER_FAILED_VERIFICATION ||
+                res == CURLE_SSL_CONNECT_ERROR || res == CURLE_SSL_CACERT)
+                LOG_ERROR("TLS trust failure for %s: place a PEM bundle next to "
+                          "the executable or set CURL_CA_BUNDLE", url);
+            free(chunk.memory);
+        }
     }
 
     return result;
 }
 
+/* Caller owns result.data; release it with FreeFetchResult(). */
+FetchResult HttpFetchURL(const char *url)
+{
+    return http_fetch_ex(url, true);
+}
 
 static FetchResult file_fetch(const char *filename)
 {
@@ -495,7 +692,7 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
 
     LOG_DEBUG("Cache MISS for %s - fetching from network", url);
     // fetch from network
-    result = http_fetch(url);
+    result = http_fetch_ex(url, false);
     if (result.success)
     {
         result.format = format;
@@ -536,7 +733,7 @@ int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_
     if (!groups || max_groups <= 0) return -1;
 
     const char *url = "https://retlector.eu/api/v1/groups";
-    FetchResult result = http_fetch(url);
+    FetchResult result = http_fetch_ex(url, false);
     if (out_http_code) *out_http_code = result.http_code;
     if (!result.success)
     {
@@ -747,7 +944,7 @@ FetchResult FetchFromCustomURL(const char *url)
     }
 
     LOG_INFO("Fetching custom URL: %s", url);
-    result = http_fetch(url);
+    result = http_fetch_ex(url, false);
 
     if (result.success)
     {

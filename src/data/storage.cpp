@@ -2,12 +2,18 @@
 #include "core/types.h"
 #include "core/astro.h"
 #include "core/config.h"
+#include "data/ephem.h"
 #include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <raylib.h>
+#include <raymath.h>
+
+#include <map>
+#include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -22,24 +28,179 @@ const char* FormatToString(OrbitalDataFormat fmt)
         case FORMAT_OMM_CSV:  return "OMM_CSV";
         case FORMAT_OMM_XML:  return "OMM_XML";
         case FORMAT_OMM_KVN:  return "OMM_KVN";
+        case FORMAT_HORIZONS_VECTORS: return "horizons_vectors";
         default:              return "UNKNOWN";
     }
 }
 
 OrbitalDataFormat StringToFormat(const char *str)
 {
-    if (!str) return FORMAT_UNKNOWN;
+    // unknown/missing strings fall back to FORMAT_TLE so old data.json still loads
+    if (!str) return FORMAT_TLE;
     if (strcmp(str, "TLE") == 0)      return FORMAT_TLE;
     if (strcmp(str, "OMM_JSON") == 0) return FORMAT_OMM_JSON;
     if (strcmp(str, "OMM_CSV") == 0)  return FORMAT_OMM_CSV;
     if (strcmp(str, "OMM_XML") == 0)  return FORMAT_OMM_XML;
     if (strcmp(str, "OMM_KVN") == 0)  return FORMAT_OMM_KVN;
-    return FORMAT_UNKNOWN;
+    if (strcmp(str, "horizons_vectors") == 0) return FORMAT_HORIZONS_VECTORS;
+    if (strcmp(str, "HORIZONS_VECTORS") == 0) return FORMAT_HORIZONS_VECTORS;
+    return FORMAT_TLE;
 }
 
 static void copy_str(char *dst, size_t dst_size, const std::string &src)
 {
     snprintf(dst, dst_size, "%s", src.c_str());
+}
+
+// -- Ephemeris mission serialization ----------------------------------------
+// Missions are persisted inline in data.json under a top-level "ephem" array.
+// Each mission stores its samples as one compact string of
+//   t|px|py|pz|vx|vy|vz|lat|lon|sunlit
+// tuples joined by ';'. Older builds simply ignore the unknown key; newer
+// builds rebuild the registry from it on load.
+
+static std::string ephem_samples_to_string(const EphemMission *m)
+{
+    std::string out;
+    if (!m)
+        return out;
+
+    size_t n = m->s.size();
+    if (n > (size_t)EPHEM_MAX_SAMPLES)
+        n = (size_t)EPHEM_MAX_SAMPLES;
+    out.reserve(n * 96);
+
+    char buf[256];
+    for (size_t i = 0; i < n; ++i)
+    {
+        const EphemSample &s = m->s[i];
+        snprintf(buf, sizeof(buf), "%s%.6f|%.6f|%.6f|%.6f|%.6f|%.6f|%.6f|%.6f|%.6f|%d",
+                 (i ? ";" : ""), s.t_unix, (double)s.p.x, (double)s.p.y, (double)s.p.z,
+                 (double)s.v.x, (double)s.v.y, (double)s.v.z, (double)s.lat, (double)s.lon,
+                 s.sunlit ? 1 : 0);
+        out += buf;
+    }
+    return out;
+}
+
+/* parse the compact sample string; malformed tuples are skipped, never fatal */
+static void ephem_samples_from_string(const std::string &text, EphemMission *m)
+{
+    m->s.clear();
+    size_t pos = 0;
+    while (pos <= text.size())
+    {
+        const size_t end = text.find(';', pos);
+        const std::string item =
+            text.substr(pos, (end == std::string::npos) ? std::string::npos : end - pos);
+        if (!item.empty())
+        {
+            double t = 0.0, px = 0.0, py = 0.0, pz = 0.0, vx = 0.0, vy = 0.0, vz = 0.0;
+            double lat = 0.0, lon = 0.0;
+            int sunlit = 0;
+            if (sscanf(item.c_str(), "%lf|%lf|%lf|%lf|%lf|%lf|%lf|%lf|%lf|%d",
+                       &t, &px, &py, &pz, &vx, &vy, &vz, &lat, &lon, &sunlit) == 10)
+            {
+                EphemSample s = {};
+                s.t_unix = t;
+                s.p.x = (float)px;
+                s.p.y = (float)py;
+                s.p.z = (float)pz;
+                s.v.x = (float)vx;
+                s.v.y = (float)vy;
+                s.v.z = (float)vz;
+                s.lat = (float)lat;
+                s.lon = (float)lon;
+                s.gmst = 0.0; /* not persisted; recomputed on demand */
+                s.sunlit = (sunlit != 0);
+                m->s.push_back(s);
+                if (m->s.size() >= (size_t)EPHEM_MAX_SAMPLES)
+                    break;
+            }
+        }
+        if (end == std::string::npos)
+            break;
+        pos = end + 1;
+    }
+
+    if (!m->s.empty())
+    {
+        m->t0_unix = m->s.front().t_unix;
+        m->t1_unix = m->s.back().t_unix;
+    }
+}
+
+static void write_ephem_missions(nlohmann::json &arr)
+{
+    const int n = EphemCount();
+    for (int i = 0; i < n; ++i)
+    {
+        const EphemMission *m = EphemGet(i);
+        if (!m)
+            continue;
+        arr.push_back(nlohmann::json{
+            {"id", m->id},
+            {"name", m->name},
+            {"target", m->target},
+            {"norad", m->norad_id_num},
+            {"t0", m->t0_unix},
+            {"t1", m->t1_unix},
+            {"samples", ephem_samples_to_string(m)}});
+    }
+}
+
+// rebuilds the ephemeris registry; EphemClear() runs first so loads never accumulate
+static std::map<int, int> load_ephem_missions(const nlohmann::json &root)
+{
+    std::map<int, int> id_map;
+
+    EphemClear();
+
+    auto it = root.find("ephem");
+    if (it == root.end() || !it->is_array())
+        return id_map;
+
+    size_t limit = it->size();
+    if (limit > (size_t)EPHEM_MAX_MISSIONS)
+        limit = (size_t)EPHEM_MAX_MISSIONS;
+
+    for (size_t i = 0; i < limit; ++i)
+    {
+        const nlohmann::json &o = it->at(i);
+        if (!o.is_object())
+            continue;
+
+        const std::string samples = o.value("samples", std::string());
+        if (samples.empty())
+            continue;
+
+        EphemMission m;
+        m.id = 0;
+        copy_str(m.name, sizeof(m.name), o.value("name", std::string()));
+        copy_str(m.target, sizeof(m.target), o.value("target", std::string()));
+        m.norad_id_num = (uint32_t)o.value("norad", 0u);
+        m.t0_unix = o.value("t0", 0.0);
+        m.t1_unix = o.value("t1", 0.0);
+
+        ephem_samples_from_string(samples, &m);
+        if (m.s.size() < 2)
+        {
+            LOG_WARN("Skipping ephemeris mission '%s': unusable sample data", m.name);
+            continue;
+        }
+
+        const int old_id = (int)o.value("id", 0);
+        const int new_id = EphemAdd(m);
+        if (new_id == 0)
+        {
+            LOG_WARN("Ephemeris registry full while restoring mission '%s'", m.name);
+            break;
+        }
+        if (old_id != 0)
+            id_map[old_id] = new_id;
+    }
+
+    return id_map;
 }
 
 // -- Satellite serialization ------------------------------------------------
@@ -63,6 +224,10 @@ static void write_satellite(nlohmann::json &arr, const Satellite *sat, int index
     j["semi_major_axis"] = sat->semi_major_axis;
     j["bstar"] = sat->bstar;
     j["is_active"] = sat->is_active;
+    /* persisted explicitly for forward compatibility; "sgp4" is the default */
+    j["kind"] = (sat->kind == SAT_KIND_EPHEM) ? "ephem" : "sgp4";
+    if (sat->kind == SAT_KIND_EPHEM)
+        j["ephem_id"] = sat->ephem_id;
     j["data_meta"] = nlohmann::json{
         {"source_name", sat->data_meta.source_name},
         {"format", FormatToString(sat->data_meta.format)},
@@ -74,6 +239,8 @@ static void write_satellite(nlohmann::json &arr, const Satellite *sat, int index
 static bool read_satellite_obj(const nlohmann::json &j, Satellite *sat)
 {
     memset(sat, 0, sizeof(Satellite));
+    // kind defaults to SAT_KIND_SGP4 (zero value); ephem_id is -1 when unassigned
+    sat->ephem_id = -1;
 
     const nlohmann::json &data_meta = j.value("data_meta", nlohmann::json::object());
 
@@ -92,6 +259,12 @@ static bool read_satellite_obj(const nlohmann::json &j, Satellite *sat)
     sat->semi_major_axis = j.value("semi_major_axis", 0.0);
     sat->bstar = j.value("bstar", 0.0);
     sat->is_active = j.value("is_active", false);
+
+    // "kind" is absent in pre-ephemeris files, and unknown values, mean SGP4
+    const std::string kind_str = j.value("kind", std::string("sgp4"));
+    sat->kind = (kind_str == "ephem") ? SAT_KIND_EPHEM : SAT_KIND_SGP4;
+    if (sat->kind == SAT_KIND_EPHEM)
+        sat->ephem_id = (int)j.value("ephem_id", -1);
 
     // parse nested data_meta
     copy_str(sat->data_meta.source_name, sizeof(sat->data_meta.source_name), data_meta.value("source_name", ""));
@@ -116,6 +289,15 @@ bool SaveOrbitalData(const char *filename, Satellite *sats, int count)
     for (int i = 0; i < count; i++)
         write_satellite(arr, &sats[i], i);
     root["satellites"] = arr;
+
+    // omit the key when no mission exists so clean files stay byte-identical
+    if (EphemCount() > 0)
+    {
+        nlohmann::json ephem_arr = nlohmann::json::array();
+        write_ephem_missions(ephem_arr);
+        if (!ephem_arr.empty())
+            root["ephem"] = ephem_arr;
+    }
 
     FILE *f = fopen(filename, "w");
     if (!f) {
@@ -158,6 +340,9 @@ static bool parse_orbital_json(const char *text, Satellite *sats, int *count, in
         return false;
     }
 
+    // rebuild missions first; the map translates persisted ids to this run's ids
+    const std::map<int, int> ephem_id_map = load_ephem_missions(root);
+
     int loaded = 0;
     for (size_t i = 0; i < sats_arr->size() && loaded < max; i++)
     {
@@ -173,6 +358,26 @@ static bool parse_orbital_json(const char *text, Satellite *sats, int *count, in
                 read_satellite_obj(sat_node, &sats[loaded]);
                 loaded++;
             }
+        }
+    }
+
+    // remap persisted ephem ids; an unrestorable mission degrades to inactive SGP4
+    for (int i = 0; i < loaded; i++)
+    {
+        Satellite *sat = &sats[i];
+        if (sat->kind != SAT_KIND_EPHEM)
+            continue;
+        const auto it = ephem_id_map.find(sat->ephem_id);
+        if (it != ephem_id_map.end() && EphemGetById(it->second) != NULL)
+        {
+            sat->ephem_id = it->second;
+        }
+        else
+        {
+            LOG_WARN("Ephemeris mission for satellite '%s' unavailable; deactivating", sat->name);
+            sat->kind = SAT_KIND_SGP4;
+            sat->ephem_id = -1;
+            sat->is_active = false;
         }
     }
 

@@ -1,10 +1,7 @@
 #ifndef ASTRO_H
 #define ASTRO_H
 
-/**
- * @file astro.h
- * @brief Orbital mechanics, pass prediction, and coordinate transforms
- */
+// Orbital mechanics, pass prediction and coordinate transforms.
 
 #include "types.h"
 
@@ -66,14 +63,27 @@ bool add_satellite_from_omm_elements_to(Satellite *sats, int *count,
 
 double normalize_epoch(double epoch);
 double get_unix_from_epoch(double epoch);
+/* inverse of get_unix_from_epoch(): unix seconds -> year*1000 + fractional day-of-year */
+double get_epoch_from_unix(double t_unix);
 
 // orbit math stuff
 Vector3 calculate_sun_position(double current_time_days);
+// Earth->Sun distance in km; calculate_sun_position() returns a normalised direction.
+double calculate_sun_distance_km(double current_time_days);
 bool is_sat_eclipsed(Vector3 pos_km, Vector3 sun_dir_norm);
 void get_map_coordinates(Vector3 pos, double gmst_deg, float earth_offset, float map_w, float map_h,
                          float *out_x, float *out_y);
 Vector3 calculate_position(Satellite *sat, double current_unix);
 Vector3 calculate_velocity(Satellite *sat, double current_unix);
+
+/* true for tabulated ephemeris missions (JPL Horizons VECTORS) */
+static inline bool SatIsEphem(const Satellite *sat)
+{
+    return sat != NULL && sat->kind == SAT_KIND_EPHEM;
+}
+
+// SGP4 needs a positive mean motion; ephem missions need a live registry entry.
+bool SatHasTracks(const Satellite *sat);
 Vector3 calculate_moon_position(double current_time_days);
 
 /* geocentric lunar orbit sampling (one sidereal month) */

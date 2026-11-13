@@ -1,20 +1,6 @@
-/*
- * labels.cpp - Screen-space label overlay for the 3D/2D scene.
- *
- * Replaces the old raylib DrawTextEx/DrawUIText label calls in main.cpp with a
- * unified Dear ImGui draw-list overlay. Labels are collected each frame,
- * projected to screen space, decluttered by priority and alternate placement, and
- * rendered via ImGui::GetBackgroundDrawList() so they draw on top of the scene
- * with full theme support (text shadow / background for contrast).
- *
- * Config is stored in the generic ToolSettings store (see tools_settings.h):
- *   labels.enabled       bool   master switch (default true)
- *   labels.mode          int    0=selected only (Sel), 1=all active (All)
- *   labels.show_altitude bool   append altitude (km) to satellite labels
- *   labels.size          float  scale multiplier on the UI font (default 1.0)
- *   labels.background    bool   draw a rounded background behind text
- *   labels.max_count     int    declutter cap (default 200)
- */
+// Screen-space label overlay for the 3D/2D scene, drawn via the ImGui background
+// draw list. Config lives in the generic ToolSettings store (labels.enabled,
+// labels.mode, labels.show_altitude, labels.size, labels.background, labels.max_count).
 
 #include "labels.h"
 #include "imgui_theme.h"
@@ -49,11 +35,22 @@ struct LabelCandidate
     float size;
     float marker_half = 0.0f;
     bool centered = false;
+    // zoom-fade factor (1.0 = full); satellite labels stay at 1.0
+    float alpha = 1.0f;
 };
 
 static ImU32 ToImU32(Color c)
 {
     return IM_COL32(c.r, c.g, c.b, c.a);
+}
+
+/* multiply an ImGui packed colour's alpha by `a` (keeps rgb untouched) */
+static ImU32 ScaleAlphaU32(ImU32 col, float a)
+{
+    int alpha = (int)((float)((col >> IM_COL32_A_SHIFT) & 0xFF) * a + 0.5f);
+    if (alpha < 0) alpha = 0;
+    if (alpha > 255) alpha = 255;
+    return (col & ~IM_COL32_A_MASK) | ((ImU32)alpha << IM_COL32_A_SHIFT);
 }
 
 /* -- Decluttering ---------------------------------------------------------- */
@@ -75,8 +72,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
     if (!enabled) return;
 
     int mode = ToolSettingGetInt(cfg, LABELS_KEY_MODE, LABELS_MODE_SELECTED_ONLY);
-    /* normalize: only Sel (0), All (1), and Fav (2) are valid now; treat other
-     * legacy values (e.g. the old "None" = 2) as the default Sel scope */
+    // only Sel/All/Fav are valid; any legacy value falls back to Sel
     if (mode != LABELS_MODE_ALL && mode != LABELS_MODE_FAV)
         mode = LABELS_MODE_SELECTED_ONLY;
     bool show_alt = ToolSettingGetBool(cfg, LABELS_KEY_ALTITUDE, false);
@@ -101,6 +97,19 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
 
     bool is_2d = ctx->is_2d_view ? *ctx->is_2d_view : false;
     bool hide_unselected = ctx->hide_unselected ? *ctx->hide_unselected : false;
+
+    // zoom fade matching main.cpp's MarkerZoomAlpha, from the live camera; satellite
+    // labels never fade, the other categories inherit label_alpha
+    float label_alpha = 1.0f;
+    // mirrors dots_dominate in main.cpp: skip Earth occlusion once the dot wins
+    bool sat_dot_dominates = false;
+    if (!is_2d && ctx->camera3d)
+    {
+        const float cam_dist = Vector3Distance(ctx->camera3d->position, ctx->camera3d->target);
+        label_alpha = MarkerZoomAlpha(cam_dist, EARTH_RADIUS_KM / DRAW_SCALE);
+        sat_dot_dominates = label_alpha <= 0.5f;
+    }
+
     bool is_pov = ctx->is_pov_mode ? *ctx->is_pov_mode : false;
     double epoch = ctx->current_epoch ? *ctx->current_epoch : 0.0;
     double epoch_unix = get_unix_from_epoch(epoch);
@@ -189,7 +198,10 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             Vector3 camForward = Vector3Normalize(Vector3Subtract(ctx->camera3d->target, ctx->camera3d->position));
             float draw_earth_radius = EARTH_RADIUS_KM / DRAW_SCALE;
             if (Vector3DotProduct(toTarget, camForward) <= 0.0f) continue;
-            if (IsOccludedByEarth(ctx->camera3d->position, draw_pos, draw_earth_radius)) continue;
+            // Earth occlusion only matters while the icon dominates (see dots_dominate)
+            if (!sat_dot_dominates &&
+                IsOccludedByEarth(ctx->camera3d->position, draw_pos, draw_earth_radius))
+                continue;
             Vector2 sp = WorldToScreenViewport3D(draw_pos, *ctx->camera3d);
             anchor = ImVec2(sp.x, sp.y);
         }
@@ -207,9 +219,8 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         c.anchor = anchor;
         c.size = size;
         c.marker_half = icon_half;
-        /* the selected/hovered satellite's name always wins decluttering:
-         * it must outrank its own apo/peri labels (priority 5) and every
-         * other satellite label so the focused sat is never occluded */
+        c.alpha = 1.0f; // satellite labels never fade
+        // the selected/hovered name outranks every other label so it is never occluded
         if (is_selected)      { c.color = ToImU32(g_theme.world.sat_selected);   c.priority = 10; }
         else if (is_hovered)  { c.color = ToImU32(g_theme.world.sat_hover); c.priority = 9; }
         else if (is_active)   { c.color = ToImU32(g_theme.world.sat_hover); c.priority = 2; }
@@ -217,8 +228,8 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         cands.push_back(c);
     }
 
-    // apsis labels (active sat)
-    if (cfg->show_apsides && active && active->is_active)
+    // apsis labels: a mission has no apsides, so guarding here avoids a NaN position
+    if (label_alpha > 0.001f && cfg->show_apsides && active && active->is_active && !SatIsEphem(active))
     {
         bool is_unselected = (selected != NULL && active != selected);
         if (!(hide_unselected && is_unselected))
@@ -241,6 +252,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     c.priority = 5;
                     c.size = size;
                     c.marker_half = 16.0f * ui_scale;
+                    c.alpha = label_alpha;
                     cands.push_back(c);
                 }
                 if (!IsOccludedByEarth(ctx->camera3d->position, draw_a, draw_earth_radius))
@@ -253,6 +265,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                     c.priority = 5;
                     c.size = size;
                     c.marker_half = 16.0f * ui_scale;
+                    c.alpha = label_alpha;
                     cands.push_back(c);
                 }
             }
@@ -273,6 +286,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 c.priority = 5;
                 c.size = size;
                 c.marker_half = 16.0f * ui_scale;
+                c.alpha = label_alpha;
                 cands.push_back(c);
 
                 snprintf(c.text, sizeof(c.text), "A %.0f km", calc_apogee_km(active, epoch_unix));
@@ -281,13 +295,14 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                 c.priority = 5;
                 c.size = size;
                 c.marker_half = 16.0f * ui_scale;
+                c.alpha = label_alpha;
                 cands.push_back(c);
             }
         }
     }
 
-    /* ---- home + location labels ---- */
-    if (cfg->show_markers)
+    /* ---- home + location labels ---- faded category, skipped once the ramp hits 0 */
+    if (label_alpha > 0.001f && cfg->show_markers)
     {
         Location *home = GetHomeLocation();
         if (home)
@@ -298,6 +313,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             c.priority = 2;
             c.size = size;
             c.marker_half = icon_half;
+            c.alpha = label_alpha;
             if (is_2d && ctx->camera2d)
             {
                 float hx = (home->lon / 360.0f) * ctx->map_w;
@@ -339,6 +355,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             c.priority = 1;
             c.size = size;
             c.marker_half = icon_half;
+            c.alpha = label_alpha;
             if (is_2d && ctx->camera2d)
             {
                 float mx = (locations[i].lon / 360.0f) * ctx->map_w;
@@ -372,8 +389,8 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
         }
     }
 
-    /* ---- slant range label ---- */
-    if (cfg->show_slant_range && active && active->is_active)
+    /* ---- slant range label ---- faded category, skipped once the ramp hits 0 */
+    if (label_alpha > 0.001f && cfg->show_slant_range && active && active->is_active)
     {
         Location *home = GetHomeLocation();
         if (home)
@@ -385,6 +402,7 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
             c.priority = 5;
             c.size = size;
             c.centered = true;
+            c.alpha = label_alpha;
             if (is_2d && ctx->camera2d)
             {
                 float sx, sy;
@@ -432,12 +450,12 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
                          return a.priority > b.priority;
                      });
 
-    ImU32 bg_col = ToImU32(ThemeAlpha(g_theme.ui.bg, 0.82f));
-    ImU32 border_col = IM_COL32(255, 255, 255, 36);
-    ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
+    // base chrome colours; each label scales them by its own alpha below
+    const ImU32 bg_base = ToImU32(ThemeAlpha(g_theme.ui.bg, 0.82f));
+    const ImU32 border_base = IM_COL32(255, 255, 255, 36);
+    const ImU32 shadow_base = IM_COL32(0, 0, 0, 200);
 
-    /* clip to the 2D map rect (or the screen in 3D) so labels never bleed
-     * past the map edge like the old scissor-mode rendering prevented */
+    // clip to the 2D map rect (or the screen in 3D) so labels never bleed past its edge
     dl->PushClipRect(clipMin, clipMax, true);
 
     std::vector<ImVec2> placedMin, placedMax;
@@ -506,18 +524,19 @@ void DrawSceneLabels(UIContext *ctx, AppConfig *cfg)
 
         if (!found) continue;
 
-        /* draw */
+        // chrome and text share this label's own alpha
         if (use_bg)
         {
-            dl->AddRectFilled(rmin, rmax, bg_col, UIPx(4.0f));
-            dl->AddRect(rmin, rmax, border_col, UIPx(4.0f));
+            dl->AddRectFilled(rmin, rmax, ScaleAlphaU32(bg_base, c.alpha), UIPx(4.0f));
+            dl->AddRect(rmin, rmax, ScaleAlphaU32(border_base, c.alpha), UIPx(4.0f));
         }
         else
         {
             /* text shadow for contrast without a background box */
-            dl->AddText(font, c.size, ImVec2(text_pos.x + UIPx(1.0f), text_pos.y + UIPx(1.0f)), shadow_col, c.text);
+            dl->AddText(font, c.size, ImVec2(text_pos.x + UIPx(1.0f), text_pos.y + UIPx(1.0f)),
+                        ScaleAlphaU32(shadow_base, c.alpha), c.text);
         }
-        dl->AddText(font, c.size, text_pos, c.color, c.text);
+        dl->AddText(font, c.size, text_pos, ScaleAlphaU32(c.color, c.alpha), c.text);
 
         placedMin.push_back(rmin);
         placedMax.push_back(rmax);

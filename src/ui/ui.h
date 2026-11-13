@@ -136,6 +136,14 @@ typedef struct
     /* file dialog */
     FileDialog file_dialog_tle;
 
+    /* ephemeris mission import (JPL Horizons VECTORS) */
+    FileDialog file_dialog_ephem;  /* separate instance: both sections poll draw() every frame */
+    bool ephem_modal_open;         /* "Add Mission" modal visibility            */
+    char ephem_name_buf[48];       /* editable mission name                     */
+    char ephem_target_buf[32];     /* editable Horizons target id/name          */
+    char ephem_path_buf[512];      /* last picked file, shown in the modal      */
+    char ephem_error[256];         /* parse/import error, empty when clean      */
+
     /* pass state */
     int selected_pass_idx;
     bool multi_pass_mode;
@@ -170,6 +178,8 @@ typedef struct
     bool *is_auto_warping;
     double *auto_warp_target;
     double *auto_warp_initial_diff;
+    // when true the active auto-warp ignores MAX_TIME_MULTIPLIER for ephem window jumps
+    bool *auto_warp_unbounded;
     // sim clock slaved to the wall clock; false after a manual date jump so the live lock doesn't snap back to "now"
     bool *live_follow;
     bool *is_2d_view;

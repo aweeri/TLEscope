@@ -92,6 +92,39 @@ inline void Viewport3DResetGL(void)
     rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
 }
 
+// Zoom is unbounded but rlgl's clip planes are fixed (near 0.05, far 4000), so
+// derive both from the camera distance: far = max(4000, dist*4, |cam|+700) and
+// near = max(dist*1e-4, 0.05). Near must NOT be capped: a tiny near with an
+// unbounded far blows the ratio past the 24-bit depth buffer and the whole scene
+// (skybox included) goes black.
+inline float g_scene_far_extra = 0.0f;
+
+inline float Viewport3DCameraFar(const Camera &cam)
+{
+    const float dist   = Vector3Distance(cam.position, cam.target);
+    const float origin = Vector3Length(cam.position);
+    float far_plane = 4000.0f;
+    if (isfinite(dist) && isfinite(origin))
+        far_plane = fmaxf(fmaxf(4000.0f, dist * 4.0f), origin + 700.0f);
+    if (isfinite(g_scene_far_extra) && g_scene_far_extra > far_plane)
+        far_plane = g_scene_far_extra;
+    return far_plane;
+}
+
+inline float Viewport3DCameraNear(const Camera &cam)
+{
+    const float dist = Vector3Distance(cam.position, cam.target);
+    if (!isfinite(dist))
+        return 0.05f;
+    return fmaxf(dist * 1e-4f, 0.05f);
+}
+
+/** push the adaptive near/far into rlgl; must be called before BeginMode3D */
+inline void Viewport3DApplyClipPlanes(const Camera &cam)
+{
+    rlSetClipPlanes((double)Viewport3DCameraNear(cam), (double)Viewport3DCameraFar(cam));
+}
+
 /** match the projection aspect to the sub-rect so the 3D content is not stretched */
 inline void Viewport3DFixProjection(Camera cam)
 {
@@ -105,6 +138,30 @@ inline void Viewport3DFixProjection(Camera cam)
     rlLoadIdentity();
     rlFrustum(-right, right, -top, top, nearz, farz);
     rlMatrixMode(RL_MODELVIEW);
+}
+
+// Fade markers out as the Earth shrinks to a speck: 1.0 up to 12x its drawn
+// radius, smoothstep to 0.0 at 40x. Non-finite or non-positive inputs return 1.0.
+inline float MarkerZoomAlpha(float cam_distance, float earth_radius)
+{
+    constexpr float FADE_START = 12.0f;
+    constexpr float FADE_END   = 40.0f;
+
+    if (!isfinite(cam_distance) || !isfinite(earth_radius) ||
+        cam_distance <= 0.0f || earth_radius <= 0.0f)
+        return 1.0f;
+
+    const float d0 = FADE_START * earth_radius;
+    const float d1 = FADE_END * earth_radius;
+    if (cam_distance <= d0) return 1.0f;
+    if (cam_distance >= d1) return 0.0f;
+
+    float t = (cam_distance - d0) / (d1 - d0);
+    t = t * t * (3.0f - 2.0f * t);
+    const float a = 1.0f - t;
+    if (a < 0.0f) return 0.0f;
+    if (a > 1.0f) return 1.0f;
+    return a;
 }
 
 /** world -> logical screen coords, offset for the sub-rect */

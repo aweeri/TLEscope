@@ -55,9 +55,20 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
     if (ImGui::SliderFloat("Time Span", &pass_time_span_hours, 1.0f, 72.0f, "%.0f h"))
         ToolSettingSetFloat(cfg, "passes.time_span_hours", pass_time_span_hours);
 
+    /* tabulated ephemeris missions have no orbital elements to scan for AOS/LOS */
+    Satellite *sel_sat = *ctx->selected_sat;
+    if (s_mode == 0 && SatIsEphem(sel_sat))
+    {
+        ImGui::Separator();
+        ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
+                           "Pass prediction is not available for ephemeris missions.");
+        ImGui::PopTextWrapPos();
+        return;
+    }
+
     /* shared with the Transit panel: recompute only when inputs change */
     double now = *ctx->current_epoch;
-    if (EnsurePassesUpToDate((unsigned int)s_mode, *ctx->selected_sat, now))
+    if (EnsurePassesUpToDate((unsigned int)s_mode, sel_sat, now))
         s_last_calc_epoch = now;
 
     ImGui::Separator();

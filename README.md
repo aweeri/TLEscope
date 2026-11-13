@@ -27,7 +27,7 @@ TLEscope is a satellite visualization and tracking tool designed to transform or
   - CCSDS OMM CSV
   - CCSDS OMM XML
   - CCSDS OMM KVN (Key-Value Notation)
-
+  - JPL Horizons VECTORS ephemeris exports [EXPERIMENTAL]
 - **Online Data Fetching**: Fetch orbital data directly from:
   - [CelesTrak](https://celestrak.org/) — built-in source groups (stations, visual, weather, etc.)
   - [ReTLEctor](https://github.com/MrTalon63/retlector) — CelesTrak mirror for frequent queries

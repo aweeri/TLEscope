@@ -11,9 +11,12 @@
 #include "core/theme.h"
 #include "core/location.h"
 #include "core/config.h"
+#include "data/ephem.h"
 
 #include <cstdio>
 #include <cmath>
+#include <cstring>
+#include <ctime>
 
 #include <raylib.h>
 #include <raymath.h>
@@ -61,6 +64,80 @@ static void calc_geocentric_radec(Vector3 eci_pos,
     while (ra < 0.0) ra += 360.0;
     while (ra >= 360.0) ra -= 360.0;
     *out_ra_deg = ra;
+}
+
+/** true when every component is finite (the propagators use NaN as an error sentinel) */
+static bool is_finite_vec(Vector3 v)
+{
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+/** unix seconds -> "YYYY-MM-DD HH:MM:SS UTC"; "----" when out of range */
+static void format_unix_utc(double t_unix, char *out, size_t out_sz)
+{
+    time_t t = (time_t)t_unix;
+    struct tm tmv;
+#ifdef _WIN32
+    if (gmtime_s(&tmv, &t) != 0)
+    {
+        snprintf(out, out_sz, "----");
+        return;
+    }
+#else
+    if (gmtime_r(&t, &tmv) == NULL)
+    {
+        snprintf(out, out_sz, "----");
+        return;
+    }
+#endif
+    snprintf(out, out_sz, "%04d-%02d-%02d %02d:%02d:%02d UTC",
+             tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+             tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+}
+
+/** unix seconds -> compact "YYYY-MM-DD HH:MM" (UTC, no zone suffix) */
+static void format_unix_utc_compact(double t_unix, char *out, size_t out_sz)
+{
+    time_t t = (time_t)t_unix;
+    struct tm tmv;
+#ifdef _WIN32
+    if (gmtime_s(&tmv, &t) != 0)
+    {
+        snprintf(out, out_sz, "----");
+        return;
+    }
+#else
+    if (gmtime_r(&t, &tmv) == NULL)
+    {
+        snprintf(out, out_sz, "----");
+        return;
+    }
+#endif
+    snprintf(out, out_sz, "%04d-%02d-%02d %02d:%02d",
+             tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+             tmv.tm_hour, tmv.tm_min);
+}
+
+/** remaining time as "3 d 04:12:07" (or "already ended" when non-positive) */
+static void format_time_to_end(double secs, char *out, size_t out_sz)
+{
+    if (!(secs > 0.0))
+    {
+        snprintf(out, out_sz, "already ended");
+        return;
+    }
+
+    long long total = (long long)(secs + 0.5);
+    long long days = total / 86400;
+    long long rem = total % 86400;
+    long long hh = rem / 3600;
+    long long mm = (rem % 3600) / 60;
+    long long ss = rem % 60;
+
+    if (days > 0)
+        snprintf(out, out_sz, "%lld d %02lld:%02lld:%02lld", days, hh, mm, ss);
+    else
+        snprintf(out, out_sz, "%02lld:%02lld:%02lld", hh, mm, ss);
 }
 
 /** apparent angular speed (deg/s) of the satellite across the sky from the observer */
@@ -159,23 +236,55 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
 
     ImGui::PushTextWrapPos(0.0f);
 
+    // ephem missions have no elements; skip the mean_motion-derived panels below
+    const bool is_ephem = SatIsEphem(sat);
+    EphemMission *mission = is_ephem ? EphemGetById(sat->ephem_id) : NULL;
+
+    // NaN is the propagators' invalid-state sentinel (decayed SGP4, out-of-window ephem)
+    const bool have_state = is_finite_vec(sat->current_pos);
+
     /* -- Observer geometry (home location) --------------------------------- */
     Vector3 obs_eci = calc_observer_eci(home, ctx->gmst_deg);
     double current_unix = get_unix_from_epoch(*ctx->current_epoch);
 
     double topo_dec = 0.0, topo_ra = 0.0;
-    calc_topocentric_radec(sat->current_pos, obs_eci, &topo_dec, &topo_ra);
     double geo_dec = 0.0, geo_ra = 0.0;
-    calc_geocentric_radec(sat->current_pos, &geo_dec, &geo_ra);
-    double ang_speed = calc_topocentric_ang_speed(sat, current_unix, obs_eci);
-
+    double ang_speed = 0.0;
     double az = 0.0, el = 0.0;
-    get_az_el(sat->current_pos, ctx->gmst_deg,
-              home->lat, home->lon, home->alt,
-              &az, &el);
-    double range = get_sat_range(sat, *ctx->current_epoch, *home);
+    double range = 0.0;
+    bool have_sky = true;
 
-    double pos_r = Vector3Length(sat->current_pos);
+    if (is_ephem)
+    {
+        /* ephemeris: only compute sky quantities from a valid interpolated state */
+        have_sky = have_state;
+        if (have_sky)
+        {
+            calc_topocentric_radec(sat->current_pos, obs_eci, &topo_dec, &topo_ra);
+            calc_geocentric_radec(sat->current_pos, &geo_dec, &geo_ra);
+            ang_speed = calc_topocentric_ang_speed(sat, current_unix, obs_eci);
+            get_az_el(sat->current_pos, ctx->gmst_deg,
+                      home->lat, home->lon, home->alt,
+                      &az, &el);
+            range = get_sat_range(sat, *ctx->current_epoch, *home);
+            have_sky = std::isfinite(topo_dec) && std::isfinite(topo_ra) &&
+                       std::isfinite(geo_dec) && std::isfinite(geo_ra) &&
+                       std::isfinite(ang_speed) && std::isfinite(az) &&
+                       std::isfinite(el) && std::isfinite(range);
+        }
+    }
+    else
+    {
+        calc_topocentric_radec(sat->current_pos, obs_eci, &topo_dec, &topo_ra);
+        calc_geocentric_radec(sat->current_pos, &geo_dec, &geo_ra);
+        ang_speed = calc_topocentric_ang_speed(sat, current_unix, obs_eci);
+        get_az_el(sat->current_pos, ctx->gmst_deg,
+                  home->lat, home->lon, home->alt,
+                  &az, &el);
+        range = get_sat_range(sat, *ctx->current_epoch, *home);
+    }
+
+    double pos_r = have_state ? Vector3Length(sat->current_pos) : 0.0;
     double sat_lat = 0.0, sat_lon = 0.0;
     if (pos_r > 0.001)
     {
@@ -189,9 +298,12 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         if (sat_lat < -90.0) sat_lat += 180.0;
     }
 
-    // derived orbital quantities + GEO classification
+    // derived orbital quantities + GEO classification (SGP4 only: an ephemeris
+    // mission has no elements, so sat_prop_elements() is never asked for them)
     SatPropElements elem;
-    sat_prop_elements(sat, current_unix, &elem);
+    memset(&elem, 0, sizeof(elem));
+    if (!is_ephem)
+        sat_prop_elements(sat, current_unix, &elem);
     double n_revday   = elem.mean_motion * 1440.0 / (2.0 * PI);
     double period_min = (n_revday > 0.0) ? (1440.0 / n_revday) : 0.0;
     double a_km       = elem.sma_km;
@@ -199,7 +311,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     double ecc        = elem.ecc;
 
     // tiered detection: GEO band, then inclination/eccentricity limits
-    bool is_geo = (n_revday > 0.0 && a_km > 0.0 &&
+    bool is_geo = (!is_ephem && n_revday > 0.0 && a_km > 0.0 &&
                    classify_geo(period_min, incl_deg, ecc) == GEO_YES);
 
     /* -- Basic info -------------------------------------------------------- */
@@ -209,15 +321,64 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
         ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         InfoRow("Name", "%s", sat->name);
         InfoRow("NORAD", "%s", sat->norad_id);
-        if (!is_geo)
+
+        if (is_ephem)
+        {
+            /* sub-satellite point from the same helper the GEO block uses */
+            double sub_lat = 0.0, sub_lon = 0.0, sub_r = 0.0;
+            bool have_sub = sub_satellite_point(sat, current_unix, ctx->gmst_deg,
+                                                &sub_lat, &sub_lon, &sub_r);
+            if (have_sub)
+            {
+                InfoRow("Latitude", "%.4f\xc2\xb0", sub_lat);
+                InfoRow("Longitude", "%.4f\xc2\xb0", sub_lon);
+                InfoRow("Altitude", "%.1f km", sub_r - (double)EARTH_RADIUS_KM);
+            }
+            else
+            {
+                InfoRow("Latitude", "-");
+                InfoRow("Longitude", "-");
+                InfoRow("Altitude", "-");
+            }
+
+            if (mission)
+            {
+                char epoch_str[48], t0_str[24], t1_str[24];
+                char window_str[80], end_str[32];
+                format_unix_utc(mission->t0_unix, epoch_str, sizeof(epoch_str));
+                format_unix_utc_compact(mission->t0_unix, t0_str, sizeof(t0_str));
+                format_unix_utc_compact(mission->t1_unix, t1_str, sizeof(t1_str));
+                snprintf(window_str, sizeof(window_str), "%s \xe2\x86\x92 %s",
+                         t0_str, t1_str);
+                format_time_to_end(mission->t1_unix - current_unix,
+                                   end_str, sizeof(end_str));
+
+                InfoRow("Epoch (UTC)", "%s", epoch_str);
+                InfoRow("Window", "%s", window_str);
+                InfoRow("Time to end", "%s", end_str);
+                InfoRow("Samples", "%d", (int)mission->s.size());
+                InfoRow("Target", "%s", mission->target[0] ? mission->target : "-");
+            }
+        }
+        else if (!is_geo)
         {
             InfoRow("Latitude", "%.4f\xc2\xb0", sat_lat);
             InfoRow("Longitude", "%.4f\xc2\xb0", sat_lon);
             InfoRow("Period", "%.2f min", period_min);
         }
-        InfoRow("Apogee", "%.1f km", calc_apogee_km(sat, current_unix));
-        InfoRow("Perigee", "%.1f km", calc_perigee_km(sat, current_unix));
+
+        if (!is_ephem)
+        {
+            InfoRow("Apogee", "%.1f km", calc_apogee_km(sat, current_unix));
+            InfoRow("Perigee", "%.1f km", calc_perigee_km(sat, current_unix));
+        }
         ImGui::EndTable();
+    }
+
+    if (is_ephem && !mission)
+    {
+        ImGui::TextColored(ThemeColor(g_theme.ui.warning),
+                           "Mission data is unavailable. Re-import the ephemeris file.");
     }
 
     /* -- GEO Analysis (only for geostationary satellites) ------------------ */
@@ -355,7 +516,13 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
     if (ImGui::CollapsingHeader(ICON_FA_GEAR " Advanced Orbital Data"))
     {
         ImGui::Text("%s Orbital Elements", ICON_FA_SATELLITE);
-        if (ImGui::BeginTable("##orbital_elements", 2, ImGuiTableFlags_SizingFixedFit))
+        if (is_ephem)
+        {
+            /* a tabulated ephemeris has no osculating element set to report */
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim),
+                               "Not applicable to ephemeris missions.");
+        }
+        else if (ImGui::BeginTable("##orbital_elements", 2, ImGuiTableFlags_SizingFixedFit))
         {
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
@@ -390,13 +557,19 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             ImGui::TableNextColumn();
             ImGui::Text("  RA");
             ImGui::TableNextColumn();
-            DrawClickableRADec("", geo_ra, &g_ui.ra_format, true);
+            if (have_sky)
+                DrawClickableRADec("", geo_ra, &g_ui.ra_format, true);
+            else
+                ImGui::TextUnformatted("-");
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("  Dec");
             ImGui::TableNextColumn();
-            DrawClickableRADec("", geo_dec, &g_ui.dec_format, false);
+            if (have_sky)
+                DrawClickableRADec("", geo_dec, &g_ui.dec_format, false);
+            else
+                ImGui::TextUnformatted("-");
 
             /* Topocentric (from home) row */
             ImGui::TableNextRow();
@@ -409,20 +582,29 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             ImGui::TableNextColumn();
             ImGui::Text("  RA");
             ImGui::TableNextColumn();
-            DrawClickableRADec("", topo_ra, &g_ui.ra_format, true);
+            if (have_sky)
+                DrawClickableRADec("", topo_ra, &g_ui.ra_format, true);
+            else
+                ImGui::TextUnformatted("-");
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("  Dec");
             ImGui::TableNextColumn();
-            DrawClickableRADec("", topo_dec, &g_ui.dec_format, false);
+            if (have_sky)
+                DrawClickableRADec("", topo_dec, &g_ui.dec_format, false);
+            else
+                ImGui::TextUnformatted("-");
 
             /* Angular speed */
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("Ang. Speed");
             ImGui::TableNextColumn();
-            ImGui::Text("%.4f\xc2\xb0/s", ang_speed);
+            if (have_sky)
+                ImGui::Text("%.4f\xc2\xb0/s", ang_speed);
+            else
+                ImGui::TextUnformatted("-");
 
             ImGui::EndTable();
         }
@@ -434,9 +616,18 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
 
-            InfoRow("Azimuth", "%.2f\xc2\xb0", az);
-            InfoRow("Elevation", "%.2f\xc2\xb0", el);
-            InfoRow("Range", "%.1f km", range);
+            if (have_sky)
+            {
+                InfoRow("Azimuth", "%.2f\xc2\xb0", az);
+                InfoRow("Elevation", "%.2f\xc2\xb0", el);
+                InfoRow("Range", "%.1f km", range);
+            }
+            else
+            {
+                InfoRow("Azimuth", "-");
+                InfoRow("Elevation", "-");
+                InfoRow("Range", "-");
+            }
 
             ImGui::EndTable();
         }
@@ -448,18 +639,44 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
             ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 40.0f);
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
 
-            InfoRow("X", "%.2f km", sat->current_pos.x);
-            InfoRow("Y", "%.2f km", sat->current_pos.y);
-            InfoRow("Z", "%.2f km", sat->current_pos.z);
+            if (have_state)
+            {
+                InfoRow("X", "%.2f km", sat->current_pos.x);
+                InfoRow("Y", "%.2f km", sat->current_pos.y);
+                InfoRow("Z", "%.2f km", sat->current_pos.z);
+            }
+            else
+            {
+                InfoRow("X", "-");
+                InfoRow("Y", "-");
+                InfoRow("Z", "-");
+            }
             ImGui::EndTable();
         }
 
         ImGui::Separator();
         ImGui::Text("%s Epoch:", ICON_FA_CALENDAR_DAYS);
         ImGui::SameLine();
-        char epoch_str[64];
-        epoch_to_datetime_str(sat->epoch_days, epoch_str);
-        ImGui::TextWrapped("%s", epoch_str);
+        if (is_ephem)
+        {
+            /* mission start epoch; sat->epoch_days is unused for ephem entries */
+            if (mission)
+            {
+                char mission_epoch[48];
+                format_unix_utc(mission->t0_unix, mission_epoch, sizeof(mission_epoch));
+                ImGui::TextWrapped("%s", mission_epoch);
+            }
+            else
+            {
+                ImGui::TextWrapped("-");
+            }
+        }
+        else
+        {
+            char epoch_str[64];
+            epoch_to_datetime_str(sat->epoch_days, epoch_str);
+            ImGui::TextWrapped("%s", epoch_str);
+        }
 
         if (sat->data_meta.format != FORMAT_UNKNOWN)
         {
@@ -480,6 +697,7 @@ void DrawPanelSatInfo(UIContext *ctx, AppConfig *cfg)
                     case FORMAT_OMM_CSV:  fmt_str = "OMM CSV";   break;
                     case FORMAT_OMM_XML:  fmt_str = "OMM XML";   break;
                     case FORMAT_OMM_KVN:  fmt_str = "OMM KVN";   break;
+                    case FORMAT_HORIZONS_VECTORS: fmt_str = "Horizons VECTORS"; break;
                     default: break;
                 }
                 InfoRow("Format", "%s", fmt_str);

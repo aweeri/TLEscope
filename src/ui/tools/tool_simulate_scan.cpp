@@ -304,12 +304,28 @@ static void ShadeHit(const Vector3 &hit, double gmst, float earth_offset, const 
     out[3] = 255;
 }
 
+/* ephemeris missions carry no SGP4 state; scan simulation is not available for them */
+static bool SimScanUnsupported(const Satellite *sat)
+{
+    return SatIsEphem(sat);
+}
+
 /* camera basis + FOV for a single-shot, mirroring ComputeShot exactly */
 static void BuildShotCamera(const Satellite *sat, double t, float focal, int aspect,
                             int pointing, float off, float az, float roll,
                             Vector3 *P, Vector3 *boresight, Vector3 *right, Vector3 *up, float *thx, float *thy)
 {
-    Vector3 V;
+    Vector3 V = {0};
+    if (SimScanUnsupported(sat))
+    {
+        *P = (Vector3){NAN, NAN, NAN};
+        *boresight = (Vector3){0, 0, 1};
+        *right = (Vector3){1, 0, 0};
+        *up = (Vector3){0, 1, 0};
+        *thx = 1.0f;
+        *thy = 1.0f;
+        return;
+    }
     sat_prop_state(sat, get_unix_from_epoch(t), P, &V);
     Vector3 nadir = Vector3Negate(Vector3Normalize(*P));
     Vector3 along = Vector3Normalize(V);
@@ -369,6 +385,11 @@ static void ComputeSwath(SatPass *pass, AppConfig *cfg, float map_w, float map_h
     s_swath.right.clear();
     s_swath.ok.clear();
     s_swath.valid = true;
+    if (SimScanUnsupported(pass->sat))
+    {
+        s_swath.valid = false; /* no SGP4 geometry for ephem missions */
+        return;
+    }
     s_swath.norad = pass->sat ? pass->sat->norad_id_num : 0u;
     s_swath.aos = pass->aos_epoch;
     s_swath.half_rad = half_rad;
@@ -457,6 +478,9 @@ static void ComputeShot(SatPass *pass, AppConfig *cfg, float map_w, float map_h,
                         float frac, int aspect, float focal, int pointing,
                         float off, float az, float roll)
 {
+    s_shot.valid = false;
+    if (SimScanUnsupported(pass->sat))
+        return; /* no SGP4 geometry for ephem missions */
     s_shot.valid = true;
     s_shot.norad = pass->sat ? pass->sat->norad_id_num : 0u;
     s_shot.aos = pass->aos_epoch;
@@ -990,6 +1014,8 @@ static bool ProjectShotMarkers(const SimScanJob *job, const ShotImageCache *c,
 {
     pts->clear();
     kinds->clear();
+    if (SimScanUnsupported(&job->sat_copy))
+        return true; /* no satellite marker without SGP4 state */
     const float ero = job->earth_rotation_offset;
 
     struct M { float lat, lon; int kind; };
@@ -1035,6 +1061,8 @@ static bool ProjectShotMarkers(const SimScanJob *job, const ShotImageCache *c,
 // port of RenderShotImage: pure CPU, cancellable, progress-reporting
 static bool ComputeShotJob(const SimScanJob *job, SimScanResult *res)
 {
+    if (SimScanUnsupported(&job->sat_copy))
+        return false; /* ephem mission: scan simulation unavailable */
     ShotImageCache &c = res->shot_img;
     c.norad = job->norad;
     c.aos = job->aos;
@@ -1127,6 +1155,12 @@ static float GroundSwathKm(const Vector3 &P, const Vector3 &nadir, const Vector3
 
 static void ComputeSwathFov(const SatPass *pass, float swath_km, SwathFov *out)
 {
+    if (SimScanUnsupported(pass->sat))
+    {
+        out->norad = pass->sat ? pass->sat->norad_id_num : 0u;
+        out->valid = false;
+        return; /* no SGP4 geometry for ephem missions */
+    }
     out->norad = pass->sat ? pass->sat->norad_id_num : 0u;
     out->aos = pass->aos_epoch;
     out->los = pass->los_epoch;
@@ -1166,6 +1200,13 @@ static void ComputeStripDims(const Satellite *sat, double aos, double los,
                              float swath_km, int swath_px, int *out_W, int *out_H)
 {
     int W = swath_px;
+    if (SimScanUnsupported(sat))
+    {
+        /* keep the requested cross-track size, fall back to a square strip */
+        if (out_W) *out_W = W;
+        if (out_H) *out_H = W;
+        return;
+    }
     if (W < 64) W = 64;
     if (W > 4096) W = 4096;
     float GSD_km = swath_km / (float)swath_px;
@@ -1232,6 +1273,11 @@ static void ComputeStripDimsCached(const Satellite *sat, uint32_t norad, double 
 static bool BuildGeoAngles(const Satellite *sat, double aos, double los, float half, int W,
                            std::vector<float> *out, bool *out_capped)
 {
+    if (SimScanUnsupported(sat))
+    {
+        if (out_capped) *out_capped = true;
+        return false; /* no SGP4 geometry for ephem missions */
+    }
     const int M = 512;
     double t_mid = aos + 0.5 * (los - aos);
     Vector3 P, V;
@@ -1403,6 +1449,8 @@ static bool ProjectStripMarkers(const SimScanJob *job, const StripImageCache *c,
 {
     pts->clear();
     kinds->clear();
+    if (SimScanUnsupported(&job->sat_copy))
+        return true; /* no satellite marker without SGP4 state */
     if (c->rows.empty())
         return true;
     const std::vector<RowSat> &rows = c->rows;
@@ -1483,6 +1531,8 @@ static bool ProjectStripMarkers(const SimScanJob *job, const StripImageCache *c,
 // port of RenderStripImage: pure CPU, cancellable, progress-reporting
 static bool ComputeStripJob(const SimScanJob *job, SimScanResult *res)
 {
+    if (SimScanUnsupported(&job->sat_copy))
+        return false; /* ephem mission: scan simulation unavailable */
     StripImageCache &c = res->strip_img;
     c.norad = job->norad;
     c.aos = job->aos;
@@ -1608,6 +1658,8 @@ static void DrawStripLines(ImDrawList *dl, const ImVec2 &p0, float W, float H, c
 static void DrawScanMarkersImg(ImDrawList *dl, const ImVec2 &p0, float W, float H,
                                const SatPass *pass, AppConfig *cfg, int view)
 {
+    if (SimScanUnsupported(pass->sat))
+        return; /* ephem missions have no SGP4 sub-satellite point to draw */
     auto glyph = [&](ImVec2 p, int kind, const char *name) {
         if (kind == 2)
         {
@@ -1914,7 +1966,7 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
         if (km < 0.0f)
         {
             km = 300.0f; /* estimate from the legacy swath-angle key */
-            if (s_swath_deg > 0.0f)
+            if (s_swath_deg > 0.0f && !SimScanUnsupported(pass->sat))
             {
                 double t_mid = pass->aos_epoch + 0.5 * (pass->los_epoch - pass->aos_epoch);
                 Vector3 P, V;

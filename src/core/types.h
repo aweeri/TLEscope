@@ -75,6 +75,7 @@
 #define MAX_LOCATIONS 256
 #define EARTH_RADIUS_KM 6371.0f
 #define MOON_RADIUS_KM 1737.4f
+#define SUN_RADIUS_KM 696340.0f
 #define MU 398600.4418f
 #define DRAW_SCALE 3000.0f
 
@@ -121,8 +122,15 @@ typedef enum {
     FORMAT_OMM_JSON,    // CCSDS OMM JSON
     FORMAT_OMM_CSV,     // CCSDS OMM CSV
     FORMAT_OMM_XML,     // CCSDS OMM XML
-    FORMAT_OMM_KVN      // CCSDS OMM Key-Value Notation
+    FORMAT_OMM_KVN,     // CCSDS OMM Key-Value Notation
+    FORMAT_HORIZONS_VECTORS // JPL Horizons VECTORS ephemeris
 } OrbitalDataFormat;
+
+/** how a satellite's state is produced: SGP4 elements vs. tabulated ephemeris */
+typedef enum {
+    SAT_KIND_SGP4 = 0,  // classic SGP4 propagation (default for zero-initialized structs)
+    SAT_KIND_EPHEM = 1  // sampled ephemeris (JPL Horizons VECTORS)
+} SatKind;
 
 /** metadata about where/how orbital data was obtained */
 typedef struct {
@@ -182,6 +190,9 @@ typedef struct
     double cached_orbit_epoch;  // epoch when cache was last calculated
     bool orbit_cached;
     bool is_active;
+    SatKind kind;                // how this satellite's state is produced
+    int ephem_id;                // registry id when kind == SAT_KIND_EPHEM
+    bool ephem_window_disabled;  // is_active was cleared automatically by ephem window exit (auto-reactivates)
 
     OrbitalDataMeta data_meta;  // provenance of this satellite's data
 } Satellite;
@@ -364,6 +375,8 @@ typedef struct
     bool show_sun;
     bool show_sun_flare;
     bool show_ecliptic_frame;
+    bool show_orbital_reference; // 3D: draw bodies relative to the Sun (mission exclusive)
+    int reference_body;          // RefBody: 0 = Earth, 1 = Moon, 2 = Sun. Orbit polylines are re-based; storage stays geocentric.
     bool show_ground_coverage;
     bool show_apsides;
     bool show_earth_texture;

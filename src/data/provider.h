@@ -1,13 +1,8 @@
 #ifndef PROVIDER_H
 #define PROVIDER_H
 
-/**
- * @file provider.h
- * @brief Data provider abstraction layer
- *
- * Allows the application to fetch orbital data from multiple sources
- * (Celestrak, Retlector, custom) in multiple formats (TLE, JSON OMM, CSV OMM).
- */
+// Data provider abstraction: fetch orbital data from Celestrak, Retlector and
+// custom sources in multiple formats (TLE, JSON OMM, CSV OMM).
 
 #include "core/types.h"
 #include "data/curl_diagnostics.h"
@@ -41,6 +36,7 @@ typedef struct {
     OrbitalDataFormat format;
     long http_code;
     bool success;
+    int curl_code;  // CURLcode of the last attempt; 0 == CURLE_OK. Non-zero with http_code == 0 means a transport failure before any status line.
 } FetchResult;
 
 // -- Provider Operations -----------------------------------------------------
@@ -91,6 +87,11 @@ FetchResult FetchFromCustomURL(const char *url);
 /** fetch from a custom file and auto-detect the format.
  *  the result.format will be set to the detected format. */
 FetchResult FetchFromCustomFile(const char *filename);
+
+// -- Raw URL Fetch -----------------------------------------------------------
+
+/// raw GET of any URL using the shared curl config (UA, timeouts, retries, proxy)
+FetchResult HttpFetchURL(const char *url);
 
 // -- Built-in Source Lists ---------------------------------------------------
 

@@ -7,6 +7,8 @@
 #include "core/theme.h"
 #include "core/config.h"
 #include "core/astro.h"
+#include "data/ephem.h"
+#include "data/horizons_api.h"
 #include "ui/labels.h"
 #include "ui/ui_layout.h"
 #include "ui/tools/tools_settings.h"
@@ -402,6 +404,26 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             ImGui::EndDisabled();
         }
 
+        // the reference body only affects imported missions; 2D stays Earth-fixed
+        if (EphemCount() > 0)
+        {
+            static const char *kRefLabels[] = { "Earth", "Moon", "Sun" };
+            ImGui::BeginDisabled(*ctx->is_2d_view);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(ICON_FA_CIRCLE_DOT "  Reference Body");
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.0f);
+            ImGui::SetNextItemWidth(88.0f);
+            int ref = cfg->reference_body;
+            if (ref < 0 || ref >= REF_BODY_COUNT) ref = 0;
+            if (ImGui::Combo("##layers_ref_body", &ref, kRefLabels, REF_BODY_COUNT))
+                cfg->reference_body = ref;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Draw orbit paths relative to this body.\n"
+                                  "Moon/Sun remove the wobble of cislunar and interplanetary\n"
+                                  "missions. 3D view only.");
+            ImGui::EndDisabled();
+        }
+
         /* Labels: master + Sel/All/Fav scope */
         {
             bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
@@ -631,7 +653,7 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             bool val = cfg->show_sun;
             bool prev = val;
             DrawLayerCheckbox("Sun", &val, ICON_FA_CIRCLE_RADIATION,
-                              "Show the sun disc and its glow over the scene.\nIndependent of the Skybox.\n3D only.");
+                              "Show the Sun as a 3D body at its real position,\nplus a screen-space glow/flare.\nIndependent of the Skybox. 3D only.");
             if (val != prev)
                 cfg->show_sun = val;
 
@@ -936,7 +958,9 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
             DrawMapGrid3D(sctx, cfg);
     }
 
-    if (!sctx->is_2d_view && ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true))
+    // the Moon orbit line is geocentric; the Moon sphere sits at its true place
+    if (!sctx->is_2d_view &&
+        ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true))
         DrawMoonOrbit3D(sctx, cfg);
 
     if (sctx->is_2d_view && sctx->camera2d && cfg->show_latlon_grid)

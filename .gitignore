@@ -39,3 +39,4 @@ lib/raylib/src/*.dylib*
 imgui.ini
 data.json
 data_selections.json
+favorites.json

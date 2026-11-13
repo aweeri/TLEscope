@@ -122,6 +122,11 @@ static double SatPeriodMinutes(const Satellite *s)
 {
     if (!s || s->mean_motion <= 0.0)
         return 0.0;
+
+    // ephem has no mean motion; a span-derived "period" would mislead the transit list
+    if (SatIsEphem(s))
+        return 0.0;
+
     const double two_pi = 6.28318530717958647692;
     return (two_pi / s->mean_motion) / 60.0;
 }

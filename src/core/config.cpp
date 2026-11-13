@@ -65,6 +65,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_sun = true;          // default
     config->show_sun_flare = true;    // default
     config->show_ecliptic_frame = false; // default
+    config->show_orbital_reference = false; // default: all shipped fixtures are Earth-centred
+    config->reference_body = 0;             // default: Earth-relative orbit polylines
     config->show_ground_coverage = true; // default
     config->show_apsides = true;      // default
     config->show_earth_texture = true;  // default
@@ -241,6 +243,15 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_sun = get_bool("show_sun", config->show_sun);
                     config->show_sun_flare = get_bool("show_sun_flare", config->show_sun_flare);
                     config->show_ecliptic_frame = get_bool("show_ecliptic_frame", config->show_ecliptic_frame);
+                    config->show_orbital_reference = get_bool("show_orbital_reference", config->show_orbital_reference);
+                    config->reference_body = get_int("reference_body", config->reference_body);
+                    /* legacy: show_orbital_reference (Sun-relative drawing) replaced by reference_body */
+                    if (config->show_orbital_reference) {
+                        config->reference_body = 2;   /* REF_BODY_SUN */
+                        config->show_orbital_reference = false;
+                    }
+                    if (config->reference_body < 0 || config->reference_body >= 3)
+                        config->reference_body = 0;
                     config->show_ground_coverage = get_bool("show_ground_coverage", config->show_ground_coverage);
                     config->show_apsides = get_bool("show_apsides", config->show_apsides);
                     config->show_earth_texture = get_bool("show_earth_texture", config->show_earth_texture);
@@ -740,6 +751,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_sun"] = config->show_sun;
     root["show_sun_flare"] = config->show_sun_flare;
     root["show_ecliptic_frame"] = config->show_ecliptic_frame;
+    root["show_orbital_reference"] = config->show_orbital_reference;
+    root["reference_body"] = config->reference_body;
     root["show_ground_coverage"] = config->show_ground_coverage;
     root["show_apsides"] = config->show_apsides;
     root["show_earth_texture"] = config->show_earth_texture;
