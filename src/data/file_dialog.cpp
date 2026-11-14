@@ -69,9 +69,20 @@ void FileDialog::open(const std::string& title,
 
     if (!fileName_.empty())
     {
+
+        // NOTE: this is a fix for Linux to make sure that the file dialog opens
+        // inside (!) the folder of the last file. When providing a path to a folder
+        // with zenity on Linux, the file dialog does not open in that folder, but
+        // one level above. Specifying a path to a file makes the file dialog open
+        // in the folder with the file pre-selected.
+#if __linux__
+        startPath = fileName_;
+#else
         const size_t sep = fileName_.find_last_of("/\\");
         startPath = (sep == std::string::npos) ? pfd::path::home()
                                                : fileName_.substr(0, sep);
+#endif
+
     }
     if (startPath.empty())
         startPath = pfd::path::home();
