@@ -37,8 +37,10 @@ extern bool log_show_timestamps;    /* show timestamps in log entries (default o
 /* favourite (starred) satellite orbit coloring (checkbox 2, bool default false) */
 #define LAYERS_KEY_FAV_ORBITS_3D "layers.favorite_orbits_3d"
 
-/* Moon geocentric orbital path (bool, default true) */
-#define LAYERS_KEY_MOON_ORBIT "layers.moon_orbit"
+#define LAYERS_KEY_DRAW_ORBITS "layers.moon_orbit"
+
+#define EARTH_ORBIT_FADE_START_AU 0.01f
+#define EARTH_ORBIT_FADE_END_AU   0.80f
 
 #define LAYERS_KEY_ORBIT_DIRECTION "layers.orbit_direction"
 #define LAYERS_KEY_ORBIT_DIRECTION_ANIM "layers.orbit_direction_anim"

@@ -90,6 +90,10 @@ Vector3 calculate_moon_position(double current_time_days);
 #define MOON_ORBIT_SAMPLES 256
 #define MOON_SIDEREAL_PERIOD_DAYS 27.321661
 void calculate_moon_orbit(double current_epoch, Vector3 *out_km, int count);
+
+#define EARTH_ORBIT_SAMPLES 256
+#define EARTH_ORBIT_PERIOD_DAYS 365.256363
+void calculate_earth_orbit(double current_epoch, Vector3 *out_km, int count);
 void get_apsis_2d(Satellite *sat, double current_time, bool is_apoapsis, double gmst_deg, float earth_offset,
                   float map_w, float map_h, Vector2 *out);
 void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix, double *out_apo_unix);

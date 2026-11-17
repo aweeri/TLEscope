@@ -1407,6 +1407,26 @@ void calculate_moon_orbit(double current_epoch, Vector3 *out_km, int count)
     }
 }
 
+void calculate_earth_orbit(double current_epoch, Vector3 *out_km, int count)
+{
+    if (!out_km || count <= 0)
+        return;
+
+    const float dist_km = (float)calculate_sun_distance_km(current_epoch);
+    if (!isfinite(dist_km) || dist_km <= 0.0f)
+        return;
+
+    /* Sun's geocentric position (the orbit centre) at the current epoch */
+    const Vector3 sun_now = Vector3Scale(calculate_sun_position(current_epoch), dist_km);
+
+    const double step = EARTH_ORBIT_PERIOD_DAYS / (double)count;
+    for (int i = 0; i < count; i++)
+    {
+        Vector3 dir = calculate_sun_position(current_epoch + i * step);
+        out_km[i] = Vector3Subtract(sun_now, Vector3Scale(dir, dist_km));
+    }
+}
+
 // straight-line distance to a satellite
 double get_sat_range(Satellite *sat, double epoch, Location obs)
 {

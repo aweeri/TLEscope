@@ -72,7 +72,7 @@ enum LayerToggleId
     LAYER_TOGGLE_CLOUDS,
     LAYER_TOGGLE_SKYBOX,
     LAYER_TOGGLE_ECLIPTIC,
-    LAYER_TOGGLE_MOON_ORBIT,
+    LAYER_TOGGLE_DRAW_ORBITS,
     LAYER_TOGGLE_SUN,
     LAYER_TOGGLE_SUN_FLARE,
     LAYER_TOGGLE_COUNT
@@ -116,7 +116,7 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_CLOUDS] = true;
         out[LAYER_TOGGLE_SKYBOX] = true;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
-        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_DRAW_ORBITS] = true;
         out[LAYER_TOGGLE_SUN] = true;
         out[LAYER_TOGGLE_SUN_FLARE] = true;
         break;
@@ -140,7 +140,7 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_CLOUDS] = false;
         out[LAYER_TOGGLE_SKYBOX] = false;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
-        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_DRAW_ORBITS] = true;
         out[LAYER_TOGGLE_SUN] = true;
         out[LAYER_TOGGLE_SUN_FLARE] = false;
         break;
@@ -165,7 +165,7 @@ static void LayerPresetValues(int preset, bool out[LAYER_TOGGLE_COUNT])
         out[LAYER_TOGGLE_CLOUDS] = false;
         out[LAYER_TOGGLE_SKYBOX] = false;
         out[LAYER_TOGGLE_ECLIPTIC] = false;
-        out[LAYER_TOGGLE_MOON_ORBIT] = true;
+        out[LAYER_TOGGLE_DRAW_ORBITS] = true;
         out[LAYER_TOGGLE_SUN] = false;
         out[LAYER_TOGGLE_SUN_FLARE] = false;
         break;
@@ -219,7 +219,7 @@ static void ReadLayerState(UIContext *ctx, AppConfig *cfg, bool cur[LAYER_TOGGLE
     cur[LAYER_TOGGLE_CLOUDS] = cfg->show_clouds;
     cur[LAYER_TOGGLE_SKYBOX] = cfg->show_skybox;
     cur[LAYER_TOGGLE_ECLIPTIC] = *ctx->is_ecliptic_frame;
-    cur[LAYER_TOGGLE_MOON_ORBIT] = ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true);
+    cur[LAYER_TOGGLE_DRAW_ORBITS] = ToolSettingGetBool(cfg, LAYERS_KEY_DRAW_ORBITS, true);
     cur[LAYER_TOGGLE_SUN] = cfg->show_sun;
     /* the flare is only meaningful while the sun is visible, so mirror that gating */
     cur[LAYER_TOGGLE_SUN_FLARE] = cfg->show_sun && cfg->show_sun_flare;
@@ -279,7 +279,7 @@ void ApplyLayerPreset(AppConfig *cfg, int preset, bool *is_ecliptic_frame)
     cfg->show_ecliptic_frame = want[LAYER_TOGGLE_ECLIPTIC];
     if (is_ecliptic_frame)
         *is_ecliptic_frame = want[LAYER_TOGGLE_ECLIPTIC];
-    ToolSettingSetBool(cfg, LAYERS_KEY_MOON_ORBIT, want[LAYER_TOGGLE_MOON_ORBIT]);
+    ToolSettingSetBool(cfg, LAYERS_KEY_DRAW_ORBITS, want[LAYER_TOGGLE_DRAW_ORBITS]);
     cfg->show_sun = want[LAYER_TOGGLE_SUN];
     cfg->show_sun_flare = want[LAYER_TOGGLE_SUN_FLARE];
 
@@ -682,14 +682,14 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             }
         }
 
-        /* Moon Orbit */
+        /* Draw Orbits (celestial body paths) */
         {
-            bool val = ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true);
+            bool val = ToolSettingGetBool(cfg, LAYERS_KEY_DRAW_ORBITS, true);
             bool prev = val;
-            DrawLayerCheckbox("Moon Orbit", &val, ICON_FA_MOON,
-                              "Show the Moon's geocentric orbital path (3D only).");
+            DrawLayerCheckbox("Draw Orbits", &val, ICON_FA_MOON,
+                              "Show the Moon's geocentric path and, once zoomed far out, Earth's orbit around the Sun. 3D only.");
             if (val != prev)
-                ToolSettingSetBool(cfg, LAYERS_KEY_MOON_ORBIT, val);
+                ToolSettingSetBool(cfg, LAYERS_KEY_DRAW_ORBITS, val);
         }
 
         ImGui::Unindent();
@@ -939,6 +939,46 @@ static void DrawMoonOrbit3D(const SceneContext *sctx, AppConfig *cfg)
     rlDrawRenderBatchActive();
 }
 
+static float EarthOrbitZoomAlpha(float cam_dist, double epoch)
+{
+    const float au_world = (float)(calculate_sun_distance_km(epoch) / (double)DRAW_SCALE);
+    if (!isfinite(cam_dist) || !isfinite(au_world) || cam_dist <= 0.0f || au_world <= 0.0f)
+        return 0.0f;
+
+    const float d0 = EARTH_ORBIT_FADE_START_AU * au_world;
+    const float d1 = EARTH_ORBIT_FADE_END_AU * au_world;
+    if (cam_dist <= d0) return 0.0f;
+    if (cam_dist >= d1) return 1.0f;
+
+    float t = (cam_dist - d0) / (d1 - d0);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static void DrawEarthOrbit3D(const SceneContext *sctx, float alpha)
+{
+    Vector3 pts[EARTH_ORBIT_SAMPLES];
+    calculate_earth_orbit(sctx->current_epoch, pts, EARTH_ORBIT_SAMPLES);
+
+    Color col = g_theme.world.orbit;
+    col.a = (unsigned char)(col.a * alpha);
+
+    /* the ring dwarfs the Earth at this zoom, so no per-segment occlusion test */
+    rlDrawRenderBatchActive();
+    rlSetLineWidth(1.5f);
+    rlBegin(RL_LINES);
+    for (int i = 0; i < EARTH_ORBIT_SAMPLES; i++)
+    {
+        Vector3 a = Vector3Scale(pts[i], 1.0f / DRAW_SCALE);
+        Vector3 b = Vector3Scale(pts[(i + 1) % EARTH_ORBIT_SAMPLES], 1.0f / DRAW_SCALE);
+        rlColor4ub(col.r, col.g, col.b, col.a);
+        rlVertex3f(a.x, a.y, a.z);
+        rlVertex3f(b.x, b.y, b.z);
+    }
+    rlEnd();
+    rlSetLineWidth(1.0f);
+    rlDrawRenderBatchActive();
+}
+
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
 {
     if (sctx->is_2d_view && sctx->camera2d)
@@ -958,10 +998,17 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
             DrawMapGrid3D(sctx, cfg);
     }
 
-    // the Moon orbit line is geocentric; the Moon sphere sits at its true place
-    if (!sctx->is_2d_view &&
-        ToolSettingGetBool(cfg, LAYERS_KEY_MOON_ORBIT, true))
+    // body orbit lines are 3D-only; the Moon orbit is geocentric, Earth's orbit
+    // is heliocentric and only fades in once the camera has pulled far out
+    if (!sctx->is_2d_view && ToolSettingGetBool(cfg, LAYERS_KEY_DRAW_ORBITS, true))
+    {
         DrawMoonOrbit3D(sctx, cfg);
+
+        const float cam_dist = sctx->camera3d ? Vector3Distance(sctx->camera3d->position, sctx->camera3d->target) : 0.0f;
+        const float orbit_alpha = EarthOrbitZoomAlpha(cam_dist, sctx->current_epoch);
+        if (orbit_alpha > 0.001f)
+            DrawEarthOrbit3D(sctx, orbit_alpha);
+    }
 
     if (sctx->is_2d_view && sctx->camera2d && cfg->show_latlon_grid)
     {
