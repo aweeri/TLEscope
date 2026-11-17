@@ -2264,11 +2264,14 @@ int main(int argc, char **argv)
             float smooth_speed = 10.0f * GetFrameTime();
             if (smooth_speed > 1.0f) smooth_speed = 1.0f; // clamp it so the camera doesnt spin out when alt tabbed
 
-            Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth_speed);
+            float smooth2d = cfg.camera_smoothing_2d ? smooth_speed : 1.0f;
+            float smooth3d = cfg.camera_smoothing_3d ? smooth_speed : 1.0f;
 
-            camAngleX = Lerp(camAngleX, target_camAngleX, smooth_speed);
-            camAngleY = Lerp(camAngleY, target_camAngleY, smooth_speed);
-            camDistance = Lerp(camDistance, target_camDistance, smooth_speed);
+            Camera2DParams.zoom = Lerp(Camera2DParams.zoom, target_camera2d_zoom, smooth2d);
+
+            camAngleX = Lerp(camAngleX, target_camAngleX, smooth3d);
+            camAngleY = Lerp(camAngleY, target_camAngleY, smooth3d);
+            camDistance = Lerp(camDistance, target_camDistance, smooth3d);
 
             /* follow tracked targets rigidly: lerp lag grows with the time multiplier */
             if (active_lock != LOCK_NONE)
@@ -2278,8 +2281,8 @@ int main(int argc, char **argv)
             }
             else
             {
-                Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth_speed);
-                Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth_speed);
+                Camera2DParams.target = Vector2Lerp(Camera2DParams.target, target_camera2d_target, smooth2d);
+                Camera3DParams.target = Vector3Lerp(Camera3DParams.target, target_camera3d_target, smooth3d);
             }
             Camera2DParams.target.y = clamp_map_y(Camera2DParams.zoom, Camera2DParams.target.y);
 

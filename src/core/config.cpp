@@ -58,6 +58,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->show_markers = true;      // default
     config->show_statistics = false;  // default
     config->limit_map_zoomout = true;  // default: cap 2D map zoom-out at the viewport fill level
+    config->camera_smoothing_2d = false;
+    config->camera_smoothing_3d = true;   // default: preserve prior 3D easing
     config->highlight_sunlit = false; // default
     config->show_slant_range = false; // default
     config->show_scattering = true;   // default (Aesthetic profile)
@@ -238,6 +240,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_markers = get_bool("show_markers", config->show_markers);
                     config->show_statistics = get_bool("show_statistics", config->show_statistics);
                     config->limit_map_zoomout = get_bool("limit_map_zoomout", config->limit_map_zoomout);
+                    config->camera_smoothing_2d = get_bool("camera_smoothing_2d", config->camera_smoothing_2d);
+                    config->camera_smoothing_3d = get_bool("camera_smoothing_3d", config->camera_smoothing_3d);
                     config->highlight_sunlit = get_bool("highlight_sunlit", config->highlight_sunlit);
                     config->show_slant_range = get_bool("show_slant_range", config->show_slant_range);
                     config->show_skybox = get_bool("show_skybox", config->show_skybox);
@@ -747,6 +751,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_markers"] = config->show_markers;
     root["show_statistics"] = config->show_statistics;
     root["limit_map_zoomout"] = config->limit_map_zoomout;
+    root["camera_smoothing_2d"] = config->camera_smoothing_2d;
+    root["camera_smoothing_3d"] = config->camera_smoothing_3d;
     root["highlight_sunlit"] = config->highlight_sunlit;
     root["show_slant_range"] = config->show_slant_range;
     root["show_scattering"] = config->show_scattering;
