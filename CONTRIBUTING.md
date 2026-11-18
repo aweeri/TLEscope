@@ -33,7 +33,7 @@ TLEscope is written in C++ using the **Raylib** and **Dear ImGui** frameworks.
 
 ## Our Stance on AI
 
-TLEscope is a passion project that has been in the works for over 5 years—starting from a simple prototype written in Python, through many iterations in C, and now C++. Throughout its development, AI has been used strictly to assist with engineering, not replace it.
+TLEscope is a passion project that has been in the works for over 5 years - starting from a simple prototype written in Python, through many iterations in C, and now C++. Throughout its development, AI has been used strictly to assist with engineering, not replace it.
 
 Many projects outright refuse AI-assisted changes, while others generate entire codebases without manually writing a single line. **TLEscope is neither of the above.**
 
