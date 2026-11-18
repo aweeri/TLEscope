@@ -2290,7 +2290,8 @@ static void DrawTransitRotatorConfig(UIContext *ctx, AppConfig *cfg)
 
 void DrawTransitRotatorWindow(UIContext *ctx, AppConfig *cfg)
 {
-    if (!g_ui.rot_show_window) return;
+    if (g_ui.rot_show_window)
+        ImGui::OpenPopup(ICON_FA_SATELLITE_DISH "  Antenna / Rotator");
 
     ImVec2 screen = ImGui::GetIO().DisplaySize;
     const float def_w = UIPx(840.0f);
@@ -2299,18 +2300,19 @@ void DrawTransitRotatorWindow(UIContext *ctx, AppConfig *cfg)
     if (max_w < UIPx(560.0f)) max_w = UIPx(560.0f);
     ImGui::SetNextWindowSizeConstraints(ImVec2(UIPx(560.0f), UIPx(340.0f)),
                                         ImVec2(max_w, screen.y - UIPx(48.0f)));
-    ImGui::SetNextWindowSize(ImVec2(def_w, def_h), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(def_w, def_h), ImGuiCond_Appearing);
     float pos_x = screen.x - def_w - UIPx(24.0f);
     if (pos_x < UIPx(8.0f)) pos_x = UIPx(8.0f);
     ImGui::SetNextWindowPos(ImVec2(pos_x, ImGui::GetFrameHeight() + UIPx(16.0f)),
-                            ImGuiCond_FirstUseEver);
+                            ImGuiCond_Appearing);
 
-    if (ImGui::Begin(ICON_FA_SATELLITE_DISH "  Antenna / Rotator", &g_ui.rot_show_window,
-                     ImGuiWindowFlags_NoCollapse))
+    bool *p_open = &g_ui.rot_show_window;
+    if (ImGui::BeginPopupModal(ICON_FA_SATELLITE_DISH "  Antenna / Rotator", p_open,
+                               ImGuiWindowFlags_NoCollapse))
     {
         DrawTransitRotatorTab(ctx, cfg);
+        ImGui::EndPopup();
     }
-    ImGui::End();
 }
 
 static void DrawTransitOverviewTabs(UIContext *ctx, AppConfig *cfg, int *pending_tab)
@@ -2380,7 +2382,7 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
     else
     {
         TransitEnsurePasses(ctx, cfg);
-        ImGui::OpenPopup("Transit Overview");
+        ImGui::OpenPopup(ICON_FA_SATELLITE_DISH "  Transit Overview");
     }
 
     ImVec2 screen = ImGui::GetIO().DisplaySize;
@@ -2392,7 +2394,7 @@ void DrawTransitOverviewModal(UIContext *ctx, AppConfig *cfg)
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
     bool *p_open = &g_ui.transit_overview_open;
-    if (ImGui::BeginPopupModal("Transit Overview", p_open, ImGuiWindowFlags_NoCollapse))
+    if (ImGui::BeginPopupModal(ICON_FA_SATELLITE_DISH "  Transit Overview", p_open, ImGuiWindowFlags_NoCollapse))
     {
         if (!s_tab_restored)
         {

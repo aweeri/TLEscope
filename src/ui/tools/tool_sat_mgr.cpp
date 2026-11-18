@@ -8,6 +8,7 @@
 #include "core/config.h"
 #include "data/storage.h"
 #include "data/ephem.h"
+#include "util/log.h"
 
 #include <cstdio>
 #include <cstring>
@@ -253,6 +254,9 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
                 /* persist the selection immediately so it survives a crash/kill */
                 SaveSatSelection(cfg);
                 SaveAppConfig("settings.json", cfg);
+                LOG_INFO("Satellite %s: %s",
+                         satellites[i].is_active ? "activated" : "deactivated",
+                         satellites[i].name);
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(satellites[i].is_active ? "Deactivate satellite"
@@ -276,10 +280,12 @@ void DrawPanelSatMgr(UIContext *ctx, AppConfig *cfg)
                 if (*ctx->selected_sat == &satellites[i])
                 {
                     *ctx->selected_sat = NULL;
+                    LOG_DEBUG("Satellite deselected: %s", satellites[i].name);
                 }
                 else
                 {
                     *ctx->selected_sat = &satellites[i];
+                    LOG_INFO("Satellite selected: %s", satellites[i].name);
                     if (SatIsEphem(&satellites[i]))
                     {
                         SatMgrEphemSelectWarp(ctx, &satellites[i]);

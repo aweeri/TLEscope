@@ -21,6 +21,7 @@
 #include "core/location.h"
 #include "core/discord_rpc.h"
 #include "util/log.h"
+#include "util/log_banner.h"
 #ifdef __APPLE__
 #include "util/window_macos.h"
 #endif
@@ -705,6 +706,7 @@ static void StartTrackingSat(TargetLock *lock, Satellite **sat, uint32_t *norad,
     *sat = target;
     *norad = target->norad_id_num;
     NotifyPush(NOTIFY_INFO, ICON_FA_SATELLITE, "Currently Tracking: %s", target->name);
+    LOG_INFO("Tracking satellite: %s", target->name);
 }
 
 static void StartTrackingBody(TargetLock *lock, Satellite **sat, uint32_t *norad, TargetLock kind)
@@ -716,6 +718,7 @@ static void StartTrackingBody(TargetLock *lock, Satellite **sat, uint32_t *norad
         NotifyPush(NOTIFY_INFO, ICON_FA_MOON, "Currently Tracking: Moon");
     else
         NotifyPush(NOTIFY_INFO, ICON_FA_GLOBE, "Currently Tracking: Earth");
+    LOG_INFO("Tracking body: %s", kind == LOCK_MOON ? "Moon" : "Earth");
 }
 
 /** user-initiated stop (pan / empty-space double-click); toasts only if tracking */
@@ -727,6 +730,7 @@ static void StopTrackingUser(TargetLock *lock, Satellite **sat, uint32_t *norad)
     *sat = NULL;
     *norad = 0;
     NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Tracking stopped");
+    LOG_INFO("Tracking stopped");
 }
 
 /** target lost (decay / NaN / data reload); toasts the lost name if known */
@@ -738,9 +742,15 @@ static void StopTrackingLost(TargetLock *lock, Satellite **sat, uint32_t *norad,
     *sat = NULL;
     *norad = 0;
     if (name && name[0])
+    {
         NotifyPush(NOTIFY_WARNING, ICON_FA_CROSSHAIRS, "Tracking stopped: %s lost", name);
+        LOG_WARN("Tracking lost: %s", name);
+    }
     else
+    {
         NotifyPush(NOTIFY_INFO, ICON_FA_CROSSHAIRS, "Tracking stopped");
+        LOG_INFO("Tracking stopped");
+    }
 }
 
 #define WINDOW_MIN_W 480
@@ -1032,11 +1042,19 @@ int main(int argc, char **argv)
             return RunEphemCheck(argc, argv, i);
     }
 
+#ifndef TLESCOPE_VERSION
+#define TLESCOPE_VERSION "vUnknown"
+#endif
+
     LogInit();
+    LogBanner(kWelcomeBanner, kWelcomeBannerAscii);
+    /* Show the full version string (e.g. "v3.9.2-12-g4f2a1c9-dirty") */
+    LOG_INFO("TLEscope %s starting", TLESCOPE_VERSION);
     AsyncFetchInit();
     SimScanInit();
 
     LoadAppConfig("settings.json", &cfg);
+    LogConfigureFile(AppConfigPath("TLEscope.log"), cfg.file_log_level, (size_t)cfg.log_file_max_kb * 1024);
     DiscordRpcInit(cfg.discord_rpc_enabled);
     SetUseLocalTime(cfg.use_local_time);
     sat_prop_set_short_period(cfg.prop_use_short_period);
@@ -1045,13 +1063,6 @@ int main(int argc, char **argv)
 
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
-
-#ifndef TLESCOPE_VERSION
-#define TLESCOPE_VERSION "vUnknown"
-#endif
-
-    /* Show the full version string (e.g. "v3.9.2-12-g4f2a1c9-dirty") */
-    LOG_INFO("TLEscope %s starting", TLESCOPE_VERSION);
 
     char window_title[128];
     snprintf(window_title, sizeof(window_title), "TLEscope %s", TLESCOPE_VERSION);
@@ -1470,11 +1481,13 @@ int main(int argc, char **argv)
                     saved_multiplier = time_multiplier;
                     time_multiplier = 0.0;
                     NotifyPush(NOTIFY_INFO, ICON_FA_PAUSE, "Time paused");
+                    LOG_INFO("Time paused");
                 }
                 else
                 {
                     time_multiplier = saved_multiplier != 0.0 ? saved_multiplier : 1.0;
                     NotifyPush(NOTIFY_INFO, ICON_FA_PLAY, "Time resumed");
+                    LOG_INFO("Time resumed");
                 }
             }
             
@@ -1519,14 +1532,20 @@ int main(int argc, char **argv)
                 time_multiplier = StepTimeMultiplier(time_multiplier, true);
                 /* only toast on the initial press, not on hold-repeat */
                 if (IsKeyPressed(KEY_PERIOD))
+                {
                     NotifyPush(NOTIFY_INFO, ICON_FA_FORWARD, "Time sped up");
+                    LOG_INFO("Time speed: %.1fx", time_multiplier);
+                }
             }
             if (step_bwd)
             {
                 is_auto_warping = false;
                 time_multiplier = StepTimeMultiplier(time_multiplier, false);
                 if (IsKeyPressed(KEY_COMMA))
+                {
                     NotifyPush(NOTIFY_INFO, ICON_FA_BACKWARD, "Time slowed");
+                    LOG_INFO("Time speed: %.1fx", time_multiplier);
+                }
             }
             if (IsKeyPressed(KEY_M)) {
                 is_2d_view = !is_2d_view;
@@ -1596,12 +1615,14 @@ int main(int argc, char **argv)
                 {
                     current_epoch = get_current_real_time_epoch();
                     NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time reset to now");
+                    LOG_INFO("Time reset to now");
                 }
                 else
                 {
                     time_multiplier = 1.0;
                     saved_multiplier = 1.0;
                     NotifyPush(NOTIFY_INFO, ICON_FA_CLOCK, "Time speed reset to 1x");
+                    LOG_INFO("Time speed reset to 1x");
                 }
             }
 
@@ -1619,7 +1640,6 @@ int main(int argc, char **argv)
                 SaveAppConfig("settings.json", &cfg);
                 LOG_INFO("Fullscreen toggled");
             }
-
             /* sidebar show/hide shortcuts */
             if (IsKeyPressed(KEY_ONE))
                 LayoutSetSidebarVisible(SIDEBAR_LEFT, !LayoutSidebarVisible(SIDEBAR_LEFT));
@@ -3811,6 +3831,7 @@ int main(int argc, char **argv)
     }
 
     /* cleanup and save */
+    LOG_INFO("TLEscope shutting down");
     UnloadTexture(logoTex);
     UnloadTexture(logoLTex);
     UnloadTexture(satIcon);
@@ -3851,6 +3872,7 @@ int main(int argc, char **argv)
     SaveSatSelection(&cfg);    /* copy live active-satellite selection into cfg */
     cfg.show_ecliptic_frame = is_ecliptic_frame; /* copy live ecliptic-frame state into cfg */
     SaveAppConfig("settings.json", &cfg);
+    LOG_INFO("Settings saved to settings.json");
 
     SaveDataSelections();
     SaveFavorites("favorites.json"); /* persist favorite satellites */

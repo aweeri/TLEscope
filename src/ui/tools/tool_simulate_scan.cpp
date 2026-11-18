@@ -2449,11 +2449,13 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             {
                 snprintf(s_export_status, sizeof(s_export_status), "Saved %s", path);
                 NotifyPush(NOTIFY_SUCCESS, ICON_FA_FILE_IMAGE, "Saved %s", path);
+                LOG_INFO("Exported image: %s", path);
             }
             else
             {
                 snprintf(s_export_status, sizeof(s_export_status), "Export failed: %s", path);
                 NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION, "Export failed: %s", path);
+                LOG_ERROR("Export failed: %s", path);
             }
         }
 
@@ -2617,11 +2619,13 @@ void DrawTransitSimulateScanTab(UIContext *ctx, AppConfig *cfg)
             {
                 snprintf(s_export_status, sizeof(s_export_status), "Saved %s", path);
                 NotifyPush(NOTIFY_SUCCESS, ICON_FA_FILE_IMAGE, "Saved %s", path);
+                LOG_INFO("Exported image: %s", path);
             }
             else
             {
                 snprintf(s_export_status, sizeof(s_export_status), "Export failed: %s", path);
                 NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION, "Export failed: %s", path);
+                LOG_ERROR("Export failed: %s", path);
             }
         }
 

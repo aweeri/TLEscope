@@ -6,11 +6,6 @@
 #include "ui/ui.h"
 #include "imgui.h"
 
-/* -- Shared state ---------------------------------------------------------- */
-
-extern bool log_auto_scroll;        /* log auto-scroll preference               */
-extern bool log_show_timestamps;    /* show timestamps in log entries (default off) */
-
 /* -- Layers panel persistence keys (see tool_layers.cpp) ------------------- */
 
 /* universal Orbits layer (see tool_layers.cpp) */

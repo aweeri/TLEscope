@@ -25,9 +25,9 @@ void TransitOpenRotatorTab(AppConfig *cfg);
 void SimScanInit(void);
 void SimScanShutdown(void);
 void SimScanCancel(void);
-void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg);
 void DrawPanelExample(UIContext *ctx, AppConfig *cfg); /* reference example tool */
+void DrawPanelLog(UIContext *ctx, AppConfig *cfg);
 
 /* scene hooks (draw into the 3D globe / 2D map, see tools_scene.h) */
 void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg);

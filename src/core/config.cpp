@@ -96,6 +96,8 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     config->auto_repull_stale = false;
     config->network_timeout_seconds = 45;
     config->max_satellites = DEFAULT_MAX_SATELLITES;
+    config->file_log_level = 2;
+    config->log_file_max_kb = 500;
     config->prop_use_short_period = true;
     config->active_sat_count = 0;
     config->has_saved_selection = false;
@@ -239,6 +241,12 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->max_satellites = get_int("max_satellites", config->max_satellites);
                     if (config->max_satellites < MIN_MAX_SATELLITES) config->max_satellites = MIN_MAX_SATELLITES;
                     if (config->max_satellites > MAX_MAX_SATELLITES) config->max_satellites = MAX_MAX_SATELLITES;
+                    config->file_log_level = get_int("file_log_level", config->file_log_level);
+                    if (config->file_log_level < 0) config->file_log_level = 0;
+                    if (config->file_log_level > 4) config->file_log_level = 4;
+                    config->log_file_max_kb = get_int("log_file_max_kb", config->log_file_max_kb);
+                    if (config->log_file_max_kb < 16) config->log_file_max_kb = 16;
+                    if (config->log_file_max_kb > 102400) config->log_file_max_kb = 102400;
                     config->first_day_of_week = get_int("first_day_of_week", config->first_day_of_week);
                     config->prop_use_short_period = get_bool("prop_use_short_period", config->prop_use_short_period);
 
@@ -786,6 +794,8 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["auto_repull_stale"] = config->auto_repull_stale;
     root["network_timeout_seconds"] = config->network_timeout_seconds;
     root["max_satellites"] = config->max_satellites;
+    root["file_log_level"] = config->file_log_level;
+    root["log_file_max_kb"] = config->log_file_max_kb;
     root["prop_use_short_period"] = config->prop_use_short_period;
 
     if (config->custom_data_source_count > 0)

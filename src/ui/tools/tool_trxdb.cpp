@@ -345,6 +345,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
             s_info_valid = false;          // drop stale data from the previous sat
             s_transponder_count = 0;
 
+            LOG_INFO("TRXDB: fetching NORAD %s", norad);
             int gen = s_target_gen;
             std::thread(trxdb_worker_fetch, gen, std::string(norad)).detach();
         }
@@ -443,6 +444,7 @@ void DrawPanelTrxdb(UIContext *ctx, AppConfig *cfg)
             trxdb_free_result(&s_result);
             s_info_valid = false;
             s_transponder_count = 0;
+            LOG_INFO("TRXDB: fetching NORAD %s", norad);
             int gen = s_target_gen;
             std::thread(trxdb_worker_fetch, gen, std::string(norad)).detach();
         }

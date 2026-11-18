@@ -44,6 +44,9 @@ void LogMessage(LogLevel level, const char *format, ...);
 #define LOG_WARN(...)   LogMessage(LOG_LEVEL_WARN,  __VA_ARGS__)
 #define LOG_ERROR(...)  LogMessage(LOG_LEVEL_ERROR, __VA_ARGS__)
 
+// write ansi to cli and ascii to log
+void LogBanner(const char *text, const char *fallback);
+
 /** clear all log entries */
 void LogClear(void);
 
@@ -55,6 +58,18 @@ void LogUnlock(void);
 
 /** ring-buffer head index; oldest entry is at (head - count + capacity) % capacity. */
 int LogGetHeadIndex(void);
+
+/** configure file logging; path is copied, file_level 0 disables, max_bytes triggers auto-trim */
+void LogConfigureFile(const char *path, int file_level, size_t max_bytes);
+
+/** change the file log level at runtime (0=Off, 1=Debug, 2=Info, 3=Warn, 4=Error) */
+void LogSetFileLevel(int file_level);
+
+/** change the file auto-trim threshold at runtime */
+void LogSetFileMaxBytes(size_t max_bytes);
+
+/** resolved log file path, or "" when file logging is unconfigured */
+const char *LogGetFilePath(void);
 
 #ifdef __cplusplus
 }

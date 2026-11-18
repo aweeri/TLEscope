@@ -414,6 +414,8 @@ typedef struct
     bool auto_repull_stale;            // auto re-pull stale data instead of prompting (default false)
     int network_timeout_seconds;       // HTTP request timeout, 15-300 seconds (default 45)
     int max_satellites;                // runtime limit, MIN_MAX_SATELLITES..MAX_MAX_SATELLITES
+    int file_log_level;                // file log verbosity: 0=Off, 1=Debug, 2=Info, 3=Warn, 4=Error
+    int log_file_max_kb;               // auto-trim threshold for the log file, in KB
 
     UILayoutPersist ui_layout;  // sidebar/panel layout persistence
 

@@ -63,6 +63,12 @@ bool UIHandleGlobalEscape(UIContext *ctx, AppConfig *cfg)
         return true;
     }
 
+    if (g_ui.show_log_window)
+    {
+        g_ui.show_log_window = false;
+        return true;
+    }
+
     UIRequestExit();
     return true;
 }

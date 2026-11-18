@@ -1,5 +1,6 @@
 #include "file_dialog.h"
 #include "portable-file-dialogs.h"
+#include "util/log.h"
 
 #include <cstdio>
 
@@ -58,9 +59,8 @@ void FileDialog::open(const std::string& title,
 
     if (!pfd::settings::available())
     {
-        std::fprintf(stderr,
-            "FileDialog: no native dialog backend found "
-            "(Linux: install zenity or kdialog)\n");
+        LOG_WARN("FileDialog: no native dialog backend found "
+                 "(Linux: install zenity or kdialog)");
         return;
     }
 

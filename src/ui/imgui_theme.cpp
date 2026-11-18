@@ -181,7 +181,16 @@ void ThemeRebuildImGuiFonts(const Theme *t, float ui_scale)
     font_cfg.OversampleH = 2;
     font_cfg.OversampleV = 1;
     font_cfg.RasterizerDensity = 1.0f;
-    io.Fonts->AddFontFromFileTTF(font_path, font_px, &font_cfg, NULL);
+    /* main font: default Latin plus box-drawing/block glyphs for the log banner */
+    static ImVector<ImWchar> main_ranges;
+    {
+        ImFontGlyphRangesBuilder builder;
+        builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+        static const ImWchar banner_ranges[] = { 0x2500, 0x257F, 0x2580, 0x259F, 0 };
+        builder.AddRanges(banner_ranges);
+        builder.BuildRanges(&main_ranges);
+    }
+    io.Fonts->AddFontFromFileTTF(font_path, font_px, &font_cfg, main_ranges.Data);
 
     /* merge FontAwesome icons */
 

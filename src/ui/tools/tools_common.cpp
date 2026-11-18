@@ -24,11 +24,6 @@
 #include "imgui.h"
 #include "IconsFontAwesome6.h"
 
-// -- Shared state -----------------------------------------------------------
-
-bool log_auto_scroll = true;
-bool log_show_timestamps = false;  // timestamps hidden by default (cleaner)
-
 // -- Helpers ----------------------------------------------------------------
 
 ImVec4 ThemeColor(const Color &c)
@@ -381,6 +376,7 @@ bool DataSourcesStartPull(AppConfig *cfg, UIContext *ctx)
         return false;
     }
 
+    LOG_INFO("Starting data pull: %d source(s)", count);
     g_pull_total = count;
     g_pull_auto = false;
 
@@ -439,6 +435,7 @@ void DataSourcesPollPullCompletion(AppConfig *cfg)
 
     // distinguish success/partial/total failure so a 24/7 operator notices silent refresh failures
     int failed = AsyncFetchTakeFailureCount();
+    LOG_INFO("Data pull complete: %d satellites, %d failed", sat_count, failed);
     if (sat_count <= 0)
     {
         /* nothing arrived at all: offline or every selected source failed */

@@ -525,6 +525,8 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                     const char *name = cfg->retlector_groups[s_retlector_combo_idx].name;
                     if (!DataSelectionAdd(SOURCE_RETLECTOR, name, name, NULL, FORMAT_OMM_CSV))
                         LOG_DEBUG("Retlector group '%s' already in selection list", name);
+                    else
+                        LOG_INFO("Added data source: %s", name);
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Add this group to the active selections list");
@@ -596,6 +598,10 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             {
                 LOG_DEBUG("Celestrak group '%s' already in selection list", name);
             }
+            else
+            {
+                LOG_INFO("Added data source: %s", name);
+            }
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Add this group to the active selections list");
@@ -624,6 +630,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             else
             {
+                LOG_INFO("Added data source: %s", s_url_buf);
                 s_url_buf[0] = '\0'; /* clear on success */
             }
         }
@@ -672,6 +679,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             else
             {
+                LOG_INFO("Added data source: %s", s_file_buf);
                 s_file_buf[0] = '\0'; /* clear on success */
             }
         }
@@ -753,6 +761,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 }
                 else
                 {
+                    LOG_INFO("Added data source: %s", preview);
                     s_paste_buf[0] = '\0'; /* clear on success */
                 }
             }
@@ -1065,12 +1074,14 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         }
 
         if (g_ui.ephem_modal_open && g_ephem_pending_valid &&
-            !ImGui::IsPopupOpen("Add Mission"))
-            ImGui::OpenPopup("Add Mission");
+            !ImGui::IsPopupOpen(ICON_FA_PLUS "  Add Mission"))
+            ImGui::OpenPopup(ICON_FA_PLUS "  Add Mission");
 
         bool *modal_open = &g_ui.ephem_modal_open;
         ImGui::SetNextWindowSize(ImVec2(UIPx(420.0f), 0), ImGuiCond_Always);
-        if (ImGui::BeginPopupModal("Add Mission", modal_open, ImGuiWindowFlags_AlwaysAutoResize))
+        /* left-align the modal title (the theme's global title alignment centers it) */
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, ImVec2(0.0f, 0.5f));
+        if (ImGui::BeginPopupModal(ICON_FA_PLUS "  Add Mission", modal_open, ImGuiWindowFlags_AlwaysAutoResize))
         {
             if (!g_ephem_pending_valid)
             {
@@ -1154,6 +1165,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             }
             ImGui::EndPopup();
         }
+        ImGui::PopStyleVar();
 
         const int mission_count = EphemCount();
         if (mission_count == 0)
@@ -1323,6 +1335,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
             if (ImGui::Button(ICON_FA_XMARK, ImVec2(20, 20)))
             {
+                LOG_INFO("Removed data source: %s", s->name);
                 DataSelectionRemove(i);
                 ImGui::PopStyleColor();
                 ImGui::PopID();
