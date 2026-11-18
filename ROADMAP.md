@@ -4,3 +4,4 @@
 
 - time conntrols: add a tab for manual date entry in the existing picker.
 
+- add spacetrack support

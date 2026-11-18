@@ -663,8 +663,7 @@ static void DrawAboutModal(UIContext *ctx, AppConfig *cfg)
     {
         ImGui::Text("TLEscope v%s", TLESCOPE_VERSION);
         ImGui::Separator();
-        ImGui::TextWrapped("A real-time satellite tracking and orbit simulation tool.");
-        ImGui::TextWrapped("TLE / OMM orbital data, 3D globe, passes, polar plots and more.");
+        ImGui::TextWrapped("Satellite tracker for live OMM/TLE GP data - 3D globe, 2D ground tracks, pass prediction, terminator & LOS coverage. Tiny native C++ app for Windows/macOS/Linux. The modern Gpredict alternative.");
         ImGui::Separator();
         if (ImGui::Button("GitHub Repository"))
         {

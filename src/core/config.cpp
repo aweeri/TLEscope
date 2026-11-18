@@ -65,6 +65,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
     strcpy(config->theme, "default");
     config->show_markers = true;      // default
     config->show_statistics = false;  // default
+    config->show_support_button = true;  // default
     config->limit_map_zoomout = true;  // default: cap 2D map zoom-out at the viewport fill level
     config->camera_smoothing_2d = false;
     config->camera_smoothing_3d = true;   // default: preserve prior 3D easing
@@ -245,6 +246,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_night_lights = get_bool("show_night_lights", config->show_night_lights);
                     config->show_markers = get_bool("show_markers", config->show_markers);
                     config->show_statistics = get_bool("show_statistics", config->show_statistics);
+                    config->show_support_button = get_bool("show_support_button", config->show_support_button);
                     config->limit_map_zoomout = get_bool("limit_map_zoomout", config->limit_map_zoomout);
                     config->camera_smoothing_2d = get_bool("camera_smoothing_2d", config->camera_smoothing_2d);
                     config->camera_smoothing_3d = get_bool("camera_smoothing_3d", config->camera_smoothing_3d);
@@ -697,6 +699,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         config->earth_rotation_offset = 0.00;
         config->orbits_to_draw = 3.00;
         config->show_statistics = false;
+        config->show_support_button = true;
         config->limit_map_zoomout = true;
         config->hint_vsync = true;
         config->night_mode = false;
@@ -756,6 +759,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_night_lights"] = config->show_night_lights;
     root["show_markers"] = config->show_markers;
     root["show_statistics"] = config->show_statistics;
+    root["show_support_button"] = config->show_support_button;
     root["limit_map_zoomout"] = config->limit_map_zoomout;
     root["camera_smoothing_2d"] = config->camera_smoothing_2d;
     root["camera_smoothing_3d"] = config->camera_smoothing_3d;

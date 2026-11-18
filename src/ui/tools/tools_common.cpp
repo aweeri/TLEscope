@@ -358,16 +358,28 @@ void DataSourcesSetAutoPull(bool is_auto) { g_pull_auto = is_auto; }
 
 bool DataSourcesStartPull(AppConfig *cfg, UIContext *ctx)
 {
+    if (AsyncFetchBusy())
+        return false;
+
     int count = DataSelectionCount();
     if (count == 0)
     {
-        LOG_INFO("No sources selected to pull");
+        LOG_INFO("No sources selected to pull - wiping all loaded data");
+
+        if (ctx && ctx->selected_sat)
+            *ctx->selected_sat = NULL;
+
+        sat_count = 0;
+        EphemClear();
+
+        SaveSatSelection(cfg);
+
+        SaveOrbitalData("data.json", satellites, sat_count);
+
+        NotifyPush(NOTIFY_INFO, ICON_FA_TRASH_CAN,
+                   "No sources selected - cleared all loaded data");
         return false;
     }
-
-    /* never start a second pull while one is already in flight */
-    if (AsyncFetchBusy())
-        return false;
 
     g_pull_total = count;
     g_pull_auto = false;

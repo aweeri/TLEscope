@@ -26,6 +26,8 @@
 #include <cstring>
 #include <cfloat>
 #include <algorithm>
+#include <string>
+#include <thread>
 
 /* -- Layout constants ------------------------------------------------------ */
 
@@ -503,6 +505,14 @@ static void NavTooltip(const char *text)
     dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), fill, round);
     dl->AddRect(p, ImVec2(p.x + w, p.y + h), edge, round, 0, UIPx(1.0f));
     dl->AddText(NULL, 0.0f, ImVec2(p.x + pad_x, p.y + pad_y), col, text, NULL, wrap_w);
+}
+
+// OpenURL blocks on system(), run off the UI thread
+static void OpenURLAsync(const char *url)
+{
+    if (!url) return;
+    std::string u(url);
+    std::thread([u]() { OpenURL(u.c_str()); }).detach();
 }
 
 static void DrawRotatorNavIndicator(UIContext *ctx, AppConfig *cfg)
@@ -1334,6 +1344,17 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
         }
 
         DrawRotatorNavIndicator(ctx, cfg);
+        if (cfg->show_support_button)
+        {
+            float rot_left = g_layout.rotator_nav_rect.x0 - ImGui::GetWindowPos().x + ImGui::GetScrollX();
+            float sw = ImGui::CalcTextSize(ICON_FA_HEART "  Support").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(rot_left - ImGui::GetStyle().ItemSpacing.x - sw);
+            if (ImGui::Button(ICON_FA_HEART "  Support"))
+                OpenURLAsync("https://ko-fi.com/aweeri");
+            if (ImGui::IsItemHovered())
+                NavTooltip("Support TLEscope development");
+        }
 
         ImGui::EndMainMenuBar();
     }
@@ -1415,6 +1436,10 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Checkbox("Show Statistics", &cfg->show_statistics);
+            if (ImGui::Checkbox("Show Support Button", &cfg->show_support_button))
+                SaveAppConfig("settings.json", cfg);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Show the Support (heart) button in the top navigation bar");
             ImGui::Checkbox("Limit Map Zoom-Out", &cfg->limit_map_zoomout);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Keep the 2D map filling the viewport by capping how far it can zoom out");
