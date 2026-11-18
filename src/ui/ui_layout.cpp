@@ -1559,6 +1559,12 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Ease 3D globe orbit and zoom instead of snapping directly");
 
+            ImGui::BeginDisabled(!cfg->show_sun);
+            ImGui::Checkbox("Anamorphic Sun Flare", &cfg->show_sun_anamorphic);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("[WORK IN PROGRESS] Replace the default sun flare with a horizontal anamorphic streak.\n3D viewport only.");
+            ImGui::EndDisabled();
+
             /* predicted (future) orbit steps per ground track in 2D mode; 0.25-orbit grid, default 2.0 */
             float orbits_steps = ToolSettingGetFloat(cfg, LAYERS_KEY_FUTURE_ORBITS_STEPS,
                                                      LAYERS_FUTURE_ORBITS_STEPS_DEFAULT);

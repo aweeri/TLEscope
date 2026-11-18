@@ -99,31 +99,32 @@ void LoadAppConfig(const char *filename, AppConfig *config)
 
     // default theme configuration
     strcpy(config->theme, "default");
-    config->show_markers = true;      // default
-    config->show_statistics = false;  // default
-    config->show_support_button = true;  // default
-    config->limit_map_zoomout = true;  // default: cap 2D map zoom-out at the viewport fill level
+    config->show_markers = true;      
+    config->show_statistics = false;  
+    config->show_support_button = true;  
+    config->limit_map_zoomout = true;
     config->camera_smoothing_2d = false;
-    config->camera_smoothing_3d = true;   // default: preserve prior 3D easing
-    config->highlight_sunlit = false; // default
-    config->show_slant_range = false; // default
-    config->show_scattering = true;   // default (Aesthetic profile)
-    config->show_skybox = true;       // default
-    config->show_sun = true;          // default
-    config->show_sun_flare = true;    // default
-    config->show_ecliptic_frame = false; // default
-    config->show_ground_coverage = true; // default
-    config->show_apsides = true;      // default
-    config->show_earth_texture = true;  // default
-    config->show_latlon_grid = true;    // default
-    config->show_country_borders = true;  // default
-    config->show_coast_lines = true;   // default
-    config->show_tutorial = false;   // default: first-boot tutorial not pending
-    config->hint_vsync = true;       // default
-    config->use_local_time = true;   // default: display in system local timezone
-    config->night_mode = false;      // default: full-screen red post-process off
-    config->discord_rpc_enabled = true; // default: publish presence to Discord
-    config->first_day_of_week = 1;   // default: Monday first in the date-picker calendar
+    config->camera_smoothing_3d = true;
+    config->highlight_sunlit = false;
+    config->show_slant_range = false;
+    config->show_scattering = true;
+    config->show_skybox = true;       
+    config->show_sun = true;          
+    config->show_sun_flare = true;    
+    config->show_sun_anamorphic = false; // default: opt-in
+    config->show_ecliptic_frame = false; 
+    config->show_ground_coverage = true; 
+    config->show_apsides = true;      
+    config->show_earth_texture = true;  
+    config->show_latlon_grid = true;    
+    config->show_country_borders = true;  
+    config->show_coast_lines = true;   
+    config->show_tutorial = false;
+    config->hint_vsync = true;       
+    config->use_local_time = true;
+    config->night_mode = false;
+    config->discord_rpc_enabled = true;
+    config->first_day_of_week = 1;
     config->custom_data_source_count = 0;
     config->retlector_group_count = 0;
     config->retlector_groups_fetched = false;
@@ -325,6 +326,7 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                     config->show_skybox = get_bool("show_skybox", config->show_skybox);
                     config->show_sun = get_bool("show_sun", config->show_sun);
                     config->show_sun_flare = get_bool("show_sun_flare", config->show_sun_flare);
+                    config->show_sun_anamorphic = get_bool("show_sun_anamorphic", config->show_sun_anamorphic);
                     config->show_ecliptic_frame = get_bool("show_ecliptic_frame", config->show_ecliptic_frame);
                     /* Reference body is per-mission; capture the legacy global value once. */
                     {
@@ -861,6 +863,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
     root["show_skybox"] = config->show_skybox;
     root["show_sun"] = config->show_sun;
     root["show_sun_flare"] = config->show_sun_flare;
+    root["show_sun_anamorphic"] = config->show_sun_anamorphic;
     root["show_ecliptic_frame"] = config->show_ecliptic_frame;
     root["show_ground_coverage"] = config->show_ground_coverage;
     root["show_apsides"] = config->show_apsides;

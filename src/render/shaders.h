@@ -283,4 +283,41 @@ void main() {
 }
 )GLSL";
 
+// WIP: anamorphic sun streak
+inline constexpr const char *fsAnamorphic = R"GLSL(#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+uniform sampler2D texture0;
+uniform float uEnergy;
+uniform vec3 uCoreCol;
+uniform vec3 uTailCol;
+void main() {
+    float u = (fragTexCoord.x - 0.5) * 2.0;
+    float v = (fragTexCoord.y - 0.5) * 2.0;
+    float au = abs(u);
+
+    // horizontal profile: hot core + main body + long thin tail
+    float x = u / 0.008;
+    float core = exp(-x * x);
+    float tail = 0.18 * exp(-au / 0.25);
+    float longTail = 0.03 * exp(-sqrt(au / 0.9));
+    float hprof = core + tail + longTail;
+
+    // vertical gaussian, sigma_v = 0.25 of the quad height
+    float y = v / 0.5;
+    float vprof = exp(-y * y);
+
+    float alpha = hprof * vprof;
+    alpha *= 1.0 + 0.04 * sin(u * 60.0); // faint diffraction ripple
+
+    // core -> tail colour gradient
+    float t = clamp(au / 0.5, 0.0, 1.0);
+    vec3 col = mix(uCoreCol, uTailCol, t);
+
+    // premultiplied additive
+    finalColor = vec4(col * alpha * uEnergy, alpha * uEnergy);
+}
+)GLSL";
+
 } // namespace Shaders

@@ -797,6 +797,23 @@ static void ClampWindowRectToMonitor(int &x, int &y, int &w, int &h)
 
 static Texture2D g_sunGlowTex = {0};
 
+static Shader g_sunAnamorphicShader = {0};
+static int g_sunAnamorphicEnergyLoc = -1;
+static int g_sunAnamorphicCoreLoc = -1;
+static int g_sunAnamorphicTailLoc = -1;
+static Texture2D g_sunWhiteTex = {0};
+
+static Texture2D SunEnsureWhiteTexture(void)
+{
+    if (g_sunWhiteTex.id == 0)
+    {
+        Image img = GenImageColor(1, 1, WHITE);
+        g_sunWhiteTex = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+    return g_sunWhiteTex;
+}
+
 static Texture2D SunEnsureGlowTexture(void)
 {
     if (g_sunGlowTex.id == 0)
@@ -858,8 +875,8 @@ static void DrawSunOverlay(Vector3 sunPosWorld, Camera cam, Vector3 camForward,
         Vector3LengthSqr(sunDirWorld) < 1e-12f)
         return;
 
-    float margin_x = g_view3d_w * 0.6f;
-    float margin_y = g_view3d_h * 0.6f;
+    float margin_x = g_view3d_w * 1.5f;
+    float margin_y = g_view3d_h * 1.5f;
     if (sp.x < g_view3d_x - margin_x || sp.x > g_view3d_x + g_view3d_w + margin_x ||
         sp.y < g_view3d_y - margin_y || sp.y > g_view3d_y + g_view3d_h + margin_y)
         return;
@@ -881,7 +898,7 @@ static void DrawSunOverlay(Vector3 sunPosWorld, Camera cam, Vector3 camForward,
                 occlusion = (b - rEarth) / (rAtmo - rEarth);
         }
     }
-    if (occlusion <= 0.0f)
+    if (occlusion <= 0.0f && !cfg.show_sun_anamorphic)
         return;
 
     Vector2 center = { g_view3d_x + g_view3d_w * 0.5f, g_view3d_y + g_view3d_h * 0.5f };
@@ -916,7 +933,7 @@ static void DrawSunOverlay(Vector3 sunPosWorld, Camera cam, Vector3 camForward,
                    (Vector2){ disk, disk }, 0.0f,
                    (Color){ 255, 255, 245, (unsigned char)(255.0f * occlusion) });
 
-    if (cfg.show_sun_flare)
+    if (cfg.show_sun_flare && !(cfg.show_sun_anamorphic && g_sunAnamorphicShader.id != 0))
     {
         float flare = centreness * occlusion;
         if (flare > 0.001f)
@@ -950,6 +967,92 @@ static void DrawSunOverlay(Vector3 sunPosWorld, Camera cam, Vector3 camForward,
     }
 
     EndBlendMode();
+
+    if (cfg.show_sun_anamorphic && g_sunAnamorphicShader.id != 0)
+    {
+        float screenW = (float)GetScreenWidth();
+        float screenH = (float)GetScreenHeight();
+        float w = 2.5f * screenW;
+        float h = fmaxf(0.02f * screenH, 10.0f);
+
+        float toSunLen = Vector3Length(toSun);
+        float camFwdLen = Vector3Length(camForward);
+        float denom = toSunLen * camFwdLen;
+        float cosAngle = (denom > 1e-6f) ? (fwd / denom) : 0.0f;
+        float sizeFactor = Clamp(sqrtf(disk / 48.0f), 0.5f, 1.5f);
+        float angleFactor = powf(fmaxf(cosAngle, 0.0f), 8.0f);
+        float occ = fmaxf(occlusion, 0.05f);
+        float target = sizeFactor * angleFactor * occ * 1.45f;
+
+        static float s_energy = 0.0f;
+        float k = 1.0f - expf(-GetFrameTime() / 0.1f);
+        s_energy += (target - s_energy) * k;
+        float energy = s_energy;
+
+        if (energy > 0.001f)
+        {
+            float coreCol[3] = { 0.55f, 0.80f, 1.00f };
+            float tailCol[3] = { 0.15f, 0.35f, 1.00f };
+
+            BeginBlendMode(BLEND_ADDITIVE);
+
+            // veiling glow around the source
+            float vr = 0.1f * screenH;
+            unsigned char va = (unsigned char)(Clamp(0.4f * energy, 0.0f, 1.0f) * 255.0f);
+            Color vc = { (unsigned char)(coreCol[0] * 255.0f), (unsigned char)(coreCol[1] * 255.0f), 255, va };
+            DrawCircleGradient(sp, vr, vc, (Color){ vc.r, vc.g, vc.b, 0 });
+
+            // optical ghost chain: each element mirrors across centre at its own scale,
+            // with its own coating tint, blur and energy, squashed into anamorphic dashes
+            struct FlareGhost { float t; float blur; float energy; unsigned char r, g, b; };
+            static const FlareGhost ghosts[] = {
+                { 1.35f,  2.0f, 0.18f, 255, 120, 220 }, // front surface, magenta
+                { 0.82f,  4.0f, 0.12f, 120, 255, 150 }, // second element, green
+                { 1.90f,  9.0f, 0.07f, 255, 190, 110 }, // rear group, amber
+                { -0.60f, 14.0f, 0.04f, 255, 120, 220 }, // sensor cover, magenta
+                { 2.60f, 18.0f, 0.03f, 120, 255, 150 }, // deep ghost, green
+            };
+            float baseR = screenH * 0.018f;
+            for (const FlareGhost &g : ghosts)
+            {
+                Vector2 gp = { center.x + (sp.x - center.x) * g.t, center.y + (sp.y - center.y) * g.t };
+                float gr = baseR + g.blur * 1.5f;
+                float amp = g.energy * energy * (baseR / gr);
+                unsigned char ga = (unsigned char)(Clamp(amp, 0.0f, 1.0f) * 255.0f);
+                Color gc = { g.r, g.g, g.b, ga };
+                rlPushMatrix();
+                rlTranslatef(gp.x, gp.y, 0.0f);
+                rlScalef(1.0f, 0.22f, 1.0f);
+                DrawCircleGradient((Vector2){ 0.0f, 0.0f }, gr, gc, (Color){ gc.r, gc.g, gc.b, 0 });
+                rlPopMatrix();
+            }
+
+            // short vertical star at the anchor
+            float vlen = screenH * 0.05f;
+            float vwid = fmaxf(1.5f, screenH * 0.0015f);
+            unsigned char sa = (unsigned char)(Clamp(0.15f * energy, 0.0f, 1.0f) * 255.0f);
+            Color sc = { (unsigned char)(coreCol[0] * 255.0f), (unsigned char)(coreCol[1] * 255.0f), 255, sa };
+            DrawRectangleGradientV((int)(sp.x - vwid * 0.5f), (int)(sp.y - vlen), (int)vwid, (int)vlen,
+                                   (Color){ sc.r, sc.g, sc.b, 0 }, sc);
+            DrawRectangleGradientV((int)(sp.x - vwid * 0.5f), (int)sp.y, (int)vwid, (int)vlen,
+                                   sc, (Color){ sc.r, sc.g, sc.b, 0 });
+
+            EndBlendMode();
+
+            // premultiplied additive streak
+            SetShaderValue(g_sunAnamorphicShader, g_sunAnamorphicEnergyLoc, &energy, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(g_sunAnamorphicShader, g_sunAnamorphicCoreLoc, coreCol, SHADER_UNIFORM_VEC3);
+            SetShaderValue(g_sunAnamorphicShader, g_sunAnamorphicTailLoc, tailCol, SHADER_UNIFORM_VEC3);
+            BeginBlendMode(BLEND_CUSTOM);
+            rlSetBlendFactors(RL_ONE, RL_ONE, RL_FUNC_ADD);
+            BeginShaderMode(g_sunAnamorphicShader);
+            DrawTexturePro(SunEnsureWhiteTexture(), (Rectangle){ 0.0f, 0.0f, 1.0f, 1.0f },
+                           (Rectangle){ sp.x, sp.y, w, h }, (Vector2){ w * 0.5f, h * 0.5f }, 0.0f, WHITE);
+            EndShaderMode();
+            EndBlendMode();
+        }
+    }
+
     EndScissorMode();
 
     rlDrawRenderBatchActive();
@@ -1182,6 +1285,12 @@ int main(int argc, char **argv)
     Shader shaderNight = LoadShaderFromMemory(NULL, Shaders::fsNight);
     int nightIntensityLoc = GetShaderLocation(shaderNight, "intensity");
     Texture2D nightTex = {0};
+
+    // anamorphic sun streak: additive screen-space pass in the 3D viewport
+    g_sunAnamorphicShader = LoadShaderFromMemory(NULL, Shaders::fsAnamorphic);
+    g_sunAnamorphicEnergyLoc = GetShaderLocation(g_sunAnamorphicShader, "uEnergy");
+    g_sunAnamorphicCoreLoc = GetShaderLocation(g_sunAnamorphicShader, "uCoreCol");
+    g_sunAnamorphicTailLoc = GetShaderLocation(g_sunAnamorphicShader, "uTailCol");
 
     Shader shaderCloud = LoadShaderFromMemory(NULL, Shaders::fsCloud3D);
     int sunDirLocCloud = GetShaderLocation(shaderCloud, "sunDir");
@@ -3854,6 +3963,10 @@ int main(int argc, char **argv)
     UnloadShader(shader2D);
     UnloadShader(earthSolidShader);
     UnloadShader(shaderNight);
+    if (g_sunAnamorphicShader.id != 0)
+        UnloadShader(g_sunAnamorphicShader);
+    if (g_sunWhiteTex.id != 0)
+        UnloadTexture(g_sunWhiteTex);
     if (nightTex.id != 0)
         UnloadTexture(nightTex);
     UnloadShader(shaderCloud);
