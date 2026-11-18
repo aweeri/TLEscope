@@ -89,16 +89,38 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
             if (it != o.end() && it->is_string())
                 snprintf(buf, buf_size, "%s", it->get_ref<const std::string &>().c_str());
         };
+        // Space-Track's GP JSON returns every value as a string ("MEAN_MOTION":"15.50"),
+        // so accept numeric strings as well as real JSON numbers.
         auto get_d = [&o](const char *key, double def) -> double {
             auto it = o.find(key);
-            if (it != o.end() && it->is_number())
-                return it->get<double>();
+            if (it == o.end()) return def;
+            if (it->is_number()) return it->get<double>();
+            if (it->is_string())
+            {
+                const std::string &s = it->get_ref<const std::string &>();
+                if (!s.empty())
+                {
+                    char *end = nullptr;
+                    const double v = strtod(s.c_str(), &end);
+                    if (end && end != s.c_str()) return v;
+                }
+            }
             return def;
         };
         auto get_l = [&o](const char *key, long def) -> long {
             auto it = o.find(key);
-            if (it != o.end() && it->is_number())
-                return it->get<long long>();
+            if (it == o.end()) return def;
+            if (it->is_number()) return (long)it->get<double>();
+            if (it->is_string())
+            {
+                const std::string &s = it->get_ref<const std::string &>();
+                if (!s.empty())
+                {
+                    char *end = nullptr;
+                    const long long v = strtoll(s.c_str(), &end, 10);
+                    if (end && end != s.c_str()) return (long)v;
+                }
+            }
             return def;
         };
 

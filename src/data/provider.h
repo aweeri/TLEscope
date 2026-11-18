@@ -14,7 +14,8 @@
 typedef enum {
     PROVIDER_CELESTRAK,
     PROVIDER_RETLECTOR,
-    PROVIDER_CUSTOM
+    PROVIDER_CUSTOM,
+    PROVIDER_SPACETRACK   // appended last: keeps persisted ProviderType ints stable
 } ProviderType;
 
 // -- Data Source Definition --------------------------------------------------
@@ -86,6 +87,22 @@ FetchResult FetchFromCustomFile(const char *filename);
 /// raw GET of any URL using the shared curl config (UA, timeouts, retries, proxy)
 FetchResult HttpFetchURL(const char *url);
 
+// -- Generic HTTP request (shared curl config: UA, TLS trust, proxy, timeouts) --
+
+typedef struct {
+    const char *url;
+    const char *post_fields;   // NULL => GET; otherwise application/x-www-form-urlencoded body
+    const char *cookie;        // optional "name=value; name2=value2" sent as CURLOPT_COOKIE
+    char *captured_cookie;     // optional out: all Set-Cookie name=value pairs, ';'-joined
+    size_t captured_cookie_size;
+    bool keep_error_body;
+    bool no_retry_on_429;      // Space-Track treats 429 itself; skip the inner curl retry storm
+} HttpRequest;
+
+/* Perform one request with the same UA/TLS/proxy/retry policy as the built-in fetches.
+   Returns the same FetchResult contract; on transport failure http_code == 0 and curl_code != 0. */
+FetchResult HttpPerform(const HttpRequest *req);
+
 // -- Built-in Source Lists ---------------------------------------------------
 
 extern const DataSource CELESTRAK_SOURCES[];
@@ -93,5 +110,8 @@ extern const int NUM_CELESTRAK_SOURCES;
 
 extern const DataSource RETLECTOR_SOURCES[];
 extern const int NUM_RETLECTOR_SOURCES;
+
+extern const DataSource SPACETRACK_SOURCES[];
+extern const int NUM_SPACETRACK_SOURCES;
 
 #endif // PROVIDER_H

@@ -12,6 +12,7 @@
 #include "core/location.h"
 #include "core/discord_rpc.h"
 #include "data/curl_diagnostics.h"
+#include "data/spacetrack_api.h"
 #include "util/log.h"
 #include "expo/expo_mode.h"
 #include "io/rotator.h"
@@ -26,6 +27,7 @@
 #include <cstring>
 #include <cfloat>
 #include <algorithm>
+#include <atomic>
 #include <string>
 #include <thread>
 
@@ -1774,6 +1776,86 @@ void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Show what you are tracking on your Discord profile");
+
+            /* ---- Space-Track account (credentials live in spacetrack.json) ---- */
+            ImGui::Separator();
+            ImGui::TextDisabled("Space-Track");
+
+            static char st_identity[128] = "";
+            static char st_password[128] = "";
+            static bool st_creds_loaded = false;
+            static char st_status[160] = "Not configured";
+            static std::atomic<bool> st_test_running{false};
+            static std::atomic<bool> st_test_done{false};
+            static std::atomic<bool> st_test_ok{false};
+
+            if (!st_creds_loaded)
+            {
+                st_creds_loaded = true;
+                if (SpacetrackLoadCredentials(st_identity, sizeof(st_identity),
+                                              st_password, sizeof(st_password)))
+                    snprintf(st_status, sizeof(st_status), "Saved credentials loaded");
+                else
+                    snprintf(st_status, sizeof(st_status), "Not configured");
+            }
+
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##st_identity", "Space-Track user",
+                                     st_identity, sizeof(st_identity));
+            const bool st_id_edited = ImGui::IsItemDeactivatedAfterEdit();
+
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##st_password", "Password",
+                                     st_password, sizeof(st_password),
+                                     ImGuiInputTextFlags_Password);
+            const bool st_pw_edited = ImGui::IsItemDeactivatedAfterEdit();
+
+            /* no Save button: persist once both fields are present and a field was edited */
+            if ((st_id_edited || st_pw_edited) && st_identity[0] != '\0' && st_password[0] != '\0')
+            {
+                if (SpacetrackSaveCredentials(st_identity, st_password))
+                    snprintf(st_status, sizeof(st_status), "Credentials saved");
+            }
+
+            /* disable while a login is in flight or a post-failure cooldown is active */
+            const int st_cooldown = SpacetrackCooldownRemainingSeconds();
+            ImGui::BeginDisabled(st_test_running.load() || st_cooldown > 0);
+            if (ImGui::Button("Test login"))
+            {
+                st_test_running = true;
+                st_test_done = false;
+                st_test_ok = false;
+                std::thread([]() {
+                    const bool ok = SpacetrackLogin();
+                    st_test_ok = ok;
+                    st_test_done = true;
+                }).detach();
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                if (st_cooldown > 0)
+                    ImGui::SetTooltip("Cooling down after a failed request (%d s)", st_cooldown);
+                else
+                    ImGui::SetTooltip("Verify the saved credentials by logging in to Space-Track");
+            }
+
+            if (st_test_done.load())
+            {
+                st_test_done = false;
+                st_test_running = false;
+                const bool ok = st_test_ok.load();
+                if (ok)
+                    snprintf(st_status, sizeof(st_status), "Signed in");
+                else
+                    snprintf(st_status, sizeof(st_status), "%s", SpacetrackLastError());
+                NotifyPush(ok ? NOTIFY_SUCCESS : NOTIFY_WARNING, ICON_FA_SATELLITE,
+                           ok ? "Space-Track signed in" : "Space-Track login failed");
+            }
+
+            ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "%s", st_status);
+            if (SpacetrackConfigured())
+                ImGui::TextDisabled("Signed in: %s", SpacetrackSignedIn() ? "yes" : "no");
         }
 
         /* ---- Buttons ----------------------------------------------------- */

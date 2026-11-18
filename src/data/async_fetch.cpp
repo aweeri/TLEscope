@@ -1,6 +1,7 @@
 #include "async_fetch.h"
 #include "core/astro.h"
 #include "data/omm_parser.h"
+#include "data/spacetrack_api.h"
 #include "data/storage.h"
 #include "util/log.h"
 
@@ -124,6 +125,33 @@ static int parse_payload(const AsyncFetchJob *job, const char *data, size_t size
                     }
                     break;
                 }
+            }
+            return count;
+        }
+
+        case ASYNC_JOB_SPACETRACK:
+        {
+            const char *predicate =
+                SpacetrackResolvePredicate(job->identifier, job->paste_data);
+            if (!predicate || !predicate[0])
+            {
+                LOG_WARN("Space-Track job '%s' has no predicate", job->name);
+                return 0;
+            }
+
+            FetchResult result = SpacetrackFetchQuery(predicate);
+            if (result.success)
+            {
+                char source_tag[80];
+                snprintf(source_tag, sizeof(source_tag), "spacetrack:%s", job->identifier);
+                ParseOMMJson(result.data, result.size, out, &count, max,
+                             source_tag, FORMAT_OMM_JSON);
+                FreeFetchResult(&result);
+            }
+            else
+            {
+                LOG_WARN("Space-Track query '%s' failed: %s",
+                         job->identifier, SpacetrackLastError());
             }
             return count;
         }

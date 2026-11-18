@@ -14,7 +14,8 @@ typedef enum {
     ASYNC_JOB_CELESTRAK,
     ASYNC_JOB_CUSTOM_URL,
     ASYNC_JOB_CUSTOM_FILE,
-    ASYNC_JOB_CUSTOM_PASTE
+    ASYNC_JOB_CUSTOM_PASTE,
+    ASYNC_JOB_SPACETRACK     // must stay index-aligned with SourceType (tools_common.cpp casts)
 } AsyncJobType;
 
 typedef struct {

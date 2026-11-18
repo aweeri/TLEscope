@@ -3,5 +3,3 @@
 - time fixes: make large scale timewarp not mess up the time- it tends to start going the wrong way when doing major timewarps.
 
 - time conntrols: add a tab for manual date entry in the existing picker.
-
-- add spacetrack support

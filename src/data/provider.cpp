@@ -1,12 +1,14 @@
 #include "provider.h"
 #include "cache.h"
 #include "storage.h"
+#include "data/spacetrack_api.h"
 #include "util/log.h"
 #ifdef __APPLE__
 #include "util/proxy_macos.h"
 #endif
 #include <fstream>
 #include <iostream>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,6 +132,23 @@ const DataSource RETLECTOR_SOURCES[] = {
 };
 const int NUM_RETLECTOR_SOURCES = sizeof(RETLECTOR_SOURCES) / sizeof(RETLECTOR_SOURCES[0]);
 
+#define SPACETRACK_BASE "https://www.space-track.org/basicspacedata/query/class/gp"
+
+// DSL slugs only: the predicates live in spacetrack_api.cpp so the DataSource::id[32]
+// stays short (same indirection as retlector_group_for_index).
+const DataSource SPACETRACK_SOURCES[] = {
+    {"active",            "Active Satellites",                      SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"last-30-days",      "Last 30 Days' Launches",                 SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"stations",          "Space Stations",                         SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"starlink",          "Starlink",                               SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"oneweb",            "OneWeb",                                 SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"gps",               "GPS Operational",                        SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"cosmos-2251-debris","COSMOS 2251 Debris",                     SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"fengyun-1c-debris", "Chinese ASAT Test Debris (FENGYUN 1C)",  SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+    {"analyst",           "Analyst Satellites",                     SPACETRACK_BASE, PROVIDER_SPACETRACK, FORMAT_OMM_JSON, {0}},
+};
+const int NUM_SPACETRACK_SOURCES = sizeof(SPACETRACK_SOURCES) / sizeof(SPACETRACK_SOURCES[0]);
+
 // -- Retlector group name mapping ------------------------------------------
 
 static const char* retlector_group_for_index(int idx)
@@ -190,6 +209,16 @@ static bool retlector_build_url(const DataSource *source, OrbitalDataFormat form
     return true;
 }
 
+// -- Space-Track URL builder ------------------------------------------------
+
+static bool spacetrack_build_url(const DataSource *source, OrbitalDataFormat format,
+                                 char *url, size_t url_size)
+{
+    const char *predicate = SpacetrackPredicateForSlug(source ? source->id : NULL);
+    (void)format;  // Space-Track GP access is JSON-only here; TLE/3LE loses names (see spec section 4.7)
+    return SpacetrackBuildQueryUrl(predicate, url, url_size);
+}
+
 // -- Provider Registry ------------------------------------------------------
 
 static const DataProvider celestrak_provider = {
@@ -202,14 +231,20 @@ static const DataProvider retlector_provider = {
     .build_url = retlector_build_url
 };
 
+static const DataProvider spacetrack_provider = {
+    .name = "Space-Track",
+    .build_url = spacetrack_build_url
+};
+
 const DataProvider* GetProvider(ProviderType type)
 {
     switch (type)
     {
-        case PROVIDER_CELESTRAK: return &celestrak_provider;
-        case PROVIDER_RETLECTOR: return &retlector_provider;
-        case PROVIDER_CUSTOM:    return NULL;  // Custom sources use raw URL
-        default:                 return NULL;
+        case PROVIDER_CELESTRAK:  return &celestrak_provider;
+        case PROVIDER_RETLECTOR:  return &retlector_provider;
+        case PROVIDER_SPACETRACK: return &spacetrack_provider;
+        case PROVIDER_CUSTOM:     return NULL;  // Custom sources use raw URL
+        default:                  return NULL;
     }
 }
 
@@ -416,11 +451,87 @@ static void apply_tls_trust(CURL *curl, const char *url)
 #endif
 }
 
+// CURLOPT_HEADERDATA carries a single pointer, so the buffer and its size travel together.
+struct HeaderSink {
+    char *buf;
+    size_t size;
+};
+
+// Capture every Set-Cookie "name=value" pair, replacing same-named pairs and joining with "; ".
+static size_t capture_set_cookie_cb(char *buffer, size_t size, size_t nitems, void *userdata)
+{
+    const size_t realsize = size * nitems;
+    HeaderSink *sink = (HeaderSink *)userdata;
+    if (!sink || !sink->buf || sink->size == 0)
+        return realsize;
+
+    static const char kPrefix[] = "set-cookie:";
+    if (realsize <= sizeof(kPrefix) - 1)
+        return realsize;
+    for (size_t i = 0; i < sizeof(kPrefix) - 1; i++)
+    {
+        if (tolower((unsigned char)buffer[i]) != kPrefix[i])
+            return realsize;
+    }
+
+    const char *val = buffer + (sizeof(kPrefix) - 1);
+    const char *end = buffer + realsize;
+    while (val < end && (*val == ' ' || *val == '\t')) val++;
+    const char *semi = val;
+    while (semi < end && *semi != ';' && *semi != '\r' && *semi != '\n') semi++;
+    const size_t vlen = (size_t)(semi - val);
+    if (vlen == 0) return realsize;
+
+    const char *eq = val;
+    while (eq < semi && *eq != '=') eq++;
+    const size_t name_len = (size_t)(eq - val);
+
+    // rebuild: drop any existing pair with the same cookie name, then append this one
+    char rebuilt[512];
+    size_t out = 0;
+    const char *p = sink->buf;
+    while (*p && out + 1 < sizeof(rebuilt))
+    {
+        const char *pair_end = strchr(p, ';');
+        size_t pair_len = pair_end ? (size_t)(pair_end - p) : strlen(p);
+        const char *ps = p;
+        while (pair_len > 0 && (*ps == ' ' || *ps == '\t')) { ps++; pair_len--; }
+        const char *peq = ps;
+        size_t pl = pair_len;
+        while (pl > 0 && *peq != '=') { peq++; pl--; }
+        const size_t pname_len = (size_t)(peq - ps);
+        const bool same = (pname_len == name_len) && (strncmp(ps, val, name_len) == 0);
+        if (!same)
+        {
+            if (out > 0 && out + 2 < sizeof(rebuilt)) { rebuilt[out++] = ';'; rebuilt[out++] = ' '; }
+            size_t copy = pair_len;
+            if (out + copy + 1 >= sizeof(rebuilt)) copy = sizeof(rebuilt) - out - 1;
+            memcpy(rebuilt + out, ps, copy);
+            out += copy;
+        }
+        if (!pair_end) break;
+        p = pair_end + 1;
+    }
+    if (out > 0 && out + 2 < sizeof(rebuilt)) { rebuilt[out++] = ';'; rebuilt[out++] = ' '; }
+    size_t copy = vlen;
+    if (out + copy + 1 >= sizeof(rebuilt)) copy = sizeof(rebuilt) - out - 1;
+    memcpy(rebuilt + out, val, copy);
+    out += copy;
+    rebuilt[out] = '\0';
+
+    snprintf(sink->buf, sink->size, "%s", rebuilt);
+    return realsize;
+}
+
 // keep_error_body: hand back a non-2xx body (success stays false) for Horizons.
-static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
+FetchResult HttpPerform(const HttpRequest *req)
 {
     FetchResult result = {0};
     result.success = false;
+
+    const char *url = (req && req->url) ? req->url : "";
+    const bool keep_error_body = req ? req->keep_error_body : false;
+    const bool no_retry_on_429 = req ? req->no_retry_on_429 : false;
 
     struct MemoryBuf chunk = {0};
     chunk.memory = (char*)malloc(1);
@@ -494,6 +605,25 @@ static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
              TLESCOPE_VERSION);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
 
+    if (req && req->post_fields)
+    {
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->post_fields);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(req->post_fields));
+    }
+    if (req && req->cookie && req->cookie[0])
+        curl_easy_setopt(curl, CURLOPT_COOKIE, req->cookie);
+
+    HeaderSink header_sink = {0};
+    if (req && req->captured_cookie && req->captured_cookie_size > 0)
+    {
+        req->captured_cookie[0] = '\0';
+        header_sink.buf = req->captured_cookie;
+        header_sink.size = req->captured_cookie_size;
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, capture_set_cookie_cb);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header_sink);
+    }
+
     apply_tls_trust(curl, url);
 
     const int max_attempts = 3;
@@ -519,6 +649,10 @@ static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
             if (res != CURLE_OK || http_status_success(http_code))
+                break;
+
+            // Space-Track treats 429 itself; a curl-internal retry storm is ToS-hostile
+            if (no_retry_on_429 && http_code == 429)
                 break;
 
             if (!http_status_retryable(http_code) || attempt == max_attempts)
@@ -595,7 +729,18 @@ static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
 /* Caller owns result.data; release it with FreeFetchResult(). */
 FetchResult HttpFetchURL(const char *url)
 {
-    return http_fetch_ex(url, true);
+    HttpRequest req = {};
+    req.url = url;
+    req.keep_error_body = true;
+    return HttpPerform(&req);
+}
+
+static FetchResult http_fetch_ex(const char *url, bool keep_error_body)
+{
+    HttpRequest req = {};
+    req.url = url;
+    req.keep_error_body = keep_error_body;
+    return HttpPerform(&req);
 }
 
 static FetchResult file_fetch(const char *filename)
@@ -655,6 +800,12 @@ FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format)
     {
         // custom sources use their URL directly; append format if needed
         snprintf(url, sizeof(url), "%s", source->base_url);
+    }
+    else if (source->type == PROVIDER_SPACETRACK)
+    {
+        // Space-Track has no auth-free FetchFromSource path; it goes through SpacetrackFetchQuery()
+        LOG_ERROR("Space-Track sources go through SpacetrackFetchQuery(), not FetchFromSource()");
+        return result;
     }
     else
     {

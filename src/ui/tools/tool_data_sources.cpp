@@ -15,6 +15,7 @@
 #include "data/ephem.h"
 #include "data/ephem_parse.h"
 #include "data/horizons_api.h"
+#include "data/spacetrack_api.h"
 #include "util/log.h"
 
 #include <cstdio>
@@ -555,6 +556,93 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         }
     }
 
+    /* Space-Track Section */
+    {
+        static int s_preset_combo_idx = 0;
+        static char s_search[64] = "";
+        static char s_custom_query[512] = "";
+
+        if (ImGui::CollapsingHeader("Space-Track"))
+        {
+            ImGui::TextDisabled("Credentials are configured in Settings > Integrations.");
+
+            /* preset combo with a search box inside the popup */
+            if (s_preset_combo_idx >= NUM_SPACETRACK_SOURCES)
+                s_preset_combo_idx = 0;
+
+            const char *combo_preview = SPACETRACK_SOURCES[s_preset_combo_idx].name;
+            ImGui::SetNextItemWidth(avail_w * 0.65f);
+            if (ImGui::BeginCombo("##st_preset", combo_preview))
+            {
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                ImGui::InputTextWithHint("##st_search",
+                                         ICON_FA_MAGNIFYING_GLASS " Search presets...",
+                                         s_search, sizeof(s_search));
+                ImGui::Separator();
+
+                for (int i = 0; i < NUM_SPACETRACK_SOURCES; i++)
+                {
+                    if (s_search[0] != '\0' &&
+                        !str_contains_ic(SPACETRACK_SOURCES[i].name, s_search))
+                        continue;
+                    bool is_selected = (i == s_preset_combo_idx);
+                    if (ImGui::Selectable(SPACETRACK_SOURCES[i].name, is_selected))
+                        s_preset_combo_idx = i;
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_PLUS "##add_st_preset"))
+            {
+                const char *slug = SPACETRACK_SOURCES[s_preset_combo_idx].id;
+                const char *name = SPACETRACK_SOURCES[s_preset_combo_idx].name;
+                if (!DataSelectionAdd(SOURCE_SPACETRACK, name, slug, NULL, FORMAT_OMM_JSON))
+                    LOG_DEBUG("Space-Track source '%s' already in selection list", slug);
+                else
+                    LOG_INFO("Added data source: %s", name);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Add this Space-Track preset to the active selections list");
+
+            /* advanced: an arbitrary GP predicate, addable to the cart */
+            ImGui::SetNextItemWidth(avail_w * 0.65f);
+            ImGui::InputTextWithHint("##st_custom",
+                                     "predicate, e.g. decay_date/null-val/OBJECT_NAME/~GALILEO",
+                                     s_custom_query, sizeof(s_custom_query));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Space-Track query filter, the part after class/gp/.\n"
+                                  "Examples: decay_date/null-val \xc2\xb7 OBJECT_NAME/~STARLINK \xc2\xb7 norad_cat_id/25544\n"
+                                  "Syntax and limits: space-track.org/documentation#/api");
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_PLUS "##add_st_custom"))
+            {
+                if (s_custom_query[0] != '\0')
+                {
+                    char label[64];
+                    snprintf(label, sizeof(label), "Custom: %.40s", s_custom_query);
+
+                    /* identifier carries a predicate hash: the cart dedupes on
+                       (type, identifier), so a bare "custom" would reject the
+                       second, different predicate */
+                    char ident[32];
+                    SpacetrackCustomIdentifier(s_custom_query, ident, sizeof(ident));
+
+                    if (!DataSelectionAdd(SOURCE_SPACETRACK, label, ident,
+                                          s_custom_query, FORMAT_OMM_JSON))
+                        LOG_DEBUG("Space-Track custom query already in selection list");
+                    else
+                        LOG_INFO("Added Space-Track custom query");
+                }
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Add an arbitrary SPACE-TRACK GP predicate to the selections");
+
+        }
+    }
+
     /* Celestrak Section */
     if (ImGui::CollapsingHeader("Celestrak"))
     {
@@ -607,186 +695,199 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("Add this group to the active selections list");
     }
 
-    /* Custom URL Section */
-    if (ImGui::CollapsingHeader("Custom URL"))
+    /* Custom Sources Section: URL / File / Paste behind one mode dropdown */
+    if (ImGui::CollapsingHeader("Custom Sources"))
     {
-        static char s_url_buf[512] = "";
+        static int s_custom_mode = 0;  // 0 = URL, 1 = File, 2 = Paste
+        static const char *kCustomModes[] = { "URL", "File", "Paste" };
+        ImGui::SetNextItemWidth(avail_w * 0.65f);
+        ImGui::Combo("##custom_mode", &s_custom_mode, kCustomModes, 3);
 
-        /* URL input + Add button on the same line */
-        float url_btn_w = ImGui::GetFrameHeight();
-        ImGui::SetNextItemWidth(avail_w - url_btn_w - ImGui::GetStyle().ItemSpacing.x);
-        ImGui::InputText("##custom_url", s_url_buf, sizeof(s_url_buf));
-        ImGui::SameLine();
-
-        if (ImGui::Button(ICON_FA_PLUS "##add_custom_url", ImVec2(url_btn_w, url_btn_w)) && s_url_buf[0])
+        if (s_custom_mode == 0)
         {
-            /* extract a short name from the URL for display */
-            const char *name_start = strrchr(s_url_buf, '/');
-            if (name_start) name_start++; else name_start = s_url_buf;
+            /* Custom URL */
+            ImGui::PushID("custom_url");
+            static char s_url_buf[512] = "";
 
-            if (!DataSelectionAdd(SOURCE_CUSTOM_URL, name_start, s_url_buf, NULL, FORMAT_UNKNOWN))
+            /* URL input + Add button on the same line */
+            float url_btn_w = ImGui::GetFrameHeight();
+            ImGui::SetNextItemWidth(avail_w - url_btn_w - ImGui::GetStyle().ItemSpacing.x);
+            ImGui::InputText("##custom_url", s_url_buf, sizeof(s_url_buf));
+            ImGui::SameLine();
+
+            if (ImGui::Button(ICON_FA_PLUS "##add_custom_url", ImVec2(url_btn_w, url_btn_w)) && s_url_buf[0])
             {
-                LOG_DEBUG("URL '%s' already in selection list", s_url_buf);
-            }
-            else
-            {
-                LOG_INFO("Added data source: %s", s_url_buf);
-                s_url_buf[0] = '\0'; /* clear on success */
-            }
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Add this URL to the active selections (fetched on pull)");
-    }
+                /* extract a short name from the URL for display */
+                const char *name_start = strrchr(s_url_buf, '/');
+                if (name_start) name_start++; else name_start = s_url_buf;
 
-    /* Custom File Section */
-    if (ImGui::CollapsingHeader("Custom File"))
-    {
-        /* file input + file dialog + add button on the same line */
-        float file_btn_w = ImGui::GetFrameHeight();
-        static char s_file_buf[512] = "";
-
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-            "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
-
-        ImGui::SetNextItemWidth(avail_w - 2*file_btn_w - ImGui::GetStyle().ItemSpacing.x);
-        ImGui::InputText("##custom_file", s_file_buf, sizeof(s_file_buf));
-        ImGui::SameLine();
-
-        if (ImGui::Button(ICON_FA_FOLDER "##select_custom_file",ImVec2(file_btn_w, file_btn_w)))
-        {
-            // Default to "All Files"
-            const std::vector<std::string> filter = { "All Files", "*", "GP", "*.3le *.json *.csv *.kvn *.xml" };
-            g_ui.file_dialog_tle.open("Open TLE file","",filter);
-        }
-        if (g_ui.file_dialog_tle.isOpen() && g_ui.file_dialog_tle.draw())
-        {
-            std::snprintf(s_file_buf, sizeof(s_file_buf), "%s",
-                          g_ui.file_dialog_tle.fileName().c_str());
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Select file");
-        ImGui::SameLine();
-
-        if (ImGui::Button(ICON_FA_PLUS "##add_custom_file", ImVec2(file_btn_w, file_btn_w)) && s_file_buf[0])
-        {
-            /* extract a short name from the file for display */
-            const char *name_start = strrchr(s_file_buf, '/');
-            if (name_start) name_start++; else name_start = s_file_buf;
-
-            if (!DataSelectionAdd(SOURCE_CUSTOM_FILE, name_start, s_file_buf, NULL, FORMAT_UNKNOWN))
-            {
-                LOG_DEBUG("File '%s' already in selection list", s_file_buf);
-            }
-            else
-            {
-                LOG_INFO("Added data source: %s", s_file_buf);
-                s_file_buf[0] = '\0'; /* clear on success */
-            }
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Add this file to the active selections (fetched on pull)");
-    }
-
-    /* Custom Paste Section */
-    if (ImGui::CollapsingHeader("Custom Paste"))
-    {
-        static char s_paste_buf[4096] = "";
-
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-            "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
-
-        /* thin by default (1 line), expands as content is pasted */
-        float paste_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
-        if (s_paste_buf[0] != '\0')
-        {
-            int line_count = 1;
-            for (const char *p = s_paste_buf; *p; p++)
-                if (*p == '\n') line_count++;
-            paste_h = fminf(line_count * ImGui::GetTextLineHeightWithSpacing() + 8.0f, 200.0f);
-        }
-
-        /* paste textbox + add button on the same line (mirrors the Custom URL row) */
-        float paste_btn_w = ImGui::GetFrameHeight();
-        float paste_box_w = avail_w - paste_btn_w - ImGui::GetStyle().ItemSpacing.x;
-        ImGui::SetNextItemWidth(paste_box_w);
-        ImGui::InputTextMultiline("##paste", s_paste_buf, sizeof(s_paste_buf),
-                                  ImVec2(0, paste_h));
-        ImGui::SameLine();
-
-        OrbitalDataFormat paste_fmt = FORMAT_UNKNOWN;
-        bool has_content = (s_paste_buf[0] != '\0');
-        if (has_content)
-            paste_fmt = DetectDataFormat(s_paste_buf, strlen(s_paste_buf));
-
-        /* 3LE requires a name line; element-only input is rejected */
-        bool tle_missing_name = has_content && (paste_fmt == FORMAT_TLE) &&
-                                !tleHasNameLine(s_paste_buf);
-
-        bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
-
-        if (!can_add)
-            ImGui::BeginDisabled();
-
-        if (ImGui::Button(ICON_FA_PLUS "##add_custom_paste", ImVec2(paste_btn_w, paste_btn_w)))
-        {
-            if (tle_missing_name)
-            {
-                /* reject element-only 3LE input: a name line is mandatory */
-                NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION,
-                           "Invalid 3LE: a name line is required "
-                           "(name, then line 1 and line 2)");
-                LOG_DEBUG("Rejected 3LE paste: missing name line");
-            }
-            else
-            {
-                /* build a short preview for the name */
-                char preview[64];
-                const char *nl = strchr(s_paste_buf, '\n');
-                if (nl)
+                if (!DataSelectionAdd(SOURCE_CUSTOM_URL, name_start, s_url_buf, NULL, FORMAT_UNKNOWN))
                 {
-                    int len = (int)(nl - s_paste_buf);
-                    if (len > 55) len = 55;
-                    strncpy(preview, s_paste_buf, len);
-                    preview[len] = '\0';
+                    LOG_DEBUG("URL '%s' already in selection list", s_url_buf);
                 }
                 else
                 {
-                    strncpy(preview, s_paste_buf, 55);
-                    preview[55] = '\0';
+                    LOG_INFO("Added data source: %s", s_url_buf);
+                    s_url_buf[0] = '\0'; /* clear on success */
                 }
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Add this URL to the active selections (fetched on pull)");
+            ImGui::PopID();
+        }
+        else if (s_custom_mode == 1)
+        {
+            /* Custom File */
+            ImGui::PushID("custom_file");
+            /* file input + file dialog + add button on the same line */
+            float file_btn_w = ImGui::GetFrameHeight();
+            static char s_file_buf[512] = "";
 
-                if (!DataSelectionAdd(SOURCE_CUSTOM_PASTE, preview, preview, s_paste_buf, paste_fmt))
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
+
+            ImGui::SetNextItemWidth(avail_w - 2*file_btn_w - ImGui::GetStyle().ItemSpacing.x);
+            ImGui::InputText("##custom_file", s_file_buf, sizeof(s_file_buf));
+            ImGui::SameLine();
+
+            if (ImGui::Button(ICON_FA_FOLDER "##select_custom_file",ImVec2(file_btn_w, file_btn_w)))
+            {
+                // Default to "All Files"
+                const std::vector<std::string> filter = { "All Files", "*", "GP", "*.3le *.json *.csv *.kvn *.xml" };
+                g_ui.file_dialog_tle.open("Open TLE file","",filter);
+            }
+            if (g_ui.file_dialog_tle.isOpen() && g_ui.file_dialog_tle.draw())
+            {
+                std::snprintf(s_file_buf, sizeof(s_file_buf), "%s",
+                              g_ui.file_dialog_tle.fileName().c_str());
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Select file");
+            ImGui::SameLine();
+
+            if (ImGui::Button(ICON_FA_PLUS "##add_custom_file", ImVec2(file_btn_w, file_btn_w)) && s_file_buf[0])
+            {
+                /* extract a short name from the file for display */
+                const char *name_start = strrchr(s_file_buf, '/');
+                if (name_start) name_start++; else name_start = s_file_buf;
+
+                if (!DataSelectionAdd(SOURCE_CUSTOM_FILE, name_start, s_file_buf, NULL, FORMAT_UNKNOWN))
                 {
-                    LOG_DEBUG("Paste entry already in selection list");
+                    LOG_DEBUG("File '%s' already in selection list", s_file_buf);
                 }
                 else
                 {
-                    LOG_INFO("Added data source: %s", preview);
-                    s_paste_buf[0] = '\0'; /* clear on success */
+                    LOG_INFO("Added data source: %s", s_file_buf);
+                    s_file_buf[0] = '\0'; /* clear on success */
                 }
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Add this file to the active selections (fetched on pull)");
+            ImGui::PopID();
         }
-
-        if (!can_add)
-            ImGui::EndDisabled();
-
-        if (has_content)
+        else
         {
-            if (paste_fmt != FORMAT_UNKNOWN)
+            /* Custom Paste */
+            ImGui::PushID("custom_paste");
+            static char s_paste_buf[4096] = "";
+
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                "Accepted formats: 3LE, JSON OMM, CSV OMM, KVN OMM, XML OMM");
+
+            /* thin by default (1 line), expands as content is pasted */
+            float paste_h = ImGui::GetTextLineHeightWithSpacing() + 4.0f;
+            if (s_paste_buf[0] != '\0')
             {
-                const char *fmt_label = (paste_fmt == FORMAT_TLE) ? "3LE"
-                                                                  : FormatToString(paste_fmt);
+                int line_count = 1;
+                for (const char *p = s_paste_buf; *p; p++)
+                    if (*p == '\n') line_count++;
+                paste_h = fminf(line_count * ImGui::GetTextLineHeightWithSpacing() + 8.0f, 200.0f);
+            }
+
+            /* paste textbox + add button on the same line (mirrors the Custom URL row) */
+            float paste_btn_w = ImGui::GetFrameHeight();
+            float paste_box_w = avail_w - paste_btn_w - ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SetNextItemWidth(paste_box_w);
+            ImGui::InputTextMultiline("##paste", s_paste_buf, sizeof(s_paste_buf),
+                                      ImVec2(0, paste_h));
+            ImGui::SameLine();
+
+            OrbitalDataFormat paste_fmt = FORMAT_UNKNOWN;
+            bool has_content = (s_paste_buf[0] != '\0');
+            if (has_content)
+                paste_fmt = DetectDataFormat(s_paste_buf, strlen(s_paste_buf));
+
+            /* 3LE requires a name line; element-only input is rejected */
+            bool tle_missing_name = has_content && (paste_fmt == FORMAT_TLE) &&
+                                    !tleHasNameLine(s_paste_buf);
+
+            bool can_add = has_content && (paste_fmt != FORMAT_UNKNOWN);
+
+            if (!can_add)
+                ImGui::BeginDisabled();
+
+            if (ImGui::Button(ICON_FA_PLUS "##add_custom_paste", ImVec2(paste_btn_w, paste_btn_w)))
+            {
                 if (tle_missing_name)
-                    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
-                                       "Detected: %s - missing name line "
-                                       "(name, line 1, line 2 required)", fmt_label);
+                {
+                    /* reject element-only 3LE input: a name line is mandatory */
+                    NotifyPush(NOTIFY_ERROR, ICON_FA_TRIANGLE_EXCLAMATION,
+                               "Invalid 3LE: a name line is required "
+                               "(name, then line 1 and line 2)");
+                    LOG_DEBUG("Rejected 3LE paste: missing name line");
+                }
                 else
-                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s",
-                                       fmt_label);
+                {
+                    /* build a short preview for the name */
+                    char preview[64];
+                    const char *nl = strchr(s_paste_buf, '\n');
+                    if (nl)
+                    {
+                        int len = (int)(nl - s_paste_buf);
+                        if (len > 55) len = 55;
+                        strncpy(preview, s_paste_buf, len);
+                        preview[len] = '\0';
+                    }
+                    else
+                    {
+                        strncpy(preview, s_paste_buf, 55);
+                        preview[55] = '\0';
+                    }
+
+                    if (!DataSelectionAdd(SOURCE_CUSTOM_PASTE, preview, preview, s_paste_buf, paste_fmt))
+                    {
+                        LOG_DEBUG("Paste entry already in selection list");
+                    }
+                    else
+                    {
+                        LOG_INFO("Added data source: %s", preview);
+                        s_paste_buf[0] = '\0'; /* clear on success */
+                    }
+                }
             }
-            else
-                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
-                                   "Format unknown - not a valid orbital data format");
+
+            if (!can_add)
+                ImGui::EndDisabled();
+
+            if (has_content)
+            {
+                if (paste_fmt != FORMAT_UNKNOWN)
+                {
+                    const char *fmt_label = (paste_fmt == FORMAT_TLE) ? "3LE"
+                                                                      : FormatToString(paste_fmt);
+                    if (tle_missing_name)
+                        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                                           "Detected: %s - missing name line "
+                                           "(name, line 1, line 2 required)", fmt_label);
+                    else
+                        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Detected: %s",
+                                           fmt_label);
+                }
+                else
+                    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                                       "Format unknown - not a valid orbital data format");
+            }
+            ImGui::PopID();
         }
     }
 
@@ -1308,6 +1409,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 case SOURCE_CUSTOM_URL:   badge = "URL";  badge_col = ImVec4(1.0f, 0.7f, 0.2f, 1.0f); break;
                 case SOURCE_CUSTOM_FILE:  badge = "FILE"; badge_col = ImVec4(0.5f, 0.2f, 0.8f, 1.0f); break;
                 case SOURCE_CUSTOM_PASTE: badge = "P";    badge_col = ImVec4(0.8f, 0.4f, 1.0f, 1.0f); break;
+                case SOURCE_SPACETRACK:   badge = "ST";   badge_col = ImVec4(0.9f, 0.3f, 0.3f, 1.0f); break;
             }
 
             ImGui::TextColored(badge_col, "[%s]", badge);
@@ -1325,6 +1427,11 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 if (ExtractOMMObjectName(s->paste_data, strlen(s->paste_data), s->format,
                                          obj_name, sizeof(obj_name)))
                     display = obj_name;
+            }
+            else if (s->type == SOURCE_SPACETRACK && strncmp(s->identifier, "custom:", 7) == 0)
+            {
+                /* show the predicate, not just the truncated label */
+                display = s->paste_data;
             }
 
             ImGui::TextUnformatted(display);

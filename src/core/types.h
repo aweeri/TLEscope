@@ -237,7 +237,8 @@ typedef enum {
     SOURCE_CELESTRAK,
     SOURCE_CUSTOM_URL,
     SOURCE_CUSTOM_FILE,
-    SOURCE_CUSTOM_PASTE
+    SOURCE_CUSTOM_PASTE,
+    SOURCE_SPACETRACK        // appended: keeps persisted ints and the AsyncJobType cast valid
 } SourceType;
 
 typedef struct {

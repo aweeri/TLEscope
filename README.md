@@ -31,6 +31,7 @@ TLEscope is a satellite visualization and tracking tool designed to transform or
 - **Online Data Fetching**: Fetch orbital data directly from:
   - [CelesTrak](https://celestrak.org/) — built-in source groups (stations, visual, weather, etc.)
   - [ReTLEctor](https://github.com/MrTalon63/retlector) — CelesTrak mirror for frequent queries
+  - [Space-Track](https://www.space-track.org/) — requires a free account; supports built-in presets and arbitrary SPACE-TRACK GP predicates. Your identity and password are stored in plain text in [`spacetrack.json`](spacetrack.json) next to the executable (permissions are set to `0600` on POSIX) — the session itself is kept in memory only. Please respect Space-Track's published limits (30 requests/minute, 300/hour); TLEscope paces requests at one per 2 seconds and caps a pull at 25 requests.
   - Custom data sources with configurable URLs and preferred formats
 
 - **Geostationary Drift Analysis**
