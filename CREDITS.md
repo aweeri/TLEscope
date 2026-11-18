@@ -13,7 +13,7 @@
 - @Noderyos - 2D text layout, prediction count fix
 - @TianHengZhuang - TLE manager tooltips
 - @kriskut08 - first-run setup and settings file
-- @weerbot - CI, icon generation, macOS bundling (AI-assisted)
+- @weerbot - Maintenance & General Support
 
 ### Attributions
 - `https://www.solarsystemscope.com/textures/`: All `default` theme textures
