@@ -1,14 +1,4 @@
-// tool_trxdb.cpp - TRXDB NORAD TEST panel
-//
-// Queries the TRXDB API (https://trxdb.mrtalon.eu) for the currently selected
-// satellite's NORAD number:
-//   - object info:   GET /api/v1/object/{norad}
-//   - image:         GET /api/v1/object/{norad}/image
-//   - transponders:  GET /api/v1/object/{norad}/transponders
-//
-// Network I/O runs on a detached worker thread (never the UI thread). The raw
-// bytes are handed back to the UI thread, which does all JSON parsing and GL
-// texture upload (LoadTextureFromImage requires the GL context).
+// TRXDB NORAD TEST panel; network I/O runs on a worker thread, JSON parsing and GL upload on the UI thread.
 
 #include "tools.h"
 #include "tools_common.h"

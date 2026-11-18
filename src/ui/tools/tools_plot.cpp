@@ -1,11 +1,3 @@
-/*
- * tools_plot.cpp - Shared, theme-aware drawing and sampling primitives.
- *
- * Extracted from tool_polar_plot.cpp so the Transit Tracking panel and its
- * overview modal share one implementation of the polar canvas, the XY charts
- * and the pass sampling.
- */
-
 #include "tools_plot.h"
 #include "ui/imgui_theme.h"
 #include "core/theme.h"
@@ -17,9 +9,7 @@
 
 #include <raylib.h>
 
-/* ========================================================================== */
-/*  Polar canvas                                                              */
-/* ========================================================================== */
+/* Polar canvas */
 
 void PlotDrawPolarGrid(ImDrawList *dl, ImVec2 center, float radius)
 {
@@ -355,9 +345,7 @@ void PlotDrawRotatorStatusLine(const char *prefix, int state, bool connected,
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s", word);
 }
 
-/* ========================================================================== */
-/*  XY charts                                                                 */
-/* ========================================================================== */
+/* XY charts */
 
 // shared chart frame; returns the inner plot rect via out_p0/out_p1
 static void PlotChartFrame(ImDrawList *dl, ImVec2 min, ImVec2 max,
@@ -644,9 +632,7 @@ void PlotDrawXYChart(ImDrawList *dl, ImVec2 min, ImVec2 max,
                      y_min, y_max, marker_frac, hover_fmt, hover_user);
 }
 
-/* ========================================================================== */
-/*  Sampling                                                                  */
-/* ========================================================================== */
+/* Sampling */
 
 void PlotSampleDoppler(Satellite *sat, double aos, double los, double base_freq,
                        Location obs, float *out, int count)

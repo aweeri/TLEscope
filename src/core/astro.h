@@ -4,6 +4,7 @@
 // Orbital mechanics, pass prediction and coordinate transforms.
 
 #include "types.h"
+#include "data/ephem.h"
 
 #define MAX_PASSES 1000
 typedef struct SatPass
@@ -21,7 +22,7 @@ extern SatPass passes[MAX_PASSES];
 extern int num_passes;
 extern Satellite *last_pass_calc_sat;
 
-/* pass prediction settings (ROADMAP 12.3) — defaults applied by CalculatePasses */
+/* pass prediction settings (ROADMAP 12.3); defaults applied by CalculatePasses */
 extern float pass_min_elev;        /* minimum elevation (deg) for a pass to count */
 extern float pass_time_span_hours; /* prediction window in hours (default 24) */
 
@@ -121,6 +122,10 @@ double local_fields_to_epoch(int year, int day, int hour, int min, int sec);
 void update_orbit_cache(Satellite *sat, double current_epoch);
 bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_threshold_km);
 int calculate_orbit_cache_resolution(double eccentricity);
+
+double ephem_period_seconds(const EphemMission *m);
+
+bool reference_body_offset_km(int ref_body, double t_unix, Vector3 *out_km);
 
 /* fills out_times[0..n-1] with adaptive sample epochs (days), uniform in eccentric anomaly */
 void orbit_adaptive_sample_times(const Satellite *sat, double start_epoch, int n,

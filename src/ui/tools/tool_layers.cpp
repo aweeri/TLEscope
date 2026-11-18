@@ -1,7 +1,3 @@
-/*
- * tool_layers.cpp - Layers panel
- */
-
 #include "tools.h"
 #include "tools_common.h"
 #include "core/theme.h"
@@ -48,8 +44,7 @@ static int GridSpacingIndex(AppConfig *cfg)
 }
 
 /* -- Layer visibility presets ---------------------------------------------- */
-/* A preset names desired values for the primary + secondary layer toggles;
- * "Custom" shows when the live state matches no preset. */
+/* a preset names desired values for the primary + secondary layer toggles; "Custom" when none match */
 
 /* order of the primary (master visibility) toggles covered by presets */
 enum LayerToggleId
@@ -78,8 +73,7 @@ enum LayerToggleId
     LAYER_TOGGLE_COUNT
 };
 
-/* secondary (sub/scope) options covered by presets; stored as int (scope
- * combos use 0/1/2, on/off sub-toggles use 0/1) */
+/* secondary (sub/scope) options covered by presets; stored as int (scope combos 0/1/2, toggles 0/1) */
 enum LayerSubToggleId
 {
     LAYER_SUB_LABELS_MODE = 0,      /* Labels Sel/All/Fav      (LABELS_KEY_MODE)      */
@@ -404,26 +398,6 @@ void DrawPanelLayers(UIContext *ctx, AppConfig *cfg)
             ImGui::EndDisabled();
         }
 
-        // the reference body only affects imported missions; 2D stays Earth-fixed
-        if (EphemCount() > 0)
-        {
-            static const char *kRefLabels[] = { "Earth", "Moon", "Sun" };
-            ImGui::BeginDisabled(*ctx->is_2d_view);
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(ICON_FA_CIRCLE_DOT "  Reference Body");
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.0f);
-            ImGui::SetNextItemWidth(88.0f);
-            int ref = cfg->reference_body;
-            if (ref < 0 || ref >= REF_BODY_COUNT) ref = 0;
-            if (ImGui::Combo("##layers_ref_body", &ref, kRefLabels, REF_BODY_COUNT))
-                cfg->reference_body = ref;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Draw orbit paths relative to this body.\n"
-                                  "Moon/Sun remove the wobble of cislunar and interplanetary\n"
-                                  "missions. 3D view only.");
-            ImGui::EndDisabled();
-        }
-
         /* Labels: master + Sel/All/Fav scope */
         {
             bool labels_enabled = ToolSettingGetBool(cfg, LABELS_KEY_ENABLED, true);
@@ -706,12 +680,7 @@ static Vector2 MapDetailToWorld(MapDetailPoint point, float map_w, float map_h)
     };
 }
 
-/**
- * Draws one MapDetail polyline set (coastlines, borders) in map world space.
- *
- * alpha scales the theme text color; segments that jump the antimeridian are
- * skipped so a polyline wrapping the map edge does not draw a seam across it.
- */
+/* draw one MapDetail polyline set in map world space; antimeridian jumps are skipped to avoid a seam */
 static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *points,
                                const MapDetailLine *lines, int line_count,
                                float line_width, float alpha)
@@ -740,8 +709,7 @@ static void DrawMapDetailLines(const SceneContext *sctx, const MapDetailPoint *p
 
 /* -- 3D globe rendering of the same overlays ------------------------------- */
 
-/* radial lift (km) that clears the 80x80 Earth mesh's faceting (its chord sag
- * is ~6 km) so the lines sit above the surface instead of z-fighting it */
+/* radial lift (km) clearing the 80x80 Earth mesh's ~6 km chord sag, avoiding z-fighting */
 #define MAP_DETAIL_LIFT_KM 6.5f
 
 #define DETAIL_POINT_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
@@ -789,12 +757,7 @@ static void DrawDetailLines3D(const std::vector<Vector3> &verts,
     rlEnd();
 }
 
-/**
- * Draws coastlines/borders on the 3D globe. The sphere positions are built
- * once; each frame only the sidereal rotation is applied and the segments are
- * submitted as one batched RL_LINES pass, so depth testing occludes the far
- * side against the Earth model drawn before the scene hooks.
- */
+/* draw coastlines/borders on the 3D globe; sphere positions built once, one batched RL_LINES pass per frame */
 static void DrawMapDetailLines3D(const SceneContext *sctx, AppConfig *cfg)
 {
     const bool show_coast = cfg->show_coast_lines;
@@ -1067,15 +1030,7 @@ void DrawSceneLayers(SceneContext *sctx, AppConfig *cfg)
     LayoutToggleCleanView(); /* sidebars, bottom time bar, menu bar and edge tabs */
 }
 
-/**
- * Numeric lat/lon labels for the 2D grid.
- *
- * Drawn as a screen-space ImGui overlay (after rlImGuiBegin) rather than in the
- * world-space grid pass, because the raylib custom font has no '°' glyph while
- * the ImGui atlas does. Latitude values sit on the left edge of the visible
- * map, longitude values along its top edge; both follow panning and are culled
- * when their grid line leaves the view.
- */
+/* numeric lat/lon labels for the 2D grid, drawn as an ImGui overlay since the raylib font lacks the degree glyph */
 void DrawMapGridLabels(UIContext *ctx, AppConfig *cfg)
 {
     if (!ctx || !cfg || !ctx->camera2d)

@@ -1,14 +1,3 @@
-/*
- * tool_passes.cpp - Satellite Passes panel
- *
- * ROADMAP section 2:
- *   2.1 Two pass modes (single-sat / all-active) + real-time updates.
- *   2.2 Richer pass entries with unique ImGui IDs, AOS/LOS, max elevation.
- *   2.3 Pass progress bar (green when ongoing).
- *   2.5 Pass-to-Doppler handoff.
- *   2.6 Pass list height cap with internal scroll.
- */
-
 #include "tools.h"
 #include "tools_settings.h"
 #include "tools_common.h"
@@ -96,8 +85,7 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
         char aos_str[64];
         epoch_to_time_str(p->aos_epoch, aos_str);
 
-        /* ETA counter: time until AOS for future passes, time remaining for
-         * ongoing passes. */
+        /* ETA counter: time until AOS for future passes, time remaining for ongoing passes */
         double span = p->los_epoch - p->aos_epoch;
         bool ongoing = (span > 0.0 && now >= p->aos_epoch && now <= p->los_epoch);
         double eta_s = ongoing ? (p->los_epoch - now) * 86400.0
@@ -143,8 +131,7 @@ void DrawPanelPasses(UIContext *ctx, AppConfig *cfg)
             TransitOpenDopplerTab(cfg);
         }
 
-        /* ---- 2.3: thin progress bar, only while the pass is
-         * ongoing. Drawn directly so it can be just a few px tall. */
+        /* ---- 2.3: thin progress bar, only while the pass is ongoing ---- */
         if (ongoing)
         {
             double progress = (now - p->aos_epoch) / span;

@@ -33,12 +33,7 @@ int GetLODSegments(CoverageMeshLOD lod) {
     }
 }
 
-/**
- * @brief Build the local-frame cap vertices shared by the GPU mesh and CPU cache.
- *
- * +Y points from Earth's centre toward the satellite; `out_verts` must hold
- * (rings + 1) * segments * 3 floats.
- */
+/* build the local-frame cap vertices shared by the GPU mesh and CPU cache; +Y points toward the satellite */
 static bool BuildCoverageCapVertices(float altitude_km, CoverageMeshLOD lod,
                                      int *out_rings, int *out_segments, float *out_verts) {
     int rings = GetLODRings(lod);
@@ -52,9 +47,7 @@ static bool BuildCoverageCapVertices(float altitude_km, CoverageMeshLOD lod,
 
     float theta = acosf(EARTH_RADIUS_KM / r);
 
-    // Lift the cap by the polygon's sag below the true sphere (R*(1-cos(d)),
-    // d = triangle angular circumradius) so wide caps don't z-fight the Earth.
-    // Radial only, so the 2D projection is unaffected.
+    // lift the cap by the polygon's sag below the true sphere so wide caps don't z-fight the Earth (radial only)
     float ring_step = theta / (float)rings;
     float seg_step = (2.0f * PI) / (float)segments;
     float seg_arc = sinf(theta) * seg_step; /* widest at the outer ring */
@@ -81,12 +74,7 @@ static bool BuildCoverageCapVertices(float altitude_km, CoverageMeshLOD lod,
     return true;
 }
 
-/**
- * @brief Generate a coverage cone mesh.
- *
- * Local Earth-centred frame with +Y toward the satellite; the vertex shader
- * rotates it per satellite.
- */
+/* generate a coverage cone mesh in a local Earth-centred frame with +Y toward the satellite */
 Mesh GenerateCoverageMesh(float altitude_km, CoverageMeshLOD lod) {
     int rings = GetLODRings(lod);
     int segments = GetLODSegments(lod);
@@ -154,9 +142,7 @@ Mesh GenerateCoverageMesh(float altitude_km, CoverageMeshLOD lod) {
     return mesh;
 }
 
-/**
- * @brief Get or create a cached coverage mesh.
- */
+/* get or create a cached coverage mesh */
 Model* GetCachedCoverageMesh(float altitude_km, CoverageMeshLOD lod, Shader shader) {
     // bucket to 10 km, but generate from the real altitude so low-altitude
     // satellites don't collapse to a degenerate zero-altitude cap
@@ -186,12 +172,7 @@ Model* GetCachedCoverageMesh(float altitude_km, CoverageMeshLOD lod, Shader shad
     return &g_coverage_cache[cache_key].model;
 }
 
-/**
- * @brief CPU-side cached cap geometry for the 2D map path (no GPU upload).
- *
- * Shares the GPU cache's key scheme; `vertices` points into the map node's
- * vector, which is stable across insertions.
- */
+/* CPU-side cached cap geometry for the 2D map path; shares the GPU cache's key scheme */
 struct CoverageCapEntry {
     std::vector<float> verts;
     CoverageCapData data;
@@ -230,9 +211,7 @@ const CoverageCapData *GetCachedCoverageCap(float altitude_km, CoverageMeshLOD l
     return &stored.data;
 }
 
-/**
- * @brief Clear all cached coverage meshes.
- */
+/* clear all cached coverage meshes */
 void ClearCoverageMeshCache() {
     for (auto& pair : g_coverage_cache) {
         if (pair.second.is_valid) {
@@ -243,9 +222,7 @@ void ClearCoverageMeshCache() {
     g_coverage_cap_cache.clear();
 }
 
-/**
- * @brief Calculate coverage parameters for a satellite.
- */
+/* calculate coverage parameters for a satellite */
 void CalculateCoverageParams(const Satellite *sat, float *out_theta, float *out_radius) {
     if (!sat || !sat->is_active) {
         *out_theta = 0.0f;
@@ -272,12 +249,7 @@ void CalculateCoverageParams(const Satellite *sat, float *out_theta, float *out_
     *out_radius = EARTH_RADIUS_KM * sinf(*out_theta);
 }
 
-/**
- * @brief Select appropriate LOD level based on camera distance.
- *
- * Measured to the sub-satellite surface point, not the satellite: using the
- * satellite forced high-orbit caps to LOW LOD even when zoomed onto the cap.
- */
+/* select LOD from camera distance measured to the sub-satellite point, not the satellite */
 CoverageMeshLOD SelectCoverageLOD(const Satellite *sat, Camera camera) {
     Vector3 sat_pos = Vector3Scale(sat->current_pos, 1.0f / DRAW_SCALE);
     float r = Vector3Length(sat_pos);
@@ -291,9 +263,7 @@ CoverageMeshLOD SelectCoverageLOD(const Satellite *sat, Camera camera) {
     return COVERAGE_LOD_LOW;
 }
 
-/**
- * @brief Select an LOD level for the 2D map based on on-screen cap size.
- */
+/* select an LOD level for the 2D map based on on-screen cap size */
 CoverageMeshLOD SelectCoverageLOD2D(const Satellite *sat, float zoom, float map_w) {
     if (!sat || !sat->is_active)
         return COVERAGE_LOD_LOW;
@@ -315,13 +285,7 @@ CoverageMeshLOD SelectCoverageLOD2D(const Satellite *sat, float zoom, float map_
     return COVERAGE_LOD_LOW;
 }
 
-/**
- * @brief Check if satellite's coverage is visible from camera.
- *
- * Tests the sub-satellite point (not the satellite) and expands the accepted
- * cone by the cap's angular radius, so large high-orbit caps aren't culled
- * when the satellite itself is behind the camera.
- */
+/* test the sub-satellite point and expand the cone by the cap's angular radius so high-orbit caps aren't culled */
 bool IsCoverageVisible(const Satellite *sat, Camera camera) {
     if (!sat || !sat->is_active)
         return false;

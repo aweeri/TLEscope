@@ -5,20 +5,6 @@
 #include "core/types.h"
 #include "ui/ui.h"
 
-/**
- * @file labels.h
- * @brief Screen-space label overlay for the 3D/2D scene.
- *
- * Replaces the old raylib DrawTextEx/DrawUIText label calls in main.cpp with a
- * unified Dear ImGui draw-list overlay. Labels are collected each frame,
- * projected to screen space, decluttered by priority and alternate placement, and
- * rendered via ImGui::GetBackgroundDrawList() so they draw on top of the scene
- * with full theme support (text shadow / background for contrast).
- *
- * Call DrawSceneLabels() from DrawGUI() after rlImGuiBegin() so the ImGui
- * draw list is active.
- */
-
 /* persisted config keys (ToolSettings store, see tools_settings.h) */
 #define LABELS_KEY_ENABLED   "labels.enabled"
 #define LABELS_KEY_MODE      "labels.mode"

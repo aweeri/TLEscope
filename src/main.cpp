@@ -275,7 +275,10 @@ static const FutureTrackCacheEntry *GetFutureTrackSamples(
         double start_unix = fmax(now_unix, m->t0_unix);
         if (start_unix > m->t1_unix)
             start_unix = m->t1_unix;
-        const double end_unix = m->t1_unix;
+        double period = ephem_period_seconds(m);
+        if (!(period > 0.0))
+            period = (m->t1_unix - m->t0_unix) / 40.0;
+        const double end_unix = fmin(m->t1_unix, start_unix + (double)cfg.orbits_to_draw * period);
         const double denom = (segments > 0) ? (double)segments : 1.0;
         for (int j = 0; j <= segments; j++)
         {
@@ -284,10 +287,9 @@ static const FutureTrackCacheEntry *GetFutureTrackSamples(
             if (!EphemInterp(m, t_unix, &p, &v))
                 p = (Vector3){0};
             const double t_epoch = get_epoch_from_unix(t_unix);
-            slot->times[j] = t_epoch; /* absolute epoch, matching the SGP4 path */
+            slot->times[j] = t_epoch;
             get_map_coordinates(p, epoch_to_gmst(t_epoch), earth_offset, map_w, map_h,
                                 &slot->pts[j].x, &slot->pts[j].y);
-            /* the mission already carries precomputed sub-satellite angles and sunlit state */
             float lat = 0.0f, lon = 0.0f;
             EphemLatLon(m, t_unix, &lat, &lon);
             slot->lat[j] = lat;
@@ -340,44 +342,7 @@ static float OrbitDirectionWidthScale(double phase, float floor = ORBIT_DIR_MIN)
     return OrbitDirectionWidth(phase, anim, GetTime(), floor);
 }
 
-// Reference-body position relative to Earth at t_unix in world units; Earth
-// yields the zero vector, an exact no-op for the transform below.
-static bool ReferenceOffsetAtEpoch(int ref_body, double t_unix, Vector3 *out)
-{
-    *out = Vector3Zero();
-    if (ref_body == 0)
-        return true;
-    if (!isfinite(t_unix))
-        return false;
-    const double t_epoch = get_epoch_from_unix(t_unix);
-    if (!isfinite(t_epoch))
-        return false;
-
-    if (ref_body == 1)
-    {
-        Vector3 moon_km = calculate_moon_position(t_epoch);
-        if (!isfinite(moon_km.x) || !isfinite(moon_km.y) || !isfinite(moon_km.z))
-            return false;
-        *out = Vector3Scale(moon_km, 1.0f / (float)DRAW_SCALE);
-        return isfinite(out->x) && isfinite(out->y) && isfinite(out->z);
-    }
-
-    Vector3 dir = calculate_sun_position(t_epoch);
-    if (!isfinite(dir.x) || !isfinite(dir.y) || !isfinite(dir.z) ||
-        Vector3LengthSqr(dir) < 1e-12f)
-        return false;
-
-    const double dist_km = calculate_sun_distance_km(t_epoch);
-    if (!isfinite(dist_km) || dist_km <= 0.0)
-        return false;
-
-    *out = Vector3Scale(Vector3Normalize(dir), (float)(dist_km / (double)DRAW_SCALE));
-    return isfinite(out->x) && isfinite(out->y) && isfinite(out->z);
-}
-
-// `body_now` is the reference body's Earth-relative position at t_now, sampled
-// once per frame; SGP4 orbits stay Earth-relative by design.
-static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step, bool apply_sunlit, Vector3 cam_pos, int ref_body, Vector3 body_now, bool body_now_ok)
+static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highlighted, float alpha, int step, bool apply_sunlit, Vector3 cam_pos)
 {
     Color orbitColor = ApplyAlpha(is_highlighted ? g_theme.world.orbit_active : g_theme.world.orbit, alpha);
     const float earth_r = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -401,37 +366,45 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
         const double t0 = m->t0_unix;
         const double span = (m->t1_unix > t0) ? (m->t1_unix - t0) : 1.0;
 
-        // per-vertex rebase pos_raw - off(t) + off(now); off(now) anchors it at the craft
-        const bool orbital_reference = ref_body != 0;
+        // update_orbit_cache() already baked body-relative geometry; draw adds the body offset once.
+        Vector3 ref_now = Vector3Zero();
+        if (m->ref_body != REF_BODY_EARTH)
+        {
+            Vector3 off_km;
+            if (reference_body_offset_km(m->ref_body, get_unix_from_epoch(current_epoch), &off_km))
+                ref_now = Vector3Scale(off_km, 1.0f / DRAW_SCALE);
+        }
 
         Vector3 prev_pos = {0};
         for (int i = 0; i < drawn; i++)
         {
             Vector3 raw_pos;
             float phase;
-            const double t = t0 + span * (double)i / (double)(drawn - 1);
+            Vector3 rel_world;
             if (use_cache)
             {
-                Vector3 scaled = sat->orbit_cache[i];
-                raw_pos = Vector3Scale(scaled, DRAW_SCALE);
+                /* the cache is already body-relative (and in world units) */
+                raw_pos = Vector3Scale(sat->orbit_cache[i], DRAW_SCALE);
                 phase = sat->orbit_cache_phase[i];
+                rel_world = sat->orbit_cache[i];
             }
             else
             {
+                const double t = t0 + span * (double)i / (double)(drawn - 1);
                 Vector3 v = {0};
                 if (!EphemInterp(m, t, &raw_pos, &v))
                     break;
                 phase = (float)((t - t0) / span);
+                Vector3 rel_km = raw_pos;
+                if (m->ref_body != REF_BODY_EARTH)
+                {
+                    Vector3 off_km;
+                    if (reference_body_offset_km(m->ref_body, t, &off_km))
+                        rel_km = Vector3Subtract(rel_km, off_km);
+                }
+                rel_world = Vector3Scale(rel_km, 1.0f / DRAW_SCALE);
             }
-            Vector3 pos = Vector3Scale(raw_pos, 1.0f / DRAW_SCALE);
-
-            if (orbital_reference)
-            {
-                Vector3 off_at_t;
-                /* both terms guarded so a bad offset never injects NaN */
-                if (ReferenceOffsetAtEpoch(ref_body, t, &off_at_t) && body_now_ok)
-                    pos = Vector3Add(Vector3Subtract(pos, off_at_t), body_now);
-            }
+            Vector3 pos = Vector3Add(rel_world, ref_now);
 
             if (i > 0)
             {
@@ -532,8 +505,7 @@ static void draw_orbit_3d(Satellite *sat, double current_epoch, bool is_highligh
     }
 }
 
-// same per-frame reference-body anchor as draw_orbit_3d(), so both paths match
-static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color color, float alpha, int step, bool apply_sunlit, Vector3 cam_pos, int ref_body, Vector3 body_now, bool body_now_ok)
+static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color color, float alpha, int step, bool apply_sunlit, Vector3 cam_pos)
 {
     Color orbitColor = ApplyAlpha(color, alpha);
     // ephem missions are served by the window-sampled cache from update_orbit_cache()
@@ -548,32 +520,27 @@ static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color co
         base_sun_dir = Vector3Normalize(calculate_sun_position(current_epoch));
     }
 
-    // same per-vertex rebase as draw_orbit_3d(); phase recovers t = t0 + span * phase
-    const bool orbital_reference = ref_body != 0 && SatIsEphem(sat);
-    EphemMission *em = orbital_reference ? EphemGetById(sat->ephem_id) : NULL;
-    double em_t0 = 0.0, em_span = 1.0;
-    if (em)
+    // the cache already holds body-relative geometry, so add the body's current
+    // offset once; SGP4 orbits are Earth-relative and get the zero vector.
+    Vector3 ref_now = Vector3Zero();
+    if (SatIsEphem(sat))
     {
-        em_t0 = em->t0_unix;
-        em_span = (em->t1_unix > em_t0) ? (em->t1_unix - em_t0) : 1.0;
+        EphemMission *em = EphemGetById(sat->ephem_id);
+        if (em && em->ref_body != REF_BODY_EARTH)
+        {
+            Vector3 off_km;
+            if (reference_body_offset_km(em->ref_body, get_unix_from_epoch(current_epoch), &off_km))
+                ref_now = Vector3Scale(off_km, 1.0f / DRAW_SCALE);
+        }
     }
-    auto rebase_vertex = [&](int idx, Vector3 p) -> Vector3 {
-        if (!orbital_reference || !em || !body_now_ok)
-            return p;
-        const double t = em_t0 + em_span * (double)sat->orbit_cache_phase[idx];
-        Vector3 off_at_t;
-        if (ReferenceOffsetAtEpoch(ref_body, t, &off_at_t))
-            p = Vector3Add(Vector3Subtract(p, off_at_t), body_now);
-        return p;
-    };
 
     rlSetLineWidth(3.0f);
-    Vector3 prev_pos = rebase_vertex(0, sat->orbit_cache[0]);
+    Vector3 prev_pos = Vector3Add(sat->orbit_cache[0], ref_now);
     int cache_size = sat->orbit_cache_resolution;
 
     for (int i = step; i < cache_size; i += step)
     {
-        Vector3 pos = rebase_vertex(i, sat->orbit_cache[i]);
+        Vector3 pos = Vector3Add(sat->orbit_cache[i], ref_now);
         Color drawCol = orbitColor;
         if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(sat->orbit_cache[i], DRAW_SCALE), base_sun_dir))
             drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
@@ -588,7 +555,7 @@ static void draw_orbit_3d_colored(Satellite *sat, double current_epoch, Color co
     {
         Color drawCol = orbitColor;
         int last = cache_size - 1;
-        Vector3 last_pos = rebase_vertex(last, sat->orbit_cache[last]);
+        Vector3 last_pos = Vector3Add(sat->orbit_cache[last], ref_now);
         if (cfg.highlight_sunlit && apply_sunlit && !is_sat_eclipsed(Vector3Scale(sat->orbit_cache[last], DRAW_SCALE), base_sun_dir))
             drawCol = ApplyAlpha(g_theme.world.sat_hover, alpha);
         drawCol = ApplyOrbitDirection(drawCol, sat->orbit_cache_phase[last]);
@@ -1873,10 +1840,6 @@ int main(int argc, char **argv)
         float moon_pitch = asinf(dirToEarth.y);
         moonModel.transform = MatrixMultiply(MatrixRotateZ(moon_pitch), MatrixRotateY(moon_yaw));
 
-        // only the mission polyline is re-based; without one the body has no effect
-        if (is_2d_view || EphemCount() == 0)
-            cfg.reference_body = 0;
-
         Vector3 sunDirGeocentric = calculate_sun_position(current_epoch);
         double sunDistKm = calculate_sun_distance_km(current_epoch);
         float sunDistWorld = (float)(sunDistKm / (double)DRAW_SCALE);
@@ -1892,10 +1855,6 @@ int main(int argc, char **argv)
         /* the drawn Sun is always geocentric, even when orbits are Moon-relative */
         const Vector3 sun_now_vec = Vector3Scale(Vector3Normalize(sunDirGeocentric), sunDistWorld);
         Vector3 sunPosWorld = sun_now_vec;
-
-        /* off(t_now) in world units; computed once per frame for both orbit paths */
-        Vector3 body_now_anchor = Vector3Zero();
-        const bool body_now_ok = ReferenceOffsetAtEpoch(cfg.reference_body, current_unix, &body_now_anchor);
 
         Vector2 mouseDelta = GetMouseDelta();
         hovered_sat = NULL;
@@ -3451,16 +3410,7 @@ int main(int argc, char **argv)
                         {
                             if (pass == 1)
                             {
-                                draw_orbit_3d(&satellites[i], current_epoch, true, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position, cfg.reference_body, body_now_anchor, body_now_ok);
-                                Vector3 draw_pos = Vector3Scale(satellites[i].current_pos, 1.0f / DRAW_SCALE);
-                                float ground_r = draw_earth_radius * 1.001f;
-                                Vector3 ground_pt = Vector3Scale(Vector3Normalize(draw_pos), ground_r);
-                                if (!IsOrbitSegmentOccluded(Camera3DParams.position, ground_pt, draw_pos, draw_earth_radius * 0.995f))
-                                {
-                                    rlDrawRenderBatchActive();
-                                    DrawLine3D(ground_pt, draw_pos, ApplyAlpha(g_theme.world.orbit_active, sat_alpha));
-                                    rlDrawRenderBatchActive();
-                                }
+                                draw_orbit_3d(&satellites[i], current_epoch, true, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position);
                             }
                             continue;
                         }
@@ -3471,7 +3421,7 @@ int main(int argc, char **argv)
                             if (pass == 1)
                             {
                                 Color fav_color = MultiGroundTrackColor(fav_index);
-                                draw_orbit_3d_colored(&satellites[i], current_epoch, fav_color, 0.9f, global_orbit_step, apply_sunlit, Camera3DParams.position, cfg.reference_body, body_now_anchor, body_now_ok);
+                                draw_orbit_3d_colored(&satellites[i], current_epoch, fav_color, 0.9f, global_orbit_step, apply_sunlit, Camera3DParams.position);
                             }
                             continue;
                         }
@@ -3481,7 +3431,7 @@ int main(int argc, char **argv)
                         {
                             if (&satellites[i] != selected_sat && !orbits_dimmed)
                                 continue;
-                            draw_orbit_3d(&satellites[i], current_epoch, false, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position, cfg.reference_body, body_now_anchor, body_now_ok);
+                            draw_orbit_3d(&satellites[i], current_epoch, false, sat_alpha, global_orbit_step, apply_sunlit, Camera3DParams.position);
                         }
                     }
 

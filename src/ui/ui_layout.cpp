@@ -1,12 +1,3 @@
-/*
- * ui_layout.cpp - Sidebar / panel workspace layout engine
- *
- * Implements the three-section workspace: a left sidebar (actions), a
- * transparent center canvas (simulation), and a right sidebar (inspector).
- * Sidebars are resizable, snap-hide to the screen edge (pull-tab to
- * restore), and contain reorderable accordion panels.
- */
-
 #include "ui_layout.h"
 #include "imgui_theme.h"
 #include "tools/tools.h"
@@ -613,9 +604,7 @@ static void DrawRotatorNavIndicator(UIContext *ctx, AppConfig *cfg)
     }
 }
 
-/* ========================================================================== */
-/*  Notch (show/hide tab)                                                     */
-/* ========================================================================== */
+/* Notch (show/hide tab) */
 
 /** draw the show/hide notch at a sidebar edge (also on the visible edge, to hide it) */
 static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_visible)
@@ -802,9 +791,7 @@ static void DrawNotch(bool is_left, float nav_h, float content_h, bool sidebar_v
     ImGui::PopStyleVar(4);
 }
 
-/* ========================================================================== */
-/*  Resize strip                                                              */
-/* ========================================================================== */
+/* Resize strip */
 
 static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
 {
@@ -881,9 +868,7 @@ static void DrawResizeStrip(bool is_left, float nav_h, float content_h)
     ImGui::PopStyleVar(4);
 }
 
-/* ========================================================================== */
-/*  Accordion header + reorder                                                */
-/* ========================================================================== */
+/* Accordion header + reorder */
 
 static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, bool is_left)
 {
@@ -982,9 +967,7 @@ static void DrawAccordionHeader(const PanelDef *def, bool *open, int order_idx, 
     ImGui::PopID();
 }
 
-/* ========================================================================== */
-/*  Reorder finalisation                                                      */
-/* ========================================================================== */
+/* Reorder finalisation */
 
 /** map a visible header target to a full-array insertion index (dragged = -1 if not in this array) */
 static int FindInsertIndex(int *order, int dragged, int visible_target)
@@ -1137,9 +1120,7 @@ static void FinishReorder(AppConfig *cfg)
     }
 }
 
-/* ========================================================================== */
-/*  Sidebar                                                                   */
-/* ========================================================================== */
+/* Sidebar */
 
 static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
 {
@@ -1255,9 +1236,7 @@ static void DrawSidebar(bool is_left, UIContext *ctx, AppConfig *cfg)
     ImGui::PopStyleVar(3);
 }
 
-/* ========================================================================== */
-/*  Navigation bar                                                            */
-/* ========================================================================== */
+/* Navigation bar */
 
 void DrawNavBar(UIContext *ctx, AppConfig *cfg)
 {
@@ -1360,9 +1339,7 @@ void DrawNavBar(UIContext *ctx, AppConfig *cfg)
     }
 }
 
-/* ========================================================================== */
-/*  Settings modal                                                            */
-/* ========================================================================== */
+/* Settings modal */
 
 void DrawSettingsModal(UIContext *ctx, AppConfig *cfg)
 {
@@ -1817,9 +1794,7 @@ static void DrawToolRow(const PanelDef *def, AppConfig *cfg)
     ImGui::PopID();
 }
 
-/* ========================================================================== */
-/*  Tools modal                                                               */
-/* ========================================================================== */
+/* Tools modal */
 
 void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
 {
@@ -1883,9 +1858,7 @@ void DrawToolsModal(UIContext *ctx, AppConfig *cfg)
     }
 }
 
-/* ========================================================================== */
-/*  Main layout entry point                                                   */
-/* ========================================================================== */
+/* Main layout entry point */
 
 void DrawUILayout(UIContext *ctx, AppConfig *cfg)
 {

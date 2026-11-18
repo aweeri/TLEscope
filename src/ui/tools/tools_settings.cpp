@@ -1,11 +1,3 @@
-/*
- * tools_settings.cpp - Generic persisted key-value settings store for tools.
- *
- * Tools read/write their own namespaced keys via this API. The whole map is
- * serialized generically by config.cpp, so adding a toggle never requires a
- * new AppConfig field or a config.cpp edit.
- */
-
 #include "tools_settings.h"
 
 #include <stdio.h>

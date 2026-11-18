@@ -1,15 +1,6 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
-/**
- * @file storage.h
- * @brief Structured orbital data persistence
- *
- * Replaces the flat data.tle file with a JSON-based structured store.
- * Each satellite's orbital elements and metadata are serialized/deserialized
- * using the same manual JSON approach as config.cpp.
- */
-
 #include "core/types.h"
 #include <time.h>
 #include <stdbool.h>
@@ -39,10 +30,7 @@ typedef struct {
 bool SaveSourceState(const char *filename, DataSourceState *sources, int count);
 bool LoadSourceState(const char *filename, DataSourceState *sources, int *count, int max);
 
-// -- Favorites Persistence ---------------------------------------------------
-// Favorites are keyed by NORAD catalog number (norad_id_num). The set is kept
-// in memory and persisted as a JSON array of ids, so the same id set can be
-// reused for filters and orbit-layer support elsewhere in the app.
+// Favorites are keyed by NORAD catalog number and persisted as a JSON array of ids.
 
 /** load the favorites set from a JSON file into memory; returns id count */
 int LoadFavorites(const char *filename);

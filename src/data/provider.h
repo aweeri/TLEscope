@@ -53,9 +53,7 @@ const DataProvider* GetProvider(ProviderType type);
 
 // -- High-Level Fetch --------------------------------------------------------
 
-/** fetch data from a source in the specified format.
- *  handles caching internally (120-min TTL).
- *  returns a FetchResult that must be freed with FreeFetchResult(). */
+/* Fetch data from a source; handles caching (120-min TTL). Free with FreeFetchResult(). */
 FetchResult FetchFromSource(const DataSource *source, OrbitalDataFormat format);
 
 /** free a fetch result */
@@ -63,29 +61,24 @@ void FreeFetchResult(FetchResult *result);
 
 // -- Retlector Group Fetch ---------------------------------------------------
 
-/** fetch available groups from retlector.eu API.
- *  parses the JSON response into RetlectorGroup array.
- *  returns number of groups parsed, or -1 on error. */
+/* Fetch available groups from retlector.eu; returns count parsed, or -1 on error. */
 int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_code);
 
 // -- Format Detection --------------------------------------------------------
 
 bool tleHasNameLine(const char *data);
 
-/** detect orbital data format from raw content.
- *  examines content signatures in order: XML -> JSON -> KVN -> CSV -> TLE. */
+/* Detect format from content signatures: XML -> JSON -> KVN -> CSV -> TLE. */
 OrbitalDataFormat DetectDataFormat(const char *data, size_t size);
 
 // -- Custom URL Fetch --------------------------------------------------------
 
-/** fetch from a custom URL and auto-detect the format.
- *  the result.format will be set to the detected format. */
+/* Fetch from a custom URL and auto-detect the format. */
 FetchResult FetchFromCustomURL(const char *url);
 
 // -- Custom File Fetch --------------------------------------------------------
 
-/** fetch from a custom file and auto-detect the format.
- *  the result.format will be set to the detected format. */
+/* Fetch from a custom file and auto-detect the format. */
 FetchResult FetchFromCustomFile(const char *filename);
 
 // -- Raw URL Fetch -----------------------------------------------------------

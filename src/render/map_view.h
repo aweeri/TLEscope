@@ -4,9 +4,7 @@
 #include <raymath.h>
 #include <rlgl.h>
 
-/* The bundled raylib's BeginMode2D resets the modelview without preserving
- * the DPI transform from BeginDrawing. Keep camera coordinates in logical
- * pixels, matching GetWorldToScreen2D, mouse input, and the ImGui overlay. */
+/* bundled raylib's BeginMode2D drops the DPI transform; keep camera coords in logical pixels */
 
 /* Smallest zoom at which the map still covers the whole window. */
 inline float MapFillZoom(float map_w, float map_h)
@@ -41,8 +39,7 @@ inline void Viewport3DSetRect(float x, float y, float w, float h)
     g_view3d_h = h;
 }
 
-/* Inclusive range of horizontally repeated map copies intersecting the scene
- * viewport. This also handles deliberate zoom-out beyond one map width. */
+/* inclusive range of horizontally repeated map copies intersecting the viewport */
 inline void MapVisibleCopyRange(const Camera2D &cam, float map_w, int *first, int *last)
 {
     if (map_w <= 0.0f)
@@ -92,11 +89,7 @@ inline void Viewport3DResetGL(void)
     rlViewport(0, 0, GetRenderWidth(), GetRenderHeight());
 }
 
-// Zoom is unbounded but rlgl's clip planes are fixed (near 0.05, far 4000), so
-// derive both from the camera distance: far = max(4000, dist*4, |cam|+700) and
-// near = max(dist*1e-4, 0.05). Near must NOT be capped: a tiny near with an
-// unbounded far blows the ratio past the 24-bit depth buffer and the whole scene
-// (skybox included) goes black.
+// derive clip planes from camera distance; near must not be capped or the depth ratio blows out and the scene goes black
 inline float g_scene_far_extra = 0.0f;
 
 inline float Viewport3DCameraFar(const Camera &cam)

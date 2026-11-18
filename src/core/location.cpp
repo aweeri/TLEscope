@@ -64,8 +64,7 @@ void RemoveLocation(int idx)
         locations[i] = locations[i + 1];
     location_count--;
 
-    /* Always preserve the invariant when at least one location remains.
-     * This also repairs malformed state where no location was marked home. */
+    /* Preserve the home invariant; also repairs state with no home marked. */
     if (location_count > 0 && (was_home || GetHomeLocationIndex() < 0))
         SetHomeLocation(0);
 }

@@ -408,9 +408,7 @@ static float TransitRowReveal(UIContext *ctx, int i, SatPass *p, bool selected,
     return off;
 }
 
-/* ========================================================================== */
-/*  Scene hook: accent-colored line along the transit portion of the orbit    */
-/* ========================================================================== */
+/* Scene hook: accent-colored line along the transit portion of the orbit */
 
 // drawn before the pass early-returns so it works with no pass selected
 static void DrawRotatorBeam3D(SceneContext *sctx, AppConfig *cfg)
@@ -580,9 +578,7 @@ void DrawSceneTransit(SceneContext *sctx, AppConfig *cfg)
     }
 }
 
-/* ========================================================================== */
-/*  Compact panel                                                             */
-/* ========================================================================== */
+/* Compact panel */
 
 void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
 {
@@ -867,9 +863,7 @@ void DrawPanelTransit(UIContext *ctx, AppConfig *cfg)
     ImGui::PopTextWrapPos();
 }
 
-/* ========================================================================== */
-/*  Overview modal                                                            */
-/* ========================================================================== */
+/* Overview modal */
 
 /** LEFT column: maximal-info transit list with inline selection/deselect */
 static void DrawTransitOverviewList(UIContext *ctx, AppConfig *cfg)

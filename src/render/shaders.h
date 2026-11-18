@@ -1,26 +1,9 @@
-/**
- * @file shaders.h
- * @brief GLSL fragment shaders for the 3D scene.
- *
- * The shaders are embedded as raw string literals and passed to raylib's
- * LoadShaderFromMemory(). They live in their own header so main.cpp stays
- * focused on application logic. `inline constexpr` gives each shader a single
- * program-wide copy (C++17 inline variables) while keeping the file header-only.
- *
- * Note: `#version` must be the first token of each shader, so the raw string
- * literal starts on the same line as its opening delimiter.
- */
+/* #version must be the first token, so each raw string literal starts on the same line as its opening delimiter */
 #pragma once
 
 namespace Shaders {
 
-/**
- * @brief day/night transition shader for the 3D earth.
- *
- * Uses the dot product between surface normal and sun direction.
- * For solar eclipses it casts a ray from the fragment towards the sun
- * and calculates its minimum distance to the Moon's center in local space.
- */
+/* day/night shader for the 3D earth; eclipse shadow casts a ray toward the sun and measures distance to the Moon */
 inline constexpr const char *fs3D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -96,9 +79,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief day/night transition shader for the 2D earth (no scattering).
- */
+/* day/night shader for the 2D earth (no scattering) */
 inline constexpr const char *fs2D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -134,9 +115,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief cloud shader handles transparency based on sun position.
- */
+/* cloud shader: transparency based on sun position */
 inline constexpr const char *fsCloud3D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -175,9 +154,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief shader to handle moon self-shadowing and earth's eclipse projection.
- */
+/* moon self-shadowing and earth eclipse projection */
 inline constexpr const char *fsMoon3D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -236,9 +213,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief atmospheric scattering glow shader.
- */
+/* atmospheric scattering glow shader */
 inline constexpr const char *fsAtmosphere3D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;

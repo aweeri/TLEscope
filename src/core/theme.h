@@ -3,25 +3,6 @@
 
 #include "types.h"
 
-/**
- * @file theme.h
- * @brief Theme definition and loading
- *
- * A theme is a self-contained visual identity for TLEscope. It is loaded
- * from `themes/<name>/theme.json` and covers:
- *   - world  : colors used for 3D/2D raylib scene drawing (Earth, orbits, sats)
- *   - ui     : a compact semantic palette; the full Dear ImGui color set is
- *              derived from it at apply time (hover/active states are mixed
- *              from the base surface toward the theme's text color)
- *   - style  : ImGui style variables (rounding, padding, border sizes, ...)
- *   - font   : the UI font file and its sizes
- *   - textures: per-theme texture file names (with fallback to default)
- *   - meta   : display metadata (name, author, description)
- *
- * The struct is intentionally flat and POD so it can be default-initialised
- * with `= {0}` and overlaid by the JSON parser.
- */
-
 /** mix ratio applied to derive a hovered state from a base color */
 #define THEME_STATE_HOVER 0.10f
 /** mix ratio applied to derive an active/pressed state from a base color */
@@ -168,16 +149,8 @@ static inline Color ThemeActiveOf(Color base, Color text)
 /** fill the theme with hardcoded defaults (safety net before JSON load) */
 void ThemeInitDefaults(Theme *t);
 
-/**
- * Load `themes/<name>/theme.json` into `t`, overlaying on its current values.
- * Returns true on success (even if the file is missing, defaults remain).
- */
 bool ThemeLoad(const char *theme_name, Theme *t);
 
-/**
- * Resolve an asset path: `themes/<current>/<file>` if it exists, otherwise
- * `themes/default/<file>`. Returns a pointer to a static buffer.
- */
 const char *ThemeAssetPath(const char *file);
 
 /** scan themes/ for directories containing theme.json; fills `list` */

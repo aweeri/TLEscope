@@ -1,27 +1,3 @@
-/*
- * tool_example.cpp - Example Tool
- *
- * ---------------------------------------------------------------------------
- * REFERENCE TEMPLATE: copy this file to start your own tool.
- * ---------------------------------------------------------------------------
- *
- * This is a minimal, working example. It is shipped disabled by default (see
- * its row in tools_registry.cpp: default_enabled = false), so it is hidden
- * from the sidebar on first run. Enable it from the Tools modal to try it.
- *
- * Integration is 3 small steps (full guide in src/ui/tools/README.md):
- *   1. Write `void DrawPanelMyTool(UIContext *ctx, AppConfig *cfg)` in a new
- *      tool_my_tool.cpp - the body is plain ImGui.
- *   2. Declare it in src/ui/tools/tools.h.
- *   3. Add a PanelId to src/core/types.h and one row to g_panel_defs in
- *      src/ui/tools/tools_registry.cpp.
- *
- * Tool settings persist through the generic store in tools_settings.h (keys
- * are namespaced, e.g. "example.show_greeting"), so no AppConfig field or
- * config.cpp edit is needed. The pattern below - read once, write back only
- * when the widget changes - is all there is to it.
- */
-
 #include "tools.h"
 #include "tools_settings.h"
 

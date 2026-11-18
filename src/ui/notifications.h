@@ -4,20 +4,6 @@
 #include "core/config.h"
 #include "core/theme.h"
 
-/**
- * @file notifications.h
- * @brief KSP-style toast notification system (ROADMAP section 8.1)
- *
- * A small ring buffer of {level, icon, message, timestamp} entries rendered
- * as stacked toasts in the top-right corner via ImGui. Each toast auto-dismisses
- * after a few seconds with a timed fade-out. Notifications are theme-aware
- * (colors come from the Theme struct) and respect UI scale.
- *
- * The module is self-contained: call NotifyPush() from any event point, call
- * NotifyUpdate()/DrawNotifications() each frame from the UI render loop, and
- * optionally persist per-category toggles via the generic tool_settings store.
- */
-
 /** severity level; drives the accent color and the per-category toggle */
 typedef enum
 {
@@ -33,10 +19,6 @@ typedef enum
 #define NOTIFY_DURATION 4.0f   /* how long a toast stays fully visible */
 #define NOTIFY_FADE 0.5f       /* fade-out duration after NOTIFY_DURATION */
 
-/**
- * Push a new notification. `icon` is a FontAwesome glyph (may be "").
- * `fmt` is a printf-style format string (e.g. "Loaded %d sources", n).
- */
 void NotifyPush(NotifyLevel level, const char *icon, const char *fmt, ...);
 
 /** advance fade timers; call once per frame with the frame delta time */

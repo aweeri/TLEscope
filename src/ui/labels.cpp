@@ -1,6 +1,4 @@
-// Screen-space label overlay for the 3D/2D scene, drawn via the ImGui background
-// draw list. Config lives in the generic ToolSettings store (labels.enabled,
-// labels.mode, labels.show_altitude, labels.size, labels.background, labels.max_count).
+// Screen-space label overlay for the 3D/2D scene, drawn via the ImGui background draw list.
 
 #include "labels.h"
 #include "imgui_theme.h"

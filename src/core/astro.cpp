@@ -618,6 +618,22 @@ void get_apsis_times(Satellite *sat, double current_time, double *out_peri_unix,
     *out_apo_unix = current_unix + (diff_apo / n) * 60.0;
 }
 
+/* local orbital period from a stored state (vis-viva); 0 when unbound/unknown */
+double ephem_period_seconds(const EphemMission *m)
+{
+    if (!m || m->s.empty())
+        return 0.0;
+    const EphemSample &s = m->s[m->s.size() / 2];
+    const double r  = Vector3Length(s.p);
+    const double v2 = Vector3LengthSqr(s.v);
+    if (!(r > 0.0) || !(v2 > 0.0))
+        return 0.0;
+    const double a = 1.0 / (2.0 / r - v2 / (double)MU);
+    if (!(a > 0.0))
+        return 0.0;
+    return 2.0 * PI * sqrt(a * a * a / (double)MU);
+}
+
 /** calculates cache resolution based on orbital eccentricity */
 int calculate_orbit_cache_resolution(double eccentricity)
 {
@@ -634,9 +650,9 @@ bool is_orbit_cache_valid(Satellite *sat, Vector3 current_pos, float drift_thres
     if (!sat->orbit_cached)
         return false;
 
-    /* ephem paths are a fixed function of time: no drift model, rebuild only after invalidation */
+    /* ephem window follows "now": refresh on the round-robin pass */
     if (sat->kind == SAT_KIND_EPHEM)
-        return true;
+        return false;
 
     float drift = Vector3Distance(sat->cached_orbit_base_pos, current_pos);
     return drift < drift_threshold_km;
@@ -711,10 +727,12 @@ void orbit_adaptive_sample_times(const Satellite *sat, double start_epoch, int n
     }
 }
 
+/* orbits to bake around "now" for a tabulated mission (no config access in this TU) */
+#define EPHEM_DRAW_ORBITS 3.0
+
 /** bakes the future orbital path into a vertex buffer so sgp4 isnt re-run every frame */
 void update_orbit_cache(Satellite *sat, double current_epoch)
 {
-    /* ephem: bake the mission window straight into the vertex buffer; mean_motion is meaningless here */
     if (sat->kind == SAT_KIND_EPHEM)
     {
         EphemMission *m = EphemGetById(sat->ephem_id);
@@ -725,19 +743,38 @@ void update_orbit_cache(Satellite *sat, double current_epoch)
             return;
         }
         const int res = ORBIT_CACHE_SIZE;
-        const double t0 = m->t0_unix;
-        double span = m->t1_unix - t0;
-        if (!(span > 0.0))
-            span = 1.0;
+        const double now_unix = get_unix_from_epoch(current_epoch);
+
+        /* window = a few orbits around "now", clamped to the mission */
+        double period = ephem_period_seconds(m);
+        if (!(period > 0.0))
+            period = (m->t1_unix - m->t0_unix) / 40.0;
+        const double half = 0.5 * (double)EPHEM_DRAW_ORBITS * period;
+
+        double t_start = fmax(m->t0_unix, now_unix - half);
+        double t_end   = fmin(m->t1_unix, now_unix + half);
+        if (!(t_end > t_start))
+        {
+            t_start = m->t0_unix;
+            t_end   = m->t1_unix;
+        }
+        const double span = t_end - t_start;
 
         for (int i = 0; i < res; i++)
         {
-            const double t = t0 + span * (double)i / (double)(res - 1);
+            const double t = t_start + span * (double)i / (double)(res - 1);
             Vector3 p = {0}, v = {0};
             if (!EphemInterp(m, t, &p, &v))
                 p = (Vector3){0};
+            /* Bake body-relative geometry: pos_rel(t) = pos_geo(t) - off(t). */
+            if (m->ref_body != REF_BODY_EARTH)
+            {
+                Vector3 off_km;
+                if (reference_body_offset_km(m->ref_body, t, &off_km))
+                    p = Vector3Subtract(p, off_km);
+            }
             sat->orbit_cache[i] = Vector3Scale(p, 1.0f / DRAW_SCALE);
-            sat->orbit_cache_phase[i] = (float)((t - t0) / span);
+            sat->orbit_cache_phase[i] = (float)((t - now_unix) / period);
         }
 
         sat->orbit_cache_resolution = res;
@@ -1385,6 +1422,42 @@ Vector3 calculate_moon_position(double current_time_days)
     pos.z = (float)-(y_ecl * cos(eps) - z_ecl * sin(eps));
 
     return pos;
+}
+
+/* Reference-body position relative to Earth at t_unix (km); Earth yields zero. */
+bool reference_body_offset_km(int ref_body, double t_unix, Vector3 *out_km)
+{
+    if (out_km)
+        *out_km = Vector3Zero();
+    if (ref_body == REF_BODY_EARTH)
+        return true;
+    if (!out_km || !isfinite(t_unix))
+        return false;
+
+    const double t_epoch = get_epoch_from_unix(t_unix);
+    if (!isfinite(t_epoch))
+        return false;
+
+    if (ref_body == REF_BODY_MOON)
+    {
+        Vector3 moon_km = calculate_moon_position(t_epoch);
+        if (!isfinite(moon_km.x) || !isfinite(moon_km.y) || !isfinite(moon_km.z))
+            return false;
+        *out_km = moon_km;
+        return true;
+    }
+
+    Vector3 dir = calculate_sun_position(t_epoch);
+    if (!isfinite(dir.x) || !isfinite(dir.y) || !isfinite(dir.z) ||
+        Vector3LengthSqr(dir) < 1e-12f)
+        return false;
+
+    const double dist_km = calculate_sun_distance_km(t_epoch);
+    if (!isfinite(dist_km) || dist_km <= 0.0)
+        return false;
+
+    *out_km = Vector3Scale(Vector3Normalize(dir), (float)dist_km);
+    return isfinite(out_km->x) && isfinite(out_km->y) && isfinite(out_km->z);
 }
 
 /* samples the geocentric lunar orbit */

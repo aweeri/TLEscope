@@ -1,6 +1,4 @@
-/* compatibility stubs for C23 libc symbols referenced by prebuilt raylib.
-   glibc < 2.38 does not provide __isoc23_* variants.
-*/
+/* C23 libc stubs for prebuilt raylib; glibc < 2.38 lacks __isoc23_* variants. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>

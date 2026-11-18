@@ -7,9 +7,7 @@
 #include <cstdlib>
 #include <vector>
 
-/*
- * Framework-free TLEscope logo rasterizer.
-*/
+/* Framework-free TLEscope logo rasterizer. */
 
 namespace logo_raster {
 
@@ -45,10 +43,7 @@ inline const char *kEdgePath =
     "m216.02 3.2c-2.71 1.39-12.72 10.41-25.3 22.8l-20.81 20.5 0.09 10.5c36.81-35.81 48.51-46.61 49.75-47.11 "
     "1.24-0.49 4.27-0.89 6.75-0.89 2.47 0 5.74 0.49 7.25 1.08 1.51 0.6 7.37 5.66 13.02 11.25l10.27 10.17-0.04-12.5c-12.01-10.85-17.07-14.77-19-15.71-1.94-0.95-6.61-1.86-10.5-2.05-5.78-0.29-7.78 0.06-11.48 1.96zm-95.52 287.51c-13.81 13.57-23.49 22.3-26 23.44-2.2 0.99-5.13 1.81-6.5 1.82-1.38 0.01-4.19-0.43-6.25-0.98-2.67-0.7-6.78-3.88-14.25-10.99l-10.5-10v11c12.44 11.24 17.73 15.4 19.77 16.5 2.71 1.45 5.64 2 10.73 2 5.76 0 7.8-0.47 11.5-2.64 2.47-1.45 13.84-11.68 25.25-22.75l20.75-20.11c0-7.46-0.43-8.99-1.25-8.96-0.69 0.03-11.15 9.78-23.25 21.67z";
 
-/*
- * Minimal SVG path flattener. Supports the commands used by the logo
- * (M, L, H, V, C, Q, S, T, Z in both absolute and relative form).
- */
+/* Minimal SVG path flattener: M, L, H, V, C, Q, S, T, Z (absolute and relative). */
 inline void FlattenPath(const char *d, std::vector<std::vector<V2>> &out)
 {
     const char *p = d;
@@ -241,9 +236,7 @@ inline void ScanFill(const std::vector<std::vector<V2>> &polys, int width, int h
     }
 }
 
-/*
- * Rasterize the logo into RGBA. Pixels outside the mark are fully transparent.
- */
+/* Rasterize the logo into RGBA; pixels outside the mark are transparent. */
 inline void Render(int size, unsigned char *rgba)
 {
     if (size < 1 || rgba == nullptr)

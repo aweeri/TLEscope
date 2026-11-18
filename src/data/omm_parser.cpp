@@ -9,31 +9,6 @@
 
 #include <nlohmann/json.hpp>
 
-//
-// JSON OMM Parser
-//
-// Parses satellite orbital data in JSON OMM (Orbital Mean-Elements Message) format.
-// This is the modern standard for distributing TLE-equivalent data.
-//
-// Expected JSON format (CCSDS OMM):
-//  [
-//    {
-//      "OBJECT_NAME": "ISS (ZARYA)",
-//      "OBJECT_ID": "1998-067A",
-//      "EPOCH": "2024-01-15 12:00:00.000000",
-//      "MEAN_MOTION": 15.50123456,
-//      "ECCENTRICITY": 0.0001234,
-//      "INCLINATION": 51.6400,
-//      "RA_OF_ASC_NODE": 120.0000,
-//      "ARG_OF_PERICENTER": 200.0000,
-//      "MEAN_ANOMALY": 300.0000,
-//      "BSTAR": 0.00012345,
-//      "NORAD_CAT_ID": 25544,
-//      "EPOCH_MICROSECONDS": 0
-//    },
-//    ...
-//  ]
-
 // converts a UTC OMM timestamp (ISO T or space separator) to YYYYDDD.FFFF
 static double omm_epoch_to_epoch(const char *epoch_str)
 {
@@ -173,14 +148,6 @@ int ParseOMMJson(const char *json, size_t size, Satellite *sats, int *count, int
     // so we do NOT do *count += parsed here to avoid double-counting.
     return parsed;
 }
-
-//
-// CSV OMM Parser
-//
-// Expected CSV format (CCSDS OMM):
-// OBJECT_NAME,OBJECT_ID,EPOCH,INCLINATION,RA_OF_ASC_NODE,ECCENTRICITY,ARG_OF_PERICENTER,MEAN_ANOMALY,MEAN_MOTION,BSTAR,NORAD_CAT_ID
-// "ISS (ZARYA)","1998-067A","2024-01-15 12:00:00.000000",51.6400,120.0000,0.0001234,200.0000,300.0000,15.50123456,0.00012345,25544
-// ...
 
 // find column index in CSV header
 static int csv_find_column(const char *header, const char *name)

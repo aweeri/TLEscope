@@ -1,12 +1,5 @@
 /* GENERATED - do not edit; run scripts/gen_horizons_catalog.py */
-/*
- * Generated: 2026-11-08 09:48 UTC
- * Sources:   NASA/JPL Horizons API (https://ssd.jpl.nasa.gov/api/horizons.api)
- * Entries:   90 missions + 14 reference bodies
- *
- * Windows are probe-derived real coverage bounds (YYYY-MMM-DD HH:MM).
- * Header is included only from horizons_api.cpp, hence `static`.
- */
+/* Windows are probe-derived real coverage bounds; included only from horizons_api.cpp, hence static. */
 #ifndef HORIZONS_CATALOG_DATA_H
 #define HORIZONS_CATALOG_DATA_H
 

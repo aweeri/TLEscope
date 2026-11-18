@@ -3,15 +3,6 @@
 
 #include "../../lib/csgp4.h"
 
-/**
- * @file types.h
- * @brief Core type definitions and shared constants
- *
- * Central header that defines all data structures, enums, and constants
- * used across the application. Must be included before raylib.h on Windows
- * to avoid symbol conflicts.
- */
-
 // include windows.h before raylib.h to avoid symbol conflicts (Rectangle, CloseWindow, ShowCursor, LoadImage, DrawText, DrawTextEx)
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
@@ -33,9 +24,7 @@
         #define NOMCX
     #endif
 
-    // Rename Windows API *functions* (not macros) that conflict with raylib's
-    // declarations.  These must be defined BEFORE windows.h is first included
-    // so the preprocessor rewrites the Windows declarations to unique names.
+    // Rename Windows API functions that conflict with raylib's declarations (must precede windows.h).
     #define CloseWindow Win32_CloseWindow
     #define ShowCursor  Win32_ShowCursor
 
@@ -78,6 +67,14 @@
 #define SUN_RADIUS_KM 696340.0f
 #define MU 398600.4418f
 #define DRAW_SCALE 3000.0f
+
+/* Body an orbit polyline is drawn relative to; storage stays geocentric, only the 3D draw cache is re-based. */
+typedef enum {
+    REF_BODY_EARTH = 0,
+    REF_BODY_MOON  = 1,
+    REF_BODY_SUN   = 2,
+    REF_BODY_COUNT
+} RefBody;
 
 /* symmetric timewarp magnitude limit: 524288 == 2^19 */
 #define MAX_TIME_MULTIPLIER 524288.0
@@ -377,8 +374,6 @@ typedef struct
     bool show_sun;
     bool show_sun_flare;
     bool show_ecliptic_frame;
-    bool show_orbital_reference; // 3D: draw bodies relative to the Sun (mission exclusive)
-    int reference_body;          // RefBody: 0 = Earth, 1 = Moon, 2 = Sun. Orbit polylines are re-based; storage stays geocentric.
     bool show_ground_coverage;
     bool show_apsides;
     bool show_earth_texture;

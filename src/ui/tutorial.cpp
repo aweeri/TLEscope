@@ -1,12 +1,3 @@
-/*
- * tutorial.cpp - first-boot tutorial, a thin layer over the hint system.
- *
- * The 7-step table below is fed to the generic hint system (hints.h), which
- * renders the dim/spotlight/hint box over everything and handles advancing.
- * This file only owns the step data, the step -> on-screen target mapping and
- * the show_tutorial persistence flag.
- */
-
 #include "tutorial.h"
 
 #include "hints.h"
@@ -36,8 +27,7 @@ static const Hint kTutorialHints[TUTORIAL_STEP_COUNT] = {
 
 /* -- Target resolution ----------------------------------------------------- */
 
-/* pick the on-screen rect the current step points at; falls back gracefully
- * when the specific panel is not currently drawn. */
+/* pick the on-screen rect the current step points at; falls back when the panel is not drawn */
 static bool ResolveStepTarget(int step, UIRect *out)
 {
     switch (step)

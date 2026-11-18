@@ -1,13 +1,3 @@
-/*
- * ui.cpp - Dear ImGui UI implementation
- *
- * This file implements the UI layer using Dear ImGui + rlImGui.
- * It contains the modal dialogs (first-run, exit, data warning, update
- * check, help, about) and the main DrawGUI entry point. The sidebar /
- * panel workspace lives in ui_layout.cpp; the tool panels live in
- * ui/tools/.
- */
-
 #include "ui.h"
 #include "ui_layout.h"
 #include "ui_input.h"

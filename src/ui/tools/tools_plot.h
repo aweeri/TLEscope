@@ -5,16 +5,6 @@
 #include "core/astro.h"
 #include "imgui.h"
 
-/**
- * @file tools_plot.h
- * @brief Shared, theme-aware drawing and sampling primitives for tool plots.
- *
- * These helpers are used by the Transit Tracking panel and its overview modal
- * so the polar canvas, the XY charts and the pass sampling all have a single
- * implementation. Every color comes from g_theme.ui.* and every size is scaled
- * through UIPx().
- */
-
 // state is a RotatorQueueState int or a pseudo-state below
 #define PLOT_ROT_STATE_NONE      (-1)
 #define PLOT_ROT_STATE_COMM_LOST (-2)

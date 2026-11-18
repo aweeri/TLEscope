@@ -10,9 +10,7 @@
 // global theme instance
 Theme g_theme = {0};
 
-// ------------------------------------------------------------------
 // color helpers
-// ------------------------------------------------------------------
 
 Color ThemeMix(Color a, Color b, float t)
 {
@@ -35,8 +33,7 @@ Color ThemeAlpha(Color c, float a)
 
 Color ThemeEarthColor(void)
 {
-    /* derive the textureless globe's base color from the world background,
-     * lifted toward the text color (no dedicated surface field exists) */
+    /* Textureless globe base color: world background lifted toward the text color. */
     Color bg = g_theme.world.bg;
     Color lift = g_theme.ui.text;
 
@@ -62,9 +59,7 @@ Color ThemeEarthColor(void)
     return c;
 }
 
-// ------------------------------------------------------------------
 // parsing helpers
-// ------------------------------------------------------------------
 
 // parse "#RRGGBB" or "#RRGGBBAA" into a raylib Color, else fallback
 static Color ParseHexColor(const char *hexStr, Color fallback)
@@ -115,9 +110,7 @@ static void ParseStringField(const nlohmann::json &section, const char *key, cha
     }
 }
 
-// ------------------------------------------------------------------
 // defaults
-// ------------------------------------------------------------------
 
 void ThemeInitDefaults(Theme *t)
 {
@@ -208,9 +201,7 @@ void ThemeInitDefaults(Theme *t)
     snprintf(t->textures.smallmark,    sizeof(t->textures.smallmark),    "smallmark.png");
 }
 
-// ------------------------------------------------------------------
 // loading
-// ------------------------------------------------------------------
 
 bool ThemeLoad(const char *theme_name, Theme *t)
 {
@@ -347,9 +338,7 @@ bool ThemeLoad(const char *theme_name, Theme *t)
     return true;
 }
 
-// ------------------------------------------------------------------
 // asset resolution
-// ------------------------------------------------------------------
 
 const char *ThemeAssetPath(const char *file)
 {
@@ -364,9 +353,7 @@ const char *ThemeAssetPath(const char *file)
     return path;
 }
 
-// ------------------------------------------------------------------
 // discovery
-// ------------------------------------------------------------------
 
 static int ThemeNameCompare(const char *a, const char *b)
 {
@@ -382,9 +369,7 @@ bool ThemeDiscover(ThemeList *list)
     list->names[0] = '\0';
     list->names[1] = '\0';
 
-    // LoadDirectoryFiles returns both files and directories (no filter).
-    // NOTE: LoadDirectoryFilesEx's filter is a file-extension filter, not a
-    // directory-type filter, so it cannot be used to select directories.
+    // LoadDirectoryFiles returns files and dirs; LoadDirectoryFilesEx filters by extension, not type.
     FilePathList dirs = LoadDirectoryFiles("themes");
     if (dirs.count == 0)
     {

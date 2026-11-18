@@ -1,12 +1,6 @@
 #include "ui/logo.h"
 #include "ui/logo_raster.h"
 
-/*
- * The logo geometry and rasterizer live in ui/logo_raster.h, which has no
- * raylib dependency so the build-time Windows icon generator can reuse the
- * exact same pixels. This file only bridges that code to raylib types.
- */
-
 Image LogoGenerateImage(int size)
 {
     if (size < 1)

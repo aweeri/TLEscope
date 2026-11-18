@@ -4,17 +4,6 @@
 #include "core/config.h"
 #include "core/types.h"
 
-/**
- * @file tools_settings.h
- * @brief Generic persisted key-value settings store for tools.
- *
- * Tools read/write their own namespaced keys (e.g. "cubeifier.enabled") via
- * this API. The whole map is serialized generically by config.cpp, so adding a
- * toggle never requires a new AppConfig field or a config.cpp edit.
- *
- * Keys should be namespaced by the tool, e.g. "mytool.some_setting".
- */
-
 /** read a bool setting, returning def if the key is absent */
 bool ToolSettingGetBool(AppConfig *cfg, const char *key, bool def);
 

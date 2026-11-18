@@ -1,7 +1,3 @@
-/*
- * tool_log.cpp - Log panel
- */
-
 #include "tools.h"
 #include "tools_common.h"
 #include "core/theme.h"

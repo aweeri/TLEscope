@@ -1,7 +1,3 @@
-/*
- * tool_time_ctrl.cpp - Time Control panel
- */
-
 #include "tools.h"
 #include "ui/notifications.h"
 #include "core/astro.h"

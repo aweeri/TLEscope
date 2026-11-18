@@ -1,7 +1,4 @@
-// JPL Horizons VECTORS client: URL build, async fetch, JSON unwrap, parse.
-// The worker thread owns all network and parse work; the UI thread only starts a
-// fetch, polls the atomic state and takes the result. One result slot is guarded
-// by a std::mutex, the state is lock-free. Cancellation is cooperative.
+// JPL Horizons VECTORS client: worker thread owns network/parse; UI polls atomic state. Cancellation is cooperative.
 
 #include "data/horizons_api.h"
 #include "data/ephem_parse.h"
@@ -22,48 +19,16 @@
 
 // -- Endpoint ----------------------------------------------------------------
 
-// 2026-11-08 measurement (recorded from a live probe, keep this note):
-//   * https://ssd-api.jpl.nasa.gov/api/horizons.api  -> HTTP 404, 146-byte
-//     nginx HTML body. That host only serves SBDB/Sentry/Scout; there is no
-//     `horizons.api` path there. This was the original client bug.
-//   * https://ssd.jpl.nasa.gov/api/horizons.api      -> HTTP 200.
-//     Note the shape: `api` is a PATH segment, not a subdomain.
-//   * The parameter encoding was verified NOT to be the cause: deliberately
-//     double-encoded quotes still return HTTP 200 with an empty small-body
-//     table, never 404. So the 404 was purely the wrong host.
+// Use ssd.jpl.nasa.gov/api/horizons.api; ssd-api.jpl.nasa.gov returns 404 (api is a path, not a subdomain).
 static const char *const kHorizonsBaseUrl = "https://ssd.jpl.nasa.gov/api/horizons.api";
 
-// The API rejects requests with more rows than this (and the response would be
-// tens of megabytes). Measured: LRO target `-85` over 2026-04-01..26 at `10 m`
-// -> HTTP 200, 3601 rows, ~710 KB, ~1 s. A 1-minute step over 30 days is 43201
-// rows / 8.4 MB and *also* works, so 40000 is a conservative client-side cap,
-// not an API hard limit.
+// Client-side row cap; 40000 is conservative, not an API hard limit.
 static const double kHorizonsMaxRows = 40000.0;
 
-// -- Mission catalog ---------------------------------------------------------
-//
-// The mission list lives entirely in the generated bundled catalog below.
-// (The former 4-entry HORIZONS_MISSIONS[] "featured" array was deleted:
-// nothing referenced it once the UI moved to HorizonsCatalogAt().)
-//
-// RULE: never derive a window from a calendar date alone. Horizons coverage
-// starts and ends mid-day (measured: `-399110` coverage begins
-// 1969-JUL-16 16:40:02.7475 TDB; `-399101` begins 1969-MAY-23 05:37:54.1078
-// TDB, so a 16-21 May window is entirely empty because the LM had not
-// separated yet; `-1024` ends 2026-APR-10 23:54:22.8576). Take t0/t1 from the
-// response, never from the request.
+// Never derive a window from a calendar date alone; take t0/t1 from the response, not the request.
 
 
-// -- Bundled catalog --------------------------------------------------------
-//
-// Generated offline by scripts/gen_horizons_catalog.py and checked in; the app
-// never re-queries the catalog at startup. The header is `static const` and is
-// included from THIS translation unit only, so no duplicate symbols are
-// possible and no runtime file or JSON parse is involved.
-//
-// Regenerate with:
-//   python scripts/gen_horizons_catalog.py --insecure --limit 90
-//       --out src/data/horizons_catalog_data.h
+// Bundled catalog generated offline by scripts/gen_horizons_catalog.py; included from this TU only.
 #include "data/horizons_catalog_data.h"
 
 int HorizonsCatalogCount(void)
@@ -135,12 +100,7 @@ int HorizonsCatalogFind(const char *query)
     return -1;
 }
 
-// The window used for an ad-hoc target whose caller supplied none. Horizons
-// only emits a table when the requested span is fully inside coverage, and its
-// data-availability horizon sits near A.D. 2100 (measured 2026-11-08). A wide
-// request therefore comes back empty with a "prior to"/"after A.D." tail, and
-// fetch_worker()'s single clamp-and-retry replaces the offending bound with the
-// real one. That is the documented no-dead-end path for unlisted ids.
+// Wide ad-hoc window; fetch_worker()'s clamp-and-retry narrows it to the real coverage bound.
 static const char *const kAdHocStart = "1600-01-01";
 static const char *const kAdHocStop = "2500-01-01";
 static const char *const kAdHocStep = "100 d";
@@ -158,19 +118,6 @@ bool HorizonsMakeAdHocEntry(const char *command, const char *start_time,
     out->stop_time = (stop_time && *stop_time) ? stop_time : kAdHocStop;
     out->step_size = (step_size && *step_size) ? step_size : kAdHocStep;
     return true;
-}
-
-// -- Center body per reference frame ----------------------------------------
-
-const char *HorizonsCenterForRef(RefBody ref)
-{
-    switch (ref)
-    {
-        case REF_BODY_MOON: return "500@301";
-        case REF_BODY_SUN:  return "500@10";
-        case REF_BODY_EARTH:
-        default:            return "500@399";
-    }
 }
 
 // -- Small time helpers (pure; also used for the row cap) --------------------
@@ -304,10 +251,7 @@ void format_step(long long seconds, char *out, size_t out_sz)
 
 } // namespace
 
-// Keep the request size bounded by coarsening the step. Pure function: no
-// state, no I/O, so it is trivially testable.
-//
-// Evidence for the 40000 cap: see kHorizonsMaxRows above.
+// Keep the request size bounded by coarsening the step; see kHorizonsMaxRows for the cap.
 double HorizonsClampStep(double span_seconds, double step_seconds)
 {
     if (!(step_seconds > 0.0) || !(span_seconds > 0.0))
@@ -323,17 +267,7 @@ double HorizonsClampStep(double span_seconds, double step_seconds)
 
 // -- URL construction --------------------------------------------------------
 
-// CENTER is pinned to Earth ('500@399') regardless of the requested reference
-// body: the parser and all downstream math are geocentric, and Horizons would
-// otherwise report vectors relative to a different origin and be rejected by
-// the "Only Earth-centred ephemerides are supported" check in ephem_parse.cpp.
-//
-// REF_PLANE='FRAME' is mandatory because the parser refuses ecliptic exports
-// (ephem_parse.cpp:539) and OUT_UNITS='KM-S' is mandatory because it otherwise
-// applies an AU heuristic when the header does not say "KM" (:558).
-//
-// Duplicate query parameters are rejected by the API with HTTP 400, so each
-// key below is emitted exactly once.
+// CENTER pinned to Earth; REF_PLANE='FRAME' and OUT_UNITS='KM-S' are mandatory for the parser.
 
 // Append a literal piece; fails when it would not fit (including the NUL).
 static bool append_literal(char *url, size_t cap, size_t *pos, const char *text)
@@ -346,9 +280,7 @@ static bool append_literal(char *url, size_t cap, size_t *pos, const char *text)
     return true;
 }
 
-// Percent-encode the two characters Horizons needs escaped in a value: space
-// and single quote. Everything else (digits, '-', ':', '@', ...) passes through
-// unchanged, matching the regenerating recipe in testdata/README.md.
+// Percent-encode space and single quote; everything else passes through unchanged.
 static bool append_encoded(char *url, size_t cap, size_t *pos, const char *text)
 {
     for (const char *p = text; *p; ++p)
@@ -391,9 +323,7 @@ bool HorizonsBuildUrl(const HorizonsMissionEntry *e, char *url, size_t url_size)
     if (!e->stop_time || !*e->stop_time) return false;
     if (!e->step_size || !*e->step_size) return false;
 
-    // Row cap: if the implied sample count exceeds kHorizonsMaxRows, coarsen
-    // the step proportionally. The catalog strings stay free-form; only the
-    // emitted query changes.
+    // Coarsen the step when the implied sample count exceeds kHorizonsMaxRows.
     char step_buf[32];
     const char *step = e->step_size;
     long long t0 = 0, t1 = 0, step_s = 0;
@@ -440,13 +370,7 @@ bool HorizonsBuildUrl(const HorizonsMissionEntry *e, char *url, size_t url_size)
 
 // -- Coverage-limit extraction ----------------------------------------------
 
-// Horizons answers an out-of-coverage window with HTTP 200 and a tail note:
-//   "No ephemeris for target ... prior to A.D. 1969-MAY-23 05:37:54.1078 TDB"
-//   "No ephemeris for target ... after  A.D. 2026-APR-10 23:54:22.8576 TDB"
-// Extract that datetime and normalise it to the "YYYY-MMM-DD HH:MM" form the
-// API itself accepts for START_TIME/STOP_TIME. `is_prior` reports which bound
-// is implicated: true means the requested START is too early, false means the
-// requested STOP is too late.
+// Horizons answers an out-of-coverage window with HTTP 200 and a "prior to"/"after A.D." tail note.
 bool HorizonsParseCoverageLimit(const std::string &body, bool *is_prior,
                                 char *dt_iso, size_t dt_sz)
 {
@@ -539,10 +463,7 @@ void store_cancelled()
     g_state.store(HZ_CANCELLED);
 }
 
-// Log the raw body at LOG_ERROR, truncated to a sane size. The user-facing
-// error line stays short; this is the forensic copy. LogEntry::message is only
-// 512 bytes, so emit the body in chunks to get the full ~4 KB into the ring
-// buffer instead of letting vsnprintf clip one giant entry.
+// Log the raw body in chunks; LogEntry::message is only 512 bytes.
 void log_body(const std::string &body)
 {
     const size_t kMaxLog = 4096;
@@ -562,11 +483,7 @@ void log_body(const std::string &body)
     }
 }
 
-// A short diagnosis derived from the body. Classes measured 2026-11-08:
-//   404 + nginx HTML            -> wrong host
-//   400 + "API ERROR:" text     -> duplicated/garbled parameter
-//   200 + "No ephemeris ..."    -> window outside coverage (handled by parser)
-//   200 + small-body index text -> quotes mangled into a name search
+// Short diagnosis from the body: 404+nginx = wrong host, 400 = garbled param, 200+No ephemeris = out of coverage.
 std::string body_hint(const std::string &body)
 {
     if (body.find("<title>404 Not Found</title>") != std::string::npos ||
@@ -649,9 +566,7 @@ bool do_request(const std::string &url, std::string *body, long *http_code,
     return ok;
 }
 
-// Unwrap {"result": "<text>"} (the $$SOE/$$EOE table is byte-identical to the
-// .txt export the parser was written for). Errors come back as
-// {"message": ..., "signature": ...} without a "result" field.
+// Unwrap {"result": "<text>"}; errors come back as {"message": ...} without a "result" field.
 bool unwrap_result(const std::string &body, std::string *text, std::string *err)
 {
     nlohmann::json root;
@@ -680,9 +595,7 @@ bool unwrap_result(const std::string &body, std::string *text, std::string *err)
     return true;
 }
 
-// Worker body: fetch (or read cache), unwrap JSON, parse, publish result.
-// A single clamp-and-retry is allowed when the table is empty because the
-// window falls outside the target's coverage.
+// Worker body: fetch (or read cache), unwrap JSON, parse, publish; one clamp-and-retry on an empty table.
 void fetch_worker(HorizonsMissionEntry entry)
 {
     const char *name = entry.name ? entry.name : "Horizons";
@@ -832,12 +745,7 @@ bool HorizonsFetchStart(const HorizonsMissionEntry *e)
 
 void HorizonsFetchCancel(void)
 {
-    // Cooperative: the worker checks g_cancel before the request and right
-    // after it returns. Because curl runs inside HttpFetchURL (no progress
-    // callback wired in this task), a request already in flight cannot be
-    // aborted mid-transfer; cancel therefore takes effect at the next
-    // checkpoint. The UI stays responsive throughout because all work is
-    // off-thread and the state is atomic.
+    // Cooperative cancel: a request already in flight cannot be aborted mid-transfer.
     g_cancel.store(true);
 }
 

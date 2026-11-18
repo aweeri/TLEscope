@@ -3,11 +3,7 @@
 
 #include <stdint.h>
 
-/*
- * Geographic overlays derived from Natural Earth v5.1.2 1:110m vector data.
- * Natural Earth data is public domain. Coordinates are stored in hundredths
- * of a degree so the overlay stays small and needs no runtime GIS dependency.
- */
+// Geographic overlays from Natural Earth v5.1.2 1:110m (public domain); coords in hundredths of a degree.
 typedef struct { int16_t lon100; int16_t lat100; } MapDetailPoint;
 typedef struct { uint16_t start; uint16_t count; } MapDetailLine;
 

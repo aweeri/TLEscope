@@ -1,12 +1,3 @@
-/*
- * hints.cpp - generic on-screen hint / coachmark overlay.
- *
- * Draws a floating hint box (icon + title + body) with an optional spotlight
- * hole and arrow pointing at a target rect. Everything is rendered into the
- * ImGui foreground draw list, so hints sit above every window, popup and toast.
- * Standalone hints are passive; sequences may opt in to input capture.
- */
-
 #include "hints.h"
 
 #include "core/theme.h"

@@ -1,12 +1,3 @@
-/**
- * @file ephem_store.cpp
- * @brief Fixed-capacity registry and interpolation for tabulated ephemerides
- *
- * Pure computation: no UI, no drawing, no file I/O. The registry owns one
- * std::vector<EphemSample> per mission; the mission records themselves live in
- * a static array so callers never depend on heap addresses.
- */
-
 #include "data/ephem.h"
 
 #include <algorithm>
@@ -129,8 +120,7 @@ static bool ephem_has_latlon(const EphemMission *m)
     return false;
 }
 
-/* normalise a freshly assigned mission: NUL-terminate the strings and keep the
- * stored samples sorted and strictly increasing in time */
+/* Normalise a freshly assigned mission: NUL-terminate strings, keep samples sorted. */
 static void ephem_normalise(EphemMission *slot)
 {
     slot->name[sizeof(slot->name) - 1] = '\0';
@@ -199,10 +189,7 @@ bool EphemReplace(int id, const EphemMission &m)
     if (slot == NULL)
         return false;
 
-    /* the identity of the slot is what favourites/selections/rows reference;
-       everything else is replaced by the refresh payload. A supplied nonzero
-       norad_id_num (the canonical 900000 + id) is preserved as-is; otherwise
-       the slot's existing value is kept. */
+    /* Keep the slot's id and norad_id_num so favourites/selections stay valid. */
     const int keep_id = slot->id;
     const uint32_t keep_norad = slot->norad_id_num;
 

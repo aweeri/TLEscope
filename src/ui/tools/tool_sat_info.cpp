@@ -1,7 +1,3 @@
-/*
- * tool_sat_info.cpp - Satellite Info (inspector) panel
- */
-
 #include "tools.h"
 #include "tools_common.h"
 #include "tools_registry.h"

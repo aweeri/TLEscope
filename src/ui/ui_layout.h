@@ -6,20 +6,6 @@
 #include "ui.h"
 #include "tools/tools_registry.h"
 
-/**
- * @file ui_layout.h
- * @brief Sidebar/panel workspace layout for TLEscope
- *
- * Implements the three-section workspace: a left sidebar (actions), a
- * transparent center canvas (simulation), and a right sidebar (inspector).
- * Sidebars are resizable, snap-hide to the screen edge (pull-tab to
- * restore), and contain reorderable accordion panels whose arrangement and
- * open/closed state are persisted to settings.json.
- *
- * Panel identity (PanelId, PanelDef, the g_panel_defs registry) lives in
- * tools/tools_registry.h — see that file to add a new tool.
- */
-
 /* -- Runtime layout state -------------------------------------------------- */
 
 /* a screen-space rectangle captured during the layout pass; valid=false when not drawn this frame */
@@ -145,9 +131,7 @@ void LayoutSetSidebarVisible(SidebarSide side, bool visible);
 /* central canvas rect (logical screen coords); any out pointer may be NULL */
 void LayoutGetViewportRect(float *x, float *y, float *w, float *h);
 
-/* on-screen element rects captured during the layout pass (for coachmarks/hint system).
- * Each returns out->valid and copies *out = {0} (valid=false) when the element was
- * not drawn this frame. */
+/* on-screen element rects captured during the layout pass; out->valid=false when not drawn this frame */
 bool LayoutGetPanelRect(PanelId id, UIRect *out);
 bool LayoutGetPanelHeaderRect(PanelId id, UIRect *out);
 bool LayoutGetSidebarRect(SidebarSide side, UIRect *out);

@@ -1,20 +1,7 @@
 #ifndef ASYNC_FETCH_H
 #define ASYNC_FETCH_H
 
-/**
- * @file async_fetch.h
- * @brief Asynchronous data-source fetching
- *
- * Moves the blocking network I/O (and parsing) of the "Pull All Selected
- * Sources" action off the UI thread. Jobs are enqueued, processed by a
- * background worker thread, and the parsed results are handed back to the
- * UI thread via a completion queue that is drained once per frame.
- *
- * The worker thread NEVER touches the global `satellites[]` array. Each job
- * parses into its own local buffer; the UI thread copies those results into
- * the global array when it drains the completion queue. This avoids data
- * races with the render loop.
- */
+/* Worker thread never touches the global satellites[] array; results return via a completion queue. */
 
 #include "core/types.h"
 #include "data/provider.h"

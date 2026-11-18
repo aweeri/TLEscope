@@ -3,13 +3,6 @@
 
 #include <raylib.h>
 
-/*
- * Built-in TLEscope logo.
- *
- * The mark is defined purely in code (see logo.cpp). It is rasterized on demand, so it stays crisp at any
- * size and needs no external image file at runtime or in the packages.
- */
-
 /* Rasterize the logo at `size` x `size` pixels (RGBA, anti-aliased). */
 Image LogoGenerateImage(int size);
 

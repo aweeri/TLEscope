@@ -5,24 +5,6 @@
 #include "ui/ui.h"
 #include "tools_scene.h"
 
-/**
- * @file tools_registry.h
- * @brief Central registry for all tool panels.
- *
- * A "tool" is a sidebar panel. To add a new tool you:
- *   1. Write a draw function:  void DrawPanelMyTool(UIContext *ctx, AppConfig *cfg)
- *   2. Add one row to g_panel_defs in tools_registry.cpp and one entry to the
- *      PanelId enum in core/types.h.
- *
- * The Tools modal, enable/disable persistence, left/right placement, and the
- * sidebar renderer all pick the tool up automatically because they iterate
- * g_panel_defs.
- *
- * A tool may optionally also provide a draw_scene callback (see tools_scene.h)
- * to draw into the 3D world / 2D map. The render loop calls every registered
- * draw_scene hook each frame.
- */
-
 /* panel categories used by the Tools modal */
 typedef enum
 {

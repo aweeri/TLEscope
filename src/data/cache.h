@@ -5,13 +5,7 @@
 #include <time.h>
 #include <stdbool.h>
 
-/**
- * @file cache.h
- * @brief Response cache manager
- *
- * Implements the 120-minute TTL recommended by Celestrak's API guidelines.
- * Caches responses keyed by URL hash to avoid redundant network requests.
- */
+/* Response cache with the 120-minute TTL recommended by Celestrak's API guidelines. */
 
 #define CACHE_TTL_SECONDS 7200  // 120 minutes
 #define MAX_CACHE_ENTRIES 64

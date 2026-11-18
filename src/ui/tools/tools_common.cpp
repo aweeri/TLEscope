@@ -1,8 +1,4 @@
-// tools_common.cpp - Shared helpers and state for tool panels
-//
-// Contains the data-source selection (shopping-cart) persistence and the
-// small UI helpers (InfoRow, RA/Dec formatting, case-insensitive search)
-// that several tool panels rely on.
+// Shared helpers and state for tool panels.
 
 #include "tools_common.h"
 #include "core/astro.h"
@@ -223,10 +219,7 @@ static bool g_pull_running = false;  // a pull started via DataSourcesStartPull(
 static int g_pull_total = 0;         // number of sources in that pull
 static bool g_pull_auto = false;     // the in-flight pull was auto-triggered
 
-// A pull wipes the satellite array but not the ephem registry, so snapshot the
-// mission rows before the wipe and re-append them after. One row per registry
-// slot is the bound: sizing to MAX_SATELLITES_HARD_CAP would reserve hundreds of
-// megabytes for rows that can never exist.
+// snapshot ephem mission rows across a pull wipe; bound to registry slots, not MAX_SATELLITES_HARD_CAP
 static Satellite g_pull_ephem_snap[EPHEM_MAX_MISSIONS];
 static int g_pull_ephem_snap_count = 0;
 

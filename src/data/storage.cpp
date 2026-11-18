@@ -52,12 +52,7 @@ static void copy_str(char *dst, size_t dst_size, const std::string &src)
     snprintf(dst, dst_size, "%s", src.c_str());
 }
 
-// -- Ephemeris mission serialization ----------------------------------------
-// Missions are persisted inline in data.json under a top-level "ephem" array.
-// Each mission stores its samples as one compact string of
-//   t|px|py|pz|vx|vy|vz|lat|lon|sunlit
-// tuples joined by ';'. Older builds simply ignore the unknown key; newer
-// builds rebuild the registry from it on load.
+// Ephemeris missions persist inline in data.json under "ephem"; samples are t|px|py|pz|vx|vy|vz|lat|lon|sunlit tuples joined by ';'.
 
 static std::string ephem_samples_to_string(const EphemMission *m)
 {
@@ -145,6 +140,7 @@ static void write_ephem_missions(nlohmann::json &arr)
             {"norad", m->norad_id_num},
             {"t0", m->t0_unix},
             {"t1", m->t1_unix},
+            {"ref_body", m->ref_body},
             {"samples", ephem_samples_to_string(m)}});
     }
 }
@@ -181,6 +177,10 @@ static std::map<int, int> load_ephem_missions(const nlohmann::json &root)
         m.norad_id_num = (uint32_t)o.value("norad", 0u);
         m.t0_unix = o.value("t0", 0.0);
         m.t1_unix = o.value("t1", 0.0);
+        /* Missions saved before the per-mission reference body adopt the legacy global setting. */
+        m.ref_body = o.value("ref_body", GetLegacyReferenceBodyDefault());
+        if (m.ref_body < 0 || m.ref_body >= REF_BODY_COUNT)
+            m.ref_body = REF_BODY_EARTH;
 
         ephem_samples_from_string(samples, &m);
         if (m.s.size() < 2)
@@ -517,9 +517,7 @@ bool LoadSourceState(const char *filename, DataSourceState *sources, int *count,
     return loaded > 0;
 }
 
-// -- Favorites Persistence ---------------------------------------------------
-// In-memory set of favorite NORAD catalog numbers, loaded/saved as a JSON
-// array of numeric ids (mirrors SaveSourceState/LoadSourceState style).
+// Favorites: in-memory set of NORAD catalog numbers, persisted as a JSON array of ids.
 
 static uint32_t s_fav_ids[MAX_SATELLITES_HARD_CAP];
 static int s_fav_count = 0;

@@ -1,16 +1,3 @@
-/*
- * notifications.cpp - KSP-style toast notification system (ROADMAP section 8.1)
- *
- * A small ring buffer of {level, icon, message, timestamp} entries rendered as
- * stacked toasts in the top-right corner via ImGui. Each toast auto-dismisses
- * after a few seconds with a timed fade-out. Notifications are theme-aware
- * (colors come from the Theme struct) and respect UI scale.
- *
- * The module is self-contained: call NotifyPush() from any event point, call
- * NotifyUpdate()/DrawNotifications() each frame from the UI render loop, and
- * optionally persist per-category toggles via the generic tool_settings store.
- */
-
 #include "notifications.h"
 #include "ui_layout.h"
 #include "core/theme.h"

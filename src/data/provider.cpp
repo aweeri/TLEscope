@@ -35,13 +35,7 @@
 
 #define CELESTRAK_BASE "https://celestrak.org/NORAD/elements/gp.php"
 
-// CelesTrak GROUP values are stored directly in DataSource::id.  This keeps
-// the user-visible catalog and the API query in one auditable table instead
-// of relying on a second, position-dependent index-to-group mapping.
-//
-// This list mirrors the ordinary GROUP= datasets advertised on CelesTrak's
-// Current GP Element Sets page.  Special queries such as GPZ/GPZ-PLUS and
-// filtered views such as OLDEST/DOCKED/MOVERS are intentionally not groups.
+// CelesTrak GROUP values are stored directly in DataSource::id; special queries like GPZ are not groups.
 const DataSource CELESTRAK_SOURCES[] = {
     // Special-interest satellites
     {"last-30-days",       "Last 30 Days' Launches",                    CELESTRAK_BASE, PROVIDER_CELESTRAK, FORMAT_OMM_JSON, {0}},
@@ -640,7 +634,7 @@ static FetchResult file_fetch(const char *filename)
     result.data[content.size()] = '\0';
 
     result.size = content.size();
-    result.format = FORMAT_TLE;  // Adjust to your actual enum value
+    result.format = FORMAT_TLE;
     result.http_code = 0;        // Not applicable to a local file
     result.success = true;
 

@@ -1,7 +1,3 @@
-/*
- * tool_polar_plot.cpp - Polar Plot panel
- */
-
 #include "tools.h"
 #include "tools_plot.h"
 #include "tools_registry.h"
@@ -21,13 +17,7 @@
 
 #include "imgui.h"
 
-/**
- * @brief mark the selected pass's AOS/LOS points in the scene.
- *
- * Registered as the draw_scene hook for PANEL_POLAR_PLOT. When a pass is
- * selected (g_ui.selected_pass_idx), this places a tick at the AOS and LOS
- * markers — on the 3D globe (DrawLine3D) and on the 2D map (DrawLineEx).
- */
+/* mark the selected pass's AOS/LOS points on the 3D globe and 2D map */
 void DrawScenePolarPlot(SceneContext *sctx, AppConfig *cfg)
 {
     (void)cfg;
@@ -166,9 +156,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
                         IM_COL32(bg_theme.r, bg_theme.g, bg_theme.b, 200), 64);
     PlotDrawPolarGrid(dl, center, radius);
 
-    /* ---- 2.4: render the selected pass sky path (SatPass.path_pts) ----
-     * Draw the pass arc as a distinct highlighted polyline, with AOS/LOS
-     * markers, the max-elevation point, and the current-time position. */
+    /* render the selected pass sky path with AOS/LOS, max-elevation and current-time markers */
     if (g_ui.selected_pass_idx >= 0 && g_ui.selected_pass_idx < num_passes)
     {
         SatPass *pass = &passes[g_ui.selected_pass_idx];
@@ -179,10 +167,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
             return PlotPolarProject(center, radius, az, el);
         };
 
-        /* draw the pass arc.
-         * Break the polyline whenever the azimuth jumps by more than 180°
-         * (a pass crossing the 0°/360° north boundary) so we never draw a
-         * straight chord across the plot. */
+        /* break the pass arc when azimuth jumps >180° (0°/360° crossing) to avoid a chord across the plot */
         ImVec2 prev = {0, 0};
         bool has_prev = false;
         for (int k = 0; k < pass->num_pts; k++)
@@ -193,7 +178,7 @@ void DrawPanelPolarPlot(UIContext *ctx, AppConfig *cfg)
                 double az_delta = fabs(pass->path_pts[k].x - pass->path_pts[k - 1].x);
                 if (az_delta > 180.0)
                 {
-                    /* azimuth wrapped across north — start a new segment */
+                    /* azimuth wrapped across north; start a new segment */
                     prev = pt;
                     continue;
                 }

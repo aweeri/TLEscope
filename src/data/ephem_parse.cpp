@@ -1,24 +1,3 @@
-/**
- * @file ephem_parse.cpp
- * @brief Parser for JPL Horizons VECTORS (CSV) ephemeris exports
- *
- * Pipeline (in order):
- *   1. locate the $$SOE/$$EOE block (report Horizons diagnostics when missing)
- *   2. reject ecliptic exports (REF_PLANE='ECLIPTIC') and non-Earth centres
- *   3. parse each data row (CSV, with a plain-text fallback)
- *   4. JDTDB -> unix seconds, TDB -> UTC with a leap-second-aware offset
- *   5. unit normalisation (km-s / au-d heuristic)
- *   6. axis remap (x, y, z) -> (x, z, -y)
- *   7. sort, drop duplicate/non-monotonic rows, decimate to EPHEM_MAX_SAMPLES
- *   8. Douglas-Peucker simplification on position (1 km tolerance)
- *   9. per-sample lat/lon/gmst/sunlit precomputation
- *
- * The parser is pure computation: it has no UI and no drawing dependencies.
- * The only external helpers it uses are the project's own ephemeris maths in
- * src/core/astro.cpp (epoch_to_gmst, calculate_sun_position, is_sat_eclipsed),
- * so the app frame and shadow model stay single-sourced.
- */
-
 #include "data/ephem_parse.h"
 
 #include "core/astro.h"
@@ -160,10 +139,7 @@ static const LeapEntry LEAPS[] = {
     { 2457754LL, 37 }, /* 2017-01-01 */
 };
 
-/* TDB -> UTC offset in seconds (approximately TT-UTC; TDB-TT < 2 ms).
- * For epochs after 2017-01-01 this is 32.184 + 37 = 69.184 s.
- * Before 1972 the leap-second table does not exist; we clamp to the first
- * entry (10 s), giving an error of a few seconds at worst for very old data. */
+/* TDB -> UTC offset (approx TT-UTC); before 1972 clamp to the first leap entry (10 s). */
 static double tdb_minus_utc_seconds(double jd)
 {
     long long ijd = (long long)floor(jd);
@@ -206,9 +182,7 @@ static long long days_from_civil(int y, int m, int d)
     return era * 146097 + (long long)doe - 719468;
 }
 
-/* unix seconds -> the app's year*1000 + day-of-year epoch format.
- * This mirrors get_unix_from_epoch()'s definition so that astro.cpp's
- * epoch_to_gmst() can be reused unchanged. */
+/* unix seconds -> year*1000 + day-of-year, mirroring get_unix_from_epoch(). */
 static double epoch_from_unix(double t_unix)
 {
     const double days_f = floor(t_unix / SECONDS_PER_DAY);
@@ -293,13 +267,7 @@ static bool parse_csv_row(const std::string &line, RawRow *r)
     return true;
 }
 
-/* Parse the plain-text (non-CSV) vector block. Returns false when the line is
- * not a record start. The record's X/Y/Z fields are left zero.
- *
- *  2459899.916666667 = A.D. 2022-Nov-16 10:00:00.0000 TDB
- *  X =-2.92E+04 Y = 9.67E+03 Z = 8.74E+03
- *  VX=-4.74E+00 VY=-5.96E-01 VZ= 1.63E-01
- */
+/* Parse the plain-text (non-CSV) vector block; false when the line is not a record start. */
 static bool parse_block_start(const std::string &trimmed, RawRow *r)
 {
     /* a record starts with a numeric JD followed (anywhere) by '=' */
@@ -320,11 +288,7 @@ static bool parse_block_start(const std::string &trimmed, RawRow *r)
     return true;
 }
 
-/* Apply one whitespace-separated token of a block line to a record.
- *
- * Horizons emits "X =-1.2E+03", "VX=-4.7E+00" or "X = 1.2E+03"; dropping '='
- * and pairing each label token with the following numeric token handles all
- * three shapes. Tokens are trimmed first. */
+/* Apply one whitespace-separated token; dropping '=' and pairing label with the next numeric token. */
 static void block_apply_token(const std::string &raw_tok, RawRow *r, std::string *pending_label,
                               bool *has_pos, bool *has_vel)
 {
@@ -432,8 +396,7 @@ static double point_seg_dist2(const Vector3 &p, const Vector3 &a, const Vector3 
     return ex * ex + ey * ey + ez * ez;
 }
 
-/* Douglas-Peucker on position, endpoints always kept.
- * Iterative to avoid deep recursion on pathological input. */
+/* Douglas-Peucker on position, endpoints always kept; iterative to avoid deep recursion. */
 static void simplify_dp(const std::vector<EphemSample> &in, double tol_km, std::vector<EphemSample> *out)
 {
     const int n = (int)in.size();
@@ -533,9 +496,7 @@ bool EphemParseHorizons(const char *text, size_t len, EphemMission *out, char *e
     std::string header = doc.substr(0, soe);
     std::string header_upper = upper(header);
 
-    /* Ecliptic exports are silently wrong in this frame; refuse them. The check
-     * is scoped to the "Reference frame" field value, because the word
-     * "ecliptic" also appears in Horizons' prose documentation blocks. */
+    /* Refuse ecliptic exports; check the "Reference frame" field, not the prose. */
     {
         std::string frame = header_value(header, "Reference frame");
         if (upper(frame).find("ECLIPTIC") != std::string::npos)
@@ -700,10 +661,7 @@ bool EphemParseHorizons(const char *text, size_t len, EphemMission *out, char *e
         }
         else
         {
-            /* Magnitude heuristic: an AU position is < 1e4 for all solar-system
-             * targets, while plausible km positions near Earth are >= ~6.4e3.
-             * Horizons AU exports always carry AU/day velocities, so the unit
-             * decision follows the position magnitude. */
+            /* AU positions are < 1e4, plausible km positions near Earth >= ~6.4e3; AU exports carry AU/day velocities. */
             units_au = (pnorm < 1.0e4);
             vel_au_per_day = units_au || (vnorm < 1.0e-2);
         }
@@ -837,8 +795,7 @@ bool EphemParseHorizons(const char *text, size_t len, EphemMission *out, char *e
         const double epoch = epoch_from_unix(s.t_unix);
         const double gmst = epoch_to_gmst(epoch);
 
-        /* lon is offset-free: the map rotation is subtracted later, exactly as
-         * get_map_coordinates() does it. */
+        /* lon is offset-free: the map rotation is subtracted later, as get_map_coordinates() does. */
         lon -= gmst;
         while (lon > 180.0)
             lon -= 360.0;

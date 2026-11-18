@@ -1,7 +1,3 @@
-/*
- * tool_data_sources.cpp - Data Sources panel
- */
-
 #include "tools.h"
 #include "tools_common.h"
 #include "tools_registry.h"
@@ -96,6 +92,19 @@ static int *GetCelestrakSortedIndex(void)
 static EphemMission g_ephem_pending;
 static bool g_ephem_pending_valid = false;
 
+// default reference body from the catalog group: Lunar->Moon, Interplanetary/L1/L2->Sun, else Earth
+static int DefaultRefBodyForGroup(const char *group)
+{
+    if (group && strcmp(group, "Lunar") == 0)
+        return REF_BODY_MOON;
+    if (group && (strcmp(group, "Interplanetary") == 0 || strcmp(group, "L1/L2") == 0))
+        return REF_BODY_SUN;
+    return REF_BODY_EARTH;
+}
+
+// reference body captured when the in-flight fetch was started (from its group)
+static int s_hz_default_ref_body = REF_BODY_EARTH;
+
 // false when the file cannot be opened or is empty
 static bool ReadWholeFile(const char *path, std::vector<char> *out)
 {
@@ -181,6 +190,8 @@ static int EphemCommitPending(UIContext *ctx, const char *name, const char *targ
                 snprintf(satellites[i].data_meta.source_name,
                          sizeof(satellites[i].data_meta.source_name),
                          "Horizons %s", m.target[0] ? m.target : m.name);
+                /* the body may have changed on refresh: force a re-bake */
+                satellites[i].orbit_cached = false;
                 break;
             }
         }
@@ -361,6 +372,7 @@ static bool HorizonsStartCatalogEntry(const HorizonsCatalogEntry *e)
     local.start_time = e->start_time;
     local.stop_time = e->stop_time;
     local.step_size = e->step_size;
+    s_hz_default_ref_body = DefaultRefBodyForGroup(e->group);
     HorizonsSnapshotEntry(&local);
 
     g_ui.ephem_error[0] = '\0';
@@ -380,6 +392,7 @@ static bool HorizonsStartAdHoc(const char *command)
     HorizonsMissionEntry local = {};
     if (!HorizonsMakeAdHocEntry(command, "", "", "", &local))
         return false;
+    s_hz_default_ref_body = REF_BODY_EARTH;
     HorizonsSnapshotEntry(&local);
 
     g_ui.ephem_error[0] = '\0';
@@ -398,9 +411,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
     float avail_w = ImGui::GetContentRegionAvail().x;
     ImGui::PushTextWrapPos(0.0f);
 
-    /* ====================================================================
-     *  Retlector Section
-     * ==================================================================== */
+    /* Retlector Section */
     {
         static std::atomic<bool> s_fetch_running{false};
         static std::atomic<bool> s_fetch_done{false};
@@ -542,9 +553,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         }
     }
 
-    /* ====================================================================
-     *  Celestrak Section
-     * ==================================================================== */
+    /* Celestrak Section */
     if (ImGui::CollapsingHeader("Celestrak"))
     {
         static int s_celestrak_combo_idx = 0;
@@ -592,9 +601,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("Add this group to the active selections list");
     }
 
-    /* ====================================================================
-     *  Custom URL Section
-     * ==================================================================== */
+    /* Custom URL Section */
     if (ImGui::CollapsingHeader("Custom URL"))
     {
         static char s_url_buf[512] = "";
@@ -624,9 +631,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("Add this URL to the active selections (fetched on pull)");
     }
 
-    /* ====================================================================
-     *  Custom File Section
-     * ==================================================================== */
+    /* Custom File Section */
     if (ImGui::CollapsingHeader("Custom File"))
     {
         /* file input + file dialog + add button on the same line */
@@ -674,9 +679,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
             ImGui::SetTooltip("Add this file to the active selections (fetched on pull)");
     }
 
-    /* ====================================================================
-     *  Custom Paste Section
-     * ==================================================================== */
+    /* Custom Paste Section */
     if (ImGui::CollapsingHeader("Custom Paste"))
     {
         static char s_paste_buf[4096] = "";
@@ -987,6 +990,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 g_ui.ephem_error[0] = '\0';
                 s_horizons_error_was_fetch = false;
                 g_ephem_pending = std::move(parsed);
+                g_ephem_pending.ref_body = s_hz_default_ref_body;
                 g_ephem_pending_valid = true;
                 snprintf(g_ui.ephem_name_buf,   sizeof(g_ui.ephem_name_buf),   "%s", s_hz_name);
                 snprintf(g_ui.ephem_target_buf, sizeof(g_ui.ephem_target_buf), "%s", s_hz_command);
@@ -1030,6 +1034,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 else
                 {
                     g_ephem_pending = std::move(parsed);
+                    g_ephem_pending.ref_body = REF_BODY_EARTH;
                     g_ephem_pending_valid = true;
 
                     char stem[48];
@@ -1083,6 +1088,20 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
                 ImGui::SetNextItemWidth(-1.0f);
                 ImGui::InputTextWithHint("##ephem_target", "Target (optional)", g_ui.ephem_target_buf,
                                          sizeof(g_ui.ephem_target_buf));
+
+                /* per-mission reference body; defaults from the catalog group */
+                static const char *kEphemRefLabels[] = { "Earth", "Moon", "Sun" };
+                ImGui::TextColored(ThemeColor(g_theme.ui.text_dim), "Reference body");
+                int ref_body = g_ephem_pending.ref_body;
+                if (ref_body < 0 || ref_body >= REF_BODY_COUNT)
+                    ref_body = REF_BODY_EARTH;
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::Combo("##ephem_ref_body", &ref_body, kEphemRefLabels, REF_BODY_COUNT))
+                    g_ephem_pending.ref_body = ref_body;
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Draw this mission's orbit path relative to this body.\n"
+                                      "Moon/Sun remove the wobble of cislunar and interplanetary\n"
+                                      "tracks. 3D view only.");
 
                 char t0_str[40], t1_str[40];
                 FormatUnixUtc(g_ephem_pending.t0_unix, t0_str, sizeof(t0_str));
@@ -1315,9 +1334,7 @@ void DrawPanelDataSources(UIContext *ctx, AppConfig *cfg)
         }
     }
 
-    /* ====================================================================
-     *  Pull All Selected Sources Button
-     * ==================================================================== */
+    /* Pull All Selected Sources Button */
     ImGui::Separator();
     ImGui::PopTextWrapPos();
 

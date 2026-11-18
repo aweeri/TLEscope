@@ -5,25 +5,7 @@
 #include "core/types.h"
 #include "ui/ui.h"
 
-/**
- * @file tools_scene.h
- * @brief Scene render-hook registry for tools.
- *
- * A tool may register an optional draw_scene callback (see PanelDef in
- * tools_registry.h) to draw into the 3D world or 2D map. The render loop in
- * main.cpp constructs a SceneContext and calls DrawSceneHooks() each frame
- * inside BeginMode3D / BeginMode2D, so tool overlays draw on top of the scene.
- *
- * This lets a feature like a 3D overlay live entirely inside its own
- * tool_*.cpp — no edit to main.cpp required.
- */
-
-/**
- * @brief read-only snapshot of the scene state passed to draw_scene hooks.
- *
- * Tools should treat this as read-only input. To persist their own state they
- * use the generic settings store (tools_settings.h) via AppConfig.
- */
+/* read-only scene state passed to draw_scene hooks; persist tool state via tools_settings.h */
 typedef struct
 {
     bool is_2d_view;              /* true = 2D map, false = 3D globe */

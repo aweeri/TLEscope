@@ -1,18 +1,8 @@
-/**
- * @file coverage_shaders.h
- * @brief GLSL shaders for ground coverage rendering (3D globe and 2D map).
- */
 #pragma once
 
 namespace CoverageShaders {
 
-/**
- * @brief Vertex shader for 3D coverage rendering.
- *
- * Rebuilds the per-satellite orthonormal basis from `satPosition` so every
- * satellite at a given altitude reuses one cached cap mesh (local +Y is the
- * sub-satellite direction).
- */
+/* vertex shader for 3D coverage; rebuilds the per-satellite basis so one cached cap mesh is reused */
 inline constexpr const char *vsCoverage3D = R"GLSL(#version 330
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
@@ -42,12 +32,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief Fragment shader for 3D coverage rendering.
- *
- * Applies a slope-scaled depth bias so the cap stays in front of the Earth at
- * any zoom, plus edge anti-aliasing and a border ring.
- */
+/* fragment shader for 3D coverage; slope-scaled depth bias keeps the cap in front of the Earth at any zoom */
 inline constexpr const char *fsCoverage3D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec3 fragWorldPos;
@@ -84,12 +69,7 @@ void main() {
 }
 )GLSL";
 
-/**
- * @brief Fragment shader for 2D coverage rendering.
- *
- * Draws the fill and border ring from the radial texcoord, so no per-segment
- * CPU line submission is needed each frame.
- */
+/* fragment shader for 2D coverage; draws fill and border from the radial texcoord, no per-segment CPU lines */
 inline constexpr const char *fsCoverage2D = R"GLSL(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
