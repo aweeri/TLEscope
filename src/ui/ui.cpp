@@ -633,13 +633,16 @@ static void DrawHelpModal(UIContext *ctx, AppConfig *cfg)
         ImGui::Text("Controls:");
         ImGui::BulletText("Space: Pause/Resume time");
         ImGui::BulletText("Scroll: Zoom in/out");
-        ImGui::BulletText("Middle mouse: Pan");
+        ImGui::BulletText("Middle mouse drag up/down: Zoom in/out");
+        ImGui::BulletText("Shift + middle mouse: Pan");
         ImGui::BulletText("Left click: Select satellite");
         ImGui::BulletText("Right click: Orbit camera");
         ImGui::Separator();
         ImGui::Text("Keyboard Shortcuts:");
         ImGui::BulletText("M: Toggle 2D/3D");
         ImGui::BulletText("H: Toggle clean view (hide/show panels)");
+        ImGui::BulletText("1: Toggle left sidebar");
+        ImGui::BulletText("2: Toggle right sidebar");
         ImGui::Separator();
         if (ImGui::Button("GitHub Repository"))
         {

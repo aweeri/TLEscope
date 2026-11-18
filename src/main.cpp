@@ -2036,6 +2036,11 @@ int main(int argc, char **argv)
                 {
                     target_camera2d_zoom += wheel * 0.1f * target_camera2d_zoom;
                 }
+                /* middle-drag up/down zooms in/out (shift+middle still pans) */
+                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) && !IsKeyDown(KEY_LEFT_SHIFT) && !is_typing)
+                {
+                    target_camera2d_zoom -= mouseDelta.y * 0.005f * target_camera2d_zoom;
+                }
             }
 
             if (!is_typing)
@@ -2121,6 +2126,13 @@ int main(int argc, char **argv)
                             if (target_camDistance < draw_earth_radius + 1.0f)
                                 target_camDistance = draw_earth_radius + 1.0f;
                         }
+                    }
+                    /* middle-drag up/down zooms in/out */
+                    if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+                    {
+                        target_camDistance += mouseDelta.y * 0.005f * target_camDistance;
+                        if (target_camDistance < draw_earth_radius + 1.0f)
+                            target_camDistance = draw_earth_radius + 1.0f;
                     }
                 }
             }
