@@ -54,6 +54,42 @@ int GetLegacyReferenceBodyDefault(void)
     return g_legacy_reference_body_default;
 }
 
+static bool g_config_was_reset = false;
+
+bool AppConfigWasReset(void)
+{
+    return g_config_was_reset;
+}
+
+/* best-effort backup; never aborts startup */
+static bool BackupConfigFile(const char *resolved_path)
+{
+    if (!resolved_path || !FileExists(resolved_path))
+        return false;
+
+    char backup_path[1088];
+    snprintf(backup_path, sizeof(backup_path), "%s.bak", resolved_path);
+
+    char *text = LoadFileText(resolved_path);
+    if (!text)
+    {
+        LOG_ERROR("Config backup failed: could not read %s", resolved_path);
+        return false;
+    }
+
+    bool ok = SaveFileText(backup_path, text);
+    UnloadFileText(text);
+
+    if (!ok)
+    {
+        LOG_ERROR("Config backup failed: could not write %s", backup_path);
+        return false;
+    }
+
+    LOG_INFO("Config backed up to %s", backup_path);
+    return true;
+}
+
 // read the json file and grab our settings
 void LoadAppConfig(const char *filename, AppConfig *config)
 {
@@ -174,19 +210,45 @@ void LoadAppConfig(const char *filename, AppConfig *config)
         }
     }
 
+    bool need_first_run = false;
+
     if (FileExists(filename))
     {
         LOG_INFO("Loading config from %s", filename);
         char *text = LoadFileText(filename);
+        bool incompatible = false;
+        const char *incompat_reason = NULL;
         if (text)
         {
             nlohmann::json root = nlohmann::json::object();
+            bool parsed = true;
             try
             {
                 root = nlohmann::json::parse(text);
             }
             catch (const std::exception &)
             {
+                parsed = false;
+            }
+
+            if (!parsed)
+            {
+                incompatible = true;
+                incompat_reason = "JSON parse error";
+                UnloadFileText(text);
+                text = NULL;
+            }
+            else if (!root.is_object())
+            {
+                incompatible = true;
+                incompat_reason = "root is not a JSON object";
+                UnloadFileText(text);
+                text = NULL;
+            }
+            else if (root.value("config_version", 0) != CONFIG_SCHEMA_VERSION)
+            {
+                incompatible = true;
+                incompat_reason = "config_version mismatch";
                 UnloadFileText(text);
                 text = NULL;
             }
@@ -695,9 +757,30 @@ void LoadAppConfig(const char *filename, AppConfig *config)
                          config->data_stale_threshold_seconds);
             }
         }
+        else
+        {
+            incompatible = true;
+            incompat_reason = "file could not be read";
+        }
+
+        if (incompatible)
+        {
+            char backup_src[1024];
+            snprintf(backup_src, sizeof(backup_src), "%s", filename);
+            BackupConfigFile(backup_src);
+            LOG_WARN("Config at %s is incompatible (%s); backed up to %s.bak and resetting to defaults",
+                     filename, incompat_reason ? incompat_reason : "unknown", filename);
+            g_config_was_reset = true;
+            need_first_run = true;
+        }
     }
     else {
-        LOG_INFO("No config file found at %s -- showing first-run dialog", filename);
+        need_first_run = true;
+    }
+
+    if (need_first_run)
+    {
+        LOG_INFO("No usable config file at %s -- showing first-run dialog", filename);
         strcpy(config->theme, "default");
         config->window_width = 1920;
         config->window_height = 1080;
@@ -751,6 +834,7 @@ void SaveAppConfig(const char *filename, AppConfig *config)
 
     nlohmann::json root = nlohmann::json::object();
 
+    root["config_version"] = CONFIG_SCHEMA_VERSION;
     root["theme"] = config->theme;
     root["window_width"] = config->window_width;
     root["window_height"] = config->window_height;

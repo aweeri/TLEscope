@@ -1061,6 +1061,10 @@ int main(int argc, char **argv)
     RotatorLoadSettings(&cfg); /* restore persisted rotator config */
     NotifyLoadSettings(&cfg);  /* restore persisted notification toggles */
 
+    if (AppConfigWasReset())
+        NotifyPush(NOTIFY_WARNING, ICON_FA_TRIANGLE_EXCLAMATION,
+                   "Settings were reset to defaults (incompatible config)");
+
     /* window setup and msaa */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI);
 
