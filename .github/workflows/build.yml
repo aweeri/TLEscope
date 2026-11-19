@@ -28,6 +28,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          # full history so git describe sees tags, else version reports 0.0.0.0
+          fetch-depth: 0
 
       - name: Get raylib commit
         id: raylib
@@ -78,6 +80,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          # full history so git describe sees tags, else version reports 0.0.0.0
+          fetch-depth: 0
 
       - name: Get raylib commit
         id: raylib
@@ -141,6 +145,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          # full history so git describe sees tags, else version reports 0.0.0.0
+          fetch-depth: 0
 
       - name: Get raylib commit
         id: raylib
@@ -199,6 +205,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          # full history so git describe sees tags, else version reports 0.0.0.0
+          fetch-depth: 0
 
       - name: Set up MSYS2
         uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
@@ -282,6 +290,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          # full history so git describe sees tags, else version reports 0.0.0.0
+          fetch-depth: 0
 
       - name: Set up MSYS2
         uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
@@ -358,6 +368,15 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      # assets this workflow publishes: anything else on nightly is stale
+      NIGHTLY_ASSETS: |
+        TLEscope-Installer.exe
+        TLEscope-Linux-Portable.zip
+        TLEscope-Linux-arm64-Portable.zip
+        TLEscope-macOS-Intel.app.zip
+        TLEscope-macOS-arm64.app.zip
+        TLEscope-Win-Portable.zip
 
     steps:
       - name: Checkout repository
@@ -388,6 +407,32 @@ jobs:
           mv TLEscope-macOS-arm64-App/TLEscope-macOS-arm64.app.zip ../
           mv TLEscope-Installer/TLEscope-Installer.exe ../
 
+      - name: Drop assets this workflow no longer produces
+        if: github.ref == 'refs/heads/extremelywip'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # no release to clean on a fresh repo
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/nightly" --silent 2>/dev/null; then
+            echo "no nightly release yet, nothing to clean"
+            exit 0
+          fi
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/nightly" \
+            --jq '.assets[] | "\(.id) \(.name)"' > "$RUNNER_TEMP/assets.txt"
+
+          while read -r id name; do
+            case " $(echo $NIGHTLY_ASSETS) " in
+              *" $name "*) ;;
+              *)
+                echo "deleting stale asset: $name (id $id)"
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+                ;;
+            esac
+          done < "$RUNNER_TEMP/assets.txt"
+
       - name: Update nightly tag
         if: github.ref == 'refs/heads/extremelywip'
         run: |
@@ -413,6 +458,20 @@ jobs:
             TLEscope-macOS-arm64.app.zip
             TLEscope-Win-Portable.zip
             TLEscope-Installer.exe
+
+      - name: Verify nightly asset set
+        if: github.ref == 'refs/heads/extremelywip'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # published set must match exactly
+          printf '%s\n' $NIGHTLY_ASSETS | sed '/^$/d' | sort > "$RUNNER_TEMP/want.txt"
+          gh release view nightly --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort > "$RUNNER_TEMP/got.txt"
+          cat "$RUNNER_TEMP/got.txt"
+          diff -u "$RUNNER_TEMP/want.txt" "$RUNNER_TEMP/got.txt"
 
       - name: Publish versioned release
         if: startsWith(github.ref, 'refs/tags/v')
