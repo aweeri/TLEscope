@@ -918,12 +918,27 @@ int FetchRetlectorGroups(RetlectorGroup *groups, int max_groups, long *out_http_
             name = obj["name"].get<std::string>();
         if (name.empty()) continue;
 
+        std::string status = obj.value("status", std::string());
+        // an expired group has no data behind its endpoint, so it must not show up
+        // in the picker as if it were selectable
+        if (status.size() == 7)
+        {
+            bool is_expired = true;
+            static const char *expired = "expired";
+            for (size_t c = 0; c < 7; c++)
+                if (tolower((unsigned char)status[c]) != expired[c]) { is_expired = false; break; }
+            if (is_expired)
+            {
+                LOG_INFO("Skipping expired retlector group '%s'", name.c_str());
+                continue;
+            }
+        }
+
         RetlectorGroup *g = &groups[count];
         copy_str(g->name, sizeof(g->name), name);
         snprintf(g->csv_endpoint, sizeof(g->csv_endpoint),
                  "https://retlector.eu/%s/csv", name.c_str());
-        copy_str(g->status, sizeof(g->status),
-                 obj.value("status", std::string()));
+        copy_str(g->status, sizeof(g->status), status);
         copy_str(g->status_label, sizeof(g->status_label),
                  obj.value("statusLabel", std::string()));
         copy_str(g->last_updated, sizeof(g->last_updated),
